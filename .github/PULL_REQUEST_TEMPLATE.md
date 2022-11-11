@@ -16,4 +16,4 @@ I carefully read the [End User License Agreement](https://github.com/Eliah-Lakhi
 and I confirm that I agree with all terms of the Agreement. I represent that
 I Assign my Derivative Work provided in this Pull Request to the copyright
 holder of the Work under the terms of this Agreement, and I confirm that I have
-sufficient rights to the Derivative Work that I submit to Assign this work.
+sufficient rights to the Derivative Work that I provide to Assign my work.
