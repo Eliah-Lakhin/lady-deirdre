@@ -61,7 +61,7 @@ Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).
 This is the Main API Crate of the Lady Deirdre Technology.
 
 This Crate together with the
-[`Macro Crate`](https://docs.rs/lady-deirdre-derove) provide sufficient set of
+[`Macro Crate`](https://docs.rs/lady-deirdre-derive) provide sufficient set of
 tools to construct incremental compilation system of a Programming Language.
 
 ## Architecture overview.
@@ -71,7 +71,7 @@ tools to construct incremental compilation system of a Programming Language.
 The Technology deals with syntax and lexis grammar analysis of the language
 independently. An API user should define both levels of the grammar separately,
 or to define just the lexical grammar bypassing syntax parsing stage. The
-[`Macro Crate`](https://docs.rs/lady-deirdre-derove) provides two derive macros
+[`Macro Crate`](https://docs.rs/lady-deirdre-derive) provides two derive macros
 to define lexis and syntax on the custom enum types by specifying parsing rules
 on the enum variants directly through the macro attributes. Alternatively, you
 can implement syntax and/or lexis parsers manually by implementing corresponding
