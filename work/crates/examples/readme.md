@@ -42,16 +42,16 @@ two different instances of Lady Deirdre:
 
 There are three series of tests on three independent JSON files of different
 sizes:
- - ~10Mb file (10791089 bytes, 178508 lines).
- - ~4Mb file (4346095 bytes, 72072 lines).
- - ~82 Kb. (84638 bytes, 1957 lines).
+ - Large ~10Mb file (10791089 bytes, 178508 lines).
+ - Medium ~4Mb file (4346095 bytes, 72072 lines).
+ - Small ~82Kb file (84638 bytes, 1957 lines).
 
 For each file the benchmarks test initial loading time, independent edits time,
 and the series of edits(1100 total edits) applied sequentially.
 
 The series of edits is the most interesting performance indicator, because it
-shows actual live editing of the text that in some way mimics end-user
-sequential edit actions.
+shows actual performance of live editing of the text that in some way mimics
+end-user sequential edit actions.
 
 I used my mobile Intel NUC machine to perform benchmark tests:
 Intel Core i7-8809G CPU @ 3.10GHz × 8, 16Mb RAM.
@@ -63,38 +63,38 @@ You can find complete Criterion report
 
 1. **Incremental Reparsing.**
 
-   Lady Deirdre shows almost the same performance on the small file(82Kb)
-   sequential edits as Tree-Sitter does: 12.1ms vs 11.25ms.
+   Lady Deirdre shows almost the same performance on the Small file(82Kb)
+   sequential edits as Tree-Sitter: 12.1ms vs 11.25ms.
 
    But Lady Deirdre demonstrates significantly better results than Tree-Sitter
-   on medium(4Mb) and large(10Mb) files: 18ms vs 58ms and 39.1ms vs 124.5ms
+   on Medium(4Mb) and Large(10Mb) files: 18ms vs 58ms and 39.1ms vs 124.5ms
    accordingly.
 
 2. **Non-Incremental Parsing.**
 
    Nom works significantly better than Tree-Sitter and Lady Deirdre for initial
-   parsing. For the small file(82Kb) Nom has parsed the file in 0.87ms,
+   parsing. For the Small file(82Kb) Nom has parsed the file in 0.87ms,
    Lady Deirdre in 2.48ms, and Tree-Sitter in 5.91ms.
 
-   For the larger file(10Mb) Nom's results are comparable too:
+   For the Larger file(10Mb) Nom's demonstrates similar results:
    87.25ms(Nom) vs 304ms(Lady Deirdre) vs 624ms(Tree-Sitter).
 
    Even though non-incremental parser combinator Nom shows significantly
-   better results that the incremental parsers, Lady Deirdre works up to 2 times
-   faster in these tests than Tree-Sitter does.
+   better results than incremental parsers, Lady Deirdre works up to 2 times
+   faster in these tests than Tree-Sitter.
 
-   For non-incremental series of complete reparsing of the small JSON file Nom
-   demonstrates expected performance degradation comparing to Lady Deirdre and
-   Tree-Sitter both: ~2155ms for 1100 edits complete reparsing.
+   For non-incremental series of complete reparsing of the Small JSON file Nom
+   expectedly demonstrates performance degradation comparing to Lady Deirdre and
+   Tree-Sitter: ~2155ms for 1100 edits complete reparsing.
 
 3. **Text Mutations.**
 
    Ropey demonstrates significantly better results on all text edit tests
-   than Tree-Sitter and Lady Deirdre both (these results not applicable to Nom).
-   To compare, on large JSON file(10Mb) a series of edits took
+   than Tree-Sitter and Lady Deirdre both (these tests not applicable to Nom).
+   To compare, on the Large JSON file(10Mb) a series of edits took
    1.26ms(Ropey) vs 11.1ms(Lady Deirdre JSON lexis only parser).
 
-   For the fair comparison I would have to opt-out Lady Deirder's lexis parser
+   For fair comparison I would have to opt-out Lady Deirder's lexis parser
    in these tests, but this is currently not possible.
 
 ### Conclusion.
@@ -104,14 +104,13 @@ loading on all tests, comparable performance of incremental reparsing on small
 files, and better performance on incremental reparsing on medium to large files.
 
 These results allow me to conclude that in certain applications Lady Deirdre
-could be a competitive replacement to Tree-Sitter, a widely used
-production-ready incremental parsing solution. However, it is worth to mention
-that both solutions have different and sometimes incomparable functional
-capabilities, and the different goals. Moreover, the tests performed in these
-Benchmarks were applied on merely artificial snippets and relatively simple Json
-syntax.
+is competitive replacement of Tree-Sitter, a widely used production-ready
+incremental parsing solution. However, it is worth to mention that both solutions
+have different and sometimes incomparable functional capabilities, and
+the different goals. Moreover, the tests performed in these Benchmarks
+were applied on merely artificial snippets and relatively simple Json syntax.
 
-For non-incremental parsing Nom and the solutions of the same class are
-beneficial in performance for the application developers, however both
-Tree-Sitter and Lady Deirdre are still applicable solutions for this type
-of parsing too.
+For non-incremental parsing Nom and solutions of the same class are
+more beneficial choice in performance for non-incremental compiler development,
+however both Tree-Sitter and Lady Deirdre are still applicable solutions for
+this type of parsing too.
