@@ -43,7 +43,7 @@ extern crate alloc;
 extern crate core;
 #[cfg(not(feature = "std"))]
 pub use alloc::{
-    borrow::{Borrow, Cow},
+    borrow::{ToOwned, Cow},
     boxed::Box,
     collections::{
         btree_map::Iter as BTreeMapIter,
@@ -63,7 +63,7 @@ pub use alloc::{
 pub use core::{
     any::{Any, TypeId},
     assert_eq,
-    borrow::{Borrow, BorrowMut, Cow, ToOwned},
+    borrow::{Borrow, BorrowMut},
     cell::UnsafeCell,
     clone::Clone,
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},

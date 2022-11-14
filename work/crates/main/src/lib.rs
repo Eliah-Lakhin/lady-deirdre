@@ -45,8 +45,6 @@
 
 pub mod arena;
 mod std;
-//todo remove
-// mod incremental;
 mod incremental;
 pub mod lexis;
 pub mod syntax;
