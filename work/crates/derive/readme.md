@@ -12,7 +12,7 @@ day one, or if you are going to develop new IDE from scratch, or a programming
 language LSP plugin, this Technology is for you!
 
 Lady Deirdre provides a framework to develop Lexical Scanner, Syntax Parser and
-Semantic Analyser that could work in live coding environment applying
+Semantic Analyzer that could work in live coding environment applying
 user-input changes incrementally to all underlying data structures.
 
 This Technology represents a set of essential instruments to develop modern
