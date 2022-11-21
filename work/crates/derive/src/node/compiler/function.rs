@@ -180,7 +180,7 @@ impl<'a, 'b> Function<'a, 'b> {
         let transitions = {
             let exclude_skips = match variant.kind() {
                 VariantKind::Comment(..) => false,
-                _ => true,
+                _ => compiler.builder.skip_automata().is_some(),
             };
 
             let synchronization_context = variant.is_global_synchronization();

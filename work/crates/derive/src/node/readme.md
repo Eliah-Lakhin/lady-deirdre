@@ -306,7 +306,7 @@ enum MyNode {
 
   - ### Skip Tokens.
 
-    **Format:** `#[error(<expression>)]`.
+    **Format:** `#[skip(<expression>)]`.
 
     Specifies a set of tokens to be auto-ignored in the Root and Regular
     parsable rules.
