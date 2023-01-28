@@ -38,11 +38,7 @@
 //TODO cleanup unused reexports.
 
 #[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-extern crate core;
-#[cfg(not(feature = "std"))]
-pub use alloc::{
+pub use ::alloc::{
     borrow::{ToOwned, Cow},
     boxed::Box,
     collections::{
@@ -60,7 +56,7 @@ pub use alloc::{
     vec::{IntoIter, Vec},
 };
 #[cfg(not(feature = "std"))]
-pub use core::{
+pub use ::core::{
     any::{Any, TypeId},
     assert_eq,
     borrow::{Borrow, BorrowMut},
@@ -85,7 +81,7 @@ pub use core::{
         Iterator,
         Map,
     },
-    marker::{PhantomData, Sized, Sync},
+    marker::{PhantomData, Sized, Sync, Copy},
     matches,
     mem::{forget, replace, take, transmute, ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,
@@ -117,6 +113,7 @@ pub use core::{
     unimplemented,
     unreachable,
 };
+
 #[cfg(feature = "std")]
 extern crate std;
 #[cfg(feature = "std")]

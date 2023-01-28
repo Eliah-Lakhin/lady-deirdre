@@ -41,9 +41,12 @@ use crate::{
     syntax::{Node, NodeRef, SyntaxError},
 };
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 /// A common generic syntax.
 ///
-/// This is a companion object of the [SimpleToken](crate::lexis::SimpleToken) lexis that represents
+/// This is a companion object of the [SimpleToken](SimpleToken) lexis that represents
 /// a set of nested parens: parenthesis, braces and brackets.
 #[derive(Node, Clone, Debug, PartialEq, Eq)]
 #[token(SimpleToken)]

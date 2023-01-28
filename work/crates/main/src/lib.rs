@@ -52,3 +52,8 @@ pub mod syntax;
 pub use crate::incremental::Document;
 
 extern crate self as lady_deirdre;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+extern crate core;
