@@ -92,7 +92,10 @@ impl Encode for Regex {
 
                 match operator {
                     RegexOperator::OneOrMore { separator: None } => {
-                        let zero_or_more = scope.repeat(inner.clone());
+                        let zero_or_more = {
+                            let inner = scope.copy(&inner);
+                            scope.repeat(inner)
+                        };
 
                         Ok(scope.concatenate(inner, zero_or_more))
                     }
@@ -102,7 +105,10 @@ impl Encode for Regex {
                     } => {
                         let separator = separator.encode(scope)?;
 
-                        let rest = scope.concatenate(separator, inner.clone());
+                        let rest = {
+                            let inner = scope.copy(&inner);
+                            scope.concatenate(separator, inner)
+                        };
                         let repeat_rest = scope.repeat(rest);
 
                         Ok(scope.concatenate(inner, repeat_rest))
@@ -115,7 +121,10 @@ impl Encode for Regex {
                     } => {
                         let separator = separator.encode(scope)?;
 
-                        let rest = scope.concatenate(separator, inner.clone());
+                        let rest = {
+                            let inner = scope.copy(&inner);
+                            scope.concatenate(separator, inner)
+                        };
                         let repeat_rest = scope.repeat(rest);
                         let one_or_more = scope.concatenate(inner, repeat_rest);
 

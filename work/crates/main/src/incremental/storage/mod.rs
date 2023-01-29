@@ -613,7 +613,7 @@ mod tests {
                     assert_eq!(tree.length(), length);
                 }
 
-                unsafe { tree.free(&mut references) }
+                let _ = unsafe { tree.free(&mut references) };
             }
         }
     }

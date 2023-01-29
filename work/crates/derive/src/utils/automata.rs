@@ -60,21 +60,6 @@ pub struct Automata<C: AutomataContext> {
     pub transitions: Transitions<C::State, C::Terminal>,
 }
 
-impl<C: AutomataContext> Clone for Automata<C>
-where
-    C::State: Clone,
-    C::Terminal: Clone,
-{
-    #[inline(always)]
-    fn clone(&self) -> Self {
-        Self {
-            start: self.start.clone(),
-            finish: self.finish.clone(),
-            transitions: self.transitions.clone(),
-        }
-    }
-}
-
 impl<C: AutomataContext> Display for Automata<C>
 where
     C::State: Ord,

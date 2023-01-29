@@ -40,6 +40,7 @@ use std::{hash::Hash, mem::replace};
 use crate::utils::{
     automata::Automata,
     transitions::{Transitions, TransitionsImpl},
+    Map,
     PredictableCollection,
     Set,
     SetImpl,
@@ -49,6 +50,46 @@ use crate::utils::{
 pub trait AutomataContext: Sized {
     type State: State<Self>;
     type Terminal: AutomataTerminal;
+
+    fn copy(&mut self, automata: &Automata<Self>) -> Automata<Self> {
+        let mut state_map =
+            Map::with_capacity(automata.transitions.len() + automata.finish.len() + 1);
+
+        let start = Self::State::gen_state(self);
+
+        let _ = state_map.insert(&automata.start, start);
+
+        let transitions = automata
+            .transitions
+            .iter()
+            .map(|(from, through, to)| {
+                let from = *state_map
+                    .entry(from)
+                    .or_insert_with(|| Self::State::gen_state(self));
+                let to = *state_map
+                    .entry(to)
+                    .or_insert_with(|| Self::State::gen_state(self));
+
+                (from, through.clone(), to)
+            })
+            .collect::<Transitions<_, _>>();
+
+        let finish = automata
+            .finish
+            .iter()
+            .map(|state| {
+                *state_map
+                    .entry(state)
+                    .or_insert_with(|| Self::State::gen_state(self))
+            })
+            .collect::<Set<_>>();
+
+        Automata {
+            start,
+            finish,
+            transitions,
+        }
+    }
 
     fn terminal(&mut self, terminals: Set<Self::Terminal>) -> Automata<Self> {
         if terminals.is_empty() {

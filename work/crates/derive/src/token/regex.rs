@@ -173,7 +173,7 @@ impl RegexImpl for Regex {
             } => {
                 let inner = inner.encode(scope)?;
 
-                let left = inner.clone();
+                let left = scope.copy(&inner);
                 let right = scope.repeat(inner);
 
                 scope.concatenate(left, right)
