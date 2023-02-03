@@ -36,16 +36,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::Ident;
+use std::time::Instant;
 use syn::{
     parse::{Parse, ParseStream},
-    AttrStyle,
-    Data,
-    DeriveInput,
-    Error,
-    Generics,
-    Result,
+    AttrStyle, Data, DeriveInput, Error, Generics, Result,
 };
 
+use crate::utils::OptimizationStrategy;
 use crate::{
     token::{
         characters::CharacterSet,
@@ -58,16 +55,12 @@ use crate::{
         variant::TokenVariant,
     },
     utils::{
-        AutomataContext,
-        Facade,
-        Map,
-        MapImpl,
-        MultimapImpl,
-        PredictableCollection,
-        Set,
-        SetImpl,
+        AutomataContext, Facade, Map, MapImpl, MultimapImpl, PredictableCollection, Set, SetImpl,
     },
 };
+
+const DETERMINE_THRESHOLD: u128 = 200;
+const NONE_THRESHOLD: u128 = 1000;
 
 pub struct Token {
     pub(super) token_name: Ident,
@@ -207,9 +200,18 @@ impl Parse for Token {
 
         let mut scope = Scope::new(alphabet);
 
+        let optimization_threshold = Instant::now();
         let mut automata = rules
             .iter()
             .try_fold(None, |accumulator, rule| {
+                if optimization_threshold.elapsed().as_millis() > DETERMINE_THRESHOLD {
+                    scope.set_strategy(OptimizationStrategy::DETERMINE);
+                }
+
+                if optimization_threshold.elapsed().as_millis() > NONE_THRESHOLD {
+                    scope.set_strategy(OptimizationStrategy::NONE);
+                }
+
                 let rule_name;
                 let rule_index;
                 let rule_expression;
@@ -250,21 +252,27 @@ impl Parse for Token {
             })?
             .expect("Internal error. Empty rule set.");
 
+        if scope.strategy() == &OptimizationStrategy::NONE {
+            scope.set_strategy(OptimizationStrategy::DETERMINE);
+            scope.optimize(&mut automata);
+        }
+
         loop {
             let mut has_changes = false;
 
             automata.transitions = automata
                 .transitions
-                .group(|(from, through, to)| ((from, to), through))
-                .try_for_each(|_, symbols| {
+                .group(|(from, through, to)| (from, (through, to)))
+                .try_for_each(|_, transitions| {
                     let mut products = Map::empty();
                     let mut conflict = None;
 
-                    symbols.retain(|through| match through {
+                    transitions.retain(|(through, to)| match through {
                         Terminal::Product(index) => {
                             let precedence = rules[*index].rule_precedence();
 
-                            if let Some(previous) = products.insert(precedence, *index) {
+                            if let Some((previous, _)) = products.insert(precedence, (*index, *to))
+                            {
                                 conflict = Some((*index, previous));
                             }
 
@@ -297,22 +305,27 @@ impl Parse for Token {
 
                     let product = products.iter().max_by_key(|(precedence, _)| *precedence);
 
-                    if let Some((_, index)) = product {
+                    if let Some((_, (index, to))) = product {
                         assert!(
-                            symbols.insert(Terminal::Product(*index)),
+                            transitions.insert((Terminal::Product(*index), *to)),
                             "Internal error. Duplicate production terminal.",
                         );
                     }
 
                     Ok(())
                 })?
-                .join(|(from, to), through| (from, through, to));
+                .join(|from, (through, to)| (from, through, to));
 
             if !has_changes {
                 break;
             }
 
-            automata.canonicalize(&mut scope);
+            scope.optimize(&mut automata);
+        }
+
+        if scope.strategy() != &OptimizationStrategy::CANONICALIZE {
+            scope.set_strategy(OptimizationStrategy::CANONICALIZE);
+            scope.optimize(&mut automata);
         }
 
         let mut products = Map::empty();

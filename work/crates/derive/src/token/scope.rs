@@ -37,6 +37,7 @@
 
 use std::ops::RangeFrom;
 
+use crate::utils::OptimizationStrategy;
 use crate::{
     token::{characters::CharacterSet, terminal::Terminal, NULL},
     utils::{Automata, AutomataContext, Set, SetImpl, State},
@@ -45,11 +46,17 @@ use crate::{
 pub(super) struct Scope {
     alphabet: CharacterSet,
     generator: RangeFrom<ScannerState>,
+    strategy: OptimizationStrategy,
 }
 
 impl AutomataContext for Scope {
     type State = ScannerState;
     type Terminal = Terminal;
+
+    #[inline(always)]
+    fn strategy(&self) -> &OptimizationStrategy {
+        &self.strategy
+    }
 }
 
 impl Scope {
@@ -58,6 +65,7 @@ impl Scope {
         Self {
             alphabet,
             generator: 1..,
+            strategy: OptimizationStrategy::CANONICALIZE,
         }
     }
 
@@ -82,6 +90,11 @@ impl Scope {
     #[inline(always)]
     pub(super) fn reset(&mut self) {
         self.generator = 1..;
+    }
+
+    #[inline(always)]
+    pub(super) fn set_strategy(&mut self, strategy: OptimizationStrategy) {
+        self.strategy = strategy;
     }
 }
 

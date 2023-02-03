@@ -18,7 +18,7 @@ compile-time errors to the macro programmer.
 
 Derive macro application outline:
 
-```rust
+```rust ignore
 #[derive(Node)]
 #[token(MyToken)] // Specifies a Token type.
 #[error(MyError)] // Specifies an Error type.
@@ -129,7 +129,7 @@ operators. And the Group operator prioritizes anything inside the parenthesis.
   4. Referred Parsable Rule's Leftmost Tokens cannot conflict with another
      Tokens in Expression in the same matching position.
 
-     ```rust
+     ```rust ignore
      enum MyNode {
          #[rule($A)]
          Foo1,
@@ -157,7 +157,7 @@ operators. And the Group operator prioritizes anything inside the parenthesis.
      different kinds. For example, Capturing Variable cannot capture Token
      and Node at the same time.
 
-     ```rust
+     ```rust ignore
      enum MyNode {
          #[rule($Foo)]
          SomeNode,
@@ -174,7 +174,7 @@ operators. And the Group operator prioritizes anything inside the parenthesis.
      ```
   7. Capturing variable type must match variant field's type.
 
-     ```rust
+     ```rust ignore
      enum MyNode {
          // `capt_1` captures a Token, not a Node.
          #[rule(capt_1: $Foo)]
@@ -275,7 +275,7 @@ There are three possibilities when the Parser could early finish Panic Mode:
 
 These attributes meant to be bound with the Enum type.
 
-```rust
+```rust ignore
 #[derive(Node)]
 // Type-level attributes go here.
 enum MyNode {
@@ -341,7 +341,7 @@ enum MyNode {
 
 These attributes meant to be bound with the Enum Variants.
 
-```rust
+```rust ignore
 #[derive(Node)]
 enum MyNode {
     // Variant attributes go here.
@@ -408,7 +408,7 @@ enum MyNode {
     This attribute must be bound to the Enum Variant already labeled as a
     [Parsable Rule](#rule).
 
-    ```rust
+    ```rust ignore
     #[derive(Node)]
     //...
     enum MyNode {
@@ -455,7 +455,7 @@ enum MyNode {
 
 These attributes meant to be bound with the Enum Variants' Named Fields.
 
-```rust
+```rust ignore
 #[derive(Node)]
 enum MyNode {
     // ...
@@ -483,7 +483,7 @@ enum MyNode {
     this attribute. Their values will be set to the `<value>` expression during
     the Node constructing.
 
-    ```rust
+    ```rust ignore
     #[derive(Node)]
     //...
     enum MyNode {
@@ -503,7 +503,7 @@ enum MyNode {
 
 ## Json Syntax Example.
 
-```rust
+```rust ignore
 #[derive(Node, Clone)]
 #[token(JsonToken)]
 #[error(SyntaxError)]

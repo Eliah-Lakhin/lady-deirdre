@@ -39,6 +39,7 @@ use std::mem::take;
 
 use syn::{Error, Result};
 
+use crate::utils::AutomataContext;
 use crate::{
     node::{
         automata::{scope::Scope, NodeAutomata},
@@ -158,7 +159,7 @@ impl AutomataMergeCaptures for NodeAutomata {
                 break;
             }
 
-            self.canonicalize(scope);
+            scope.optimize(self);
         }
 
         Ok(())

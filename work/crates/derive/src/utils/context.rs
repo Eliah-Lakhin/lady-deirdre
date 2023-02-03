@@ -40,11 +40,7 @@ use std::{hash::Hash, mem::replace};
 use crate::utils::{
     automata::Automata,
     transitions::{Transitions, TransitionsImpl},
-    Map,
-    PredictableCollection,
-    Set,
-    SetImpl,
-    State,
+    Map, PredictableCollection, Set, SetImpl, State,
 };
 
 pub trait AutomataContext: Sized {
@@ -123,7 +119,7 @@ pub trait AutomataContext: Sized {
         a.start = start;
         a.finish.append(b.finish);
 
-        a.canonicalize(self);
+        self.optimize(&mut a);
 
         a
     }
@@ -135,7 +131,7 @@ pub trait AutomataContext: Sized {
 
         a.transitions.append(b.transitions);
 
-        a.canonicalize(self);
+        self.optimize(&mut a);
 
         a
     }
@@ -146,7 +142,7 @@ pub trait AutomataContext: Sized {
             inner.transitions.through_null(inner.start, *finish);
         }
 
-        inner.canonicalize(self);
+        self.optimize(&mut inner);
 
         inner
     }
@@ -159,10 +155,31 @@ pub trait AutomataContext: Sized {
             .transitions
             .through_null(start, replace(&mut inner.start, start));
 
-        inner.canonicalize(self);
+        self.optimize(&mut inner);
 
         inner
     }
+
+    fn optimize(&mut self, automata: &mut Automata<Self>) {
+        match self.strategy() {
+            &OptimizationStrategy::CANONICALIZE => automata.canonicalize(self),
+            &OptimizationStrategy::DETERMINE => automata.determine(self),
+            &OptimizationStrategy::NONE => (),
+        }
+    }
+
+    fn strategy(&self) -> &OptimizationStrategy {
+        static DEFAULT: OptimizationStrategy = OptimizationStrategy::CANONICALIZE;
+
+        &DEFAULT
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum OptimizationStrategy {
+    NONE,
+    DETERMINE,
+    CANONICALIZE,
 }
 
 pub trait AutomataTerminal: Clone + Eq + Hash {
@@ -219,7 +236,10 @@ mod tests {
         assert!(!foo.test(vec![]));
 
         let foo_or_bar = context.union(foo, bar);
-        let comma_foo_or_bar = context.concatenate(comma, foo_or_bar.clone());
+        let comma_foo_or_bar = {
+            let foo_or_bar = context.copy(&foo_or_bar);
+            context.concatenate(comma, foo_or_bar)
+        };
         let repeat_comma_foo_or_bar = context.repeat(comma_foo_or_bar);
         let one_or_more = context.concatenate(foo_or_bar, repeat_comma_foo_or_bar);
 

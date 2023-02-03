@@ -50,7 +50,7 @@ define the entire scanning "Alphabet". In principle the macro cannot set
 
 These attributes meant to be bound with the Enum type.
 
-```rust
+```rust ignore
 #[derive(Token)]
 // Type-level attributes go here.
 enum MyToken {
@@ -77,7 +77,7 @@ enum MyToken {
     
     This attribute is optional.
     
-    ```rust
+    ```rust ignore
     #[derive(Token)]
     #[define(POSITIVE_DIGIT = ['1'..'9'])]
     #[define(DIGIT = '0' | POSITIVE_DIGIT)] // Referring POSITIVE_DIGIT.
@@ -96,7 +96,7 @@ enum MyToken {
 
 These attributes meant to be bound with the Enum Variants.
 
-```rust
+```rust ignore
 #[derive(Token)]
 enum MyToken {
     // Variant attributes go here.
@@ -127,7 +127,7 @@ enum MyToken {
    
     The `<regular expression>` must not parse empty strings.
 
-    ```rust
+    ```rust ignore
     #[derive(Token)]
     enum MyToken {
         #[rule(['a'..'z']+)]
@@ -159,7 +159,7 @@ enum MyToken {
     For example, an arbitrary alphabetical identifier would conflict with the
     programming language's alphabetical reserved words.
 
-    ```rust
+    ```rust ignore
     #[derive(Token)]
     enum MyToken {
         #[rule(['a'..'z']+)]
@@ -212,7 +212,7 @@ enum MyToken {
     applicable to Parsable variants only(the Variant must be labeled with the
     `#[rule(...)]` attribute too).
 
-    ```rust
+    ```rust ignore
     #[derive(Token)]
     enum MyToken {
         #[rule(['1'..'9'] & ['0'..'9']* | '0')]
@@ -232,7 +232,7 @@ enum MyToken {
 
 ## Json Lexis Example.
 
-```rust
+```rust ignore
 #[derive(Token)]
 #[define(DEC = ['0'..'9'])]
 #[define(HEX = DEC | ['A'..'F'])]

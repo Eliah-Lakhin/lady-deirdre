@@ -49,7 +49,7 @@ mod transitions;
 
 pub use crate::utils::{
     automata::Automata,
-    context::{AutomataContext, AutomataTerminal},
+    context::{AutomataContext, AutomataTerminal, OptimizationStrategy},
     expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
     facade::Facade,
     map::{Map, MapImpl},

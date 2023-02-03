@@ -46,12 +46,7 @@ use std::{
 use crate::utils::{
     deterministic::Deterministic,
     transitions::{Transitions, TransitionsImpl},
-    AutomataContext,
-    Map,
-    PredictableCollection,
-    Set,
-    SetImpl,
-    State,
+    AutomataContext, Map, PredictableCollection, Set, SetImpl, State,
 };
 
 pub struct Automata<C: AutomataContext> {
@@ -180,11 +175,16 @@ impl<C: AutomataContext> Automata<C> {
         self.finish.contains(&self.start) || self.transitions.is_empty()
     }
 
-    pub fn canonicalize(&mut self, context: &mut C) {
+    pub(super) fn canonicalize(&mut self, context: &mut C) {
         self.reverse(context);
         self.determine(context);
         self.reverse(context);
         self.determine(context);
+    }
+
+    #[inline(always)]
+    pub(super) fn determine(&mut self, context: &mut C) {
+        *self = Deterministic::build(context, self);
     }
 
     #[cfg(test)]
@@ -211,11 +211,6 @@ impl<C: AutomataContext> Automata<C> {
         }
 
         self.finish.contains(state)
-    }
-
-    #[inline(always)]
-    fn determine(&mut self, context: &mut C) {
-        *self = Deterministic::build(context, self);
     }
 
     fn reverse(&mut self, context: &mut C) {

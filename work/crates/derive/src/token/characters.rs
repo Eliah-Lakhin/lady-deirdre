@@ -40,9 +40,7 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Error,
-    LitChar,
-    Result,
+    Error, LitChar, Result,
 };
 
 use crate::{
@@ -179,9 +177,9 @@ impl CharacterSet {
                 return Err(Error::new(
                     self.span,
                     format!(
-                        "An exclusion character '{}' is not included in any of the parsable rules' \
-                        non-exclusion expression.",
-                        character
+                        "An exclusion character '{}' not found in any parsable rule \
+                        alphabet.",
+                        character.escape_debug(),
                     ),
                 ));
             }
