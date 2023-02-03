@@ -239,7 +239,7 @@ impl TokenVariant {
     #[inline(always)]
     pub(super) fn rule_precedence(&self) -> RulePrecedence {
         match self {
-            TokenVariant::Rule { precedence, .. } => precedence.clone().unwrap_or(0),
+            TokenVariant::Rule { precedence, .. } => precedence.clone().unwrap_or(1),
             _ => unreachable!("Non-rule variant."),
         }
     }
