@@ -39,9 +39,10 @@ use std::vec::IntoIter;
 
 use proc_macro2::Ident;
 
+use crate::utils::{debug_panic, State};
 use crate::{
     node::{
-        automata::{scope::SyntaxState, NodeAutomata},
+        automata::NodeAutomata,
         builder::Builder,
         compiler::transitions::{TransitionsVector, TransitionsVectorImpl},
         regex::terminal::Terminal,
@@ -53,7 +54,7 @@ pub(in crate::node) struct Insert<'a> {
     matching: &'a Ident,
     expected_terminal: &'a Terminal,
     destination_terminal: &'a Terminal,
-    destination_state: &'a SyntaxState,
+    destination_state: &'a State,
 }
 
 impl<'a> Insert<'a> {
@@ -73,7 +74,7 @@ impl<'a> Insert<'a> {
     }
 
     #[inline(always)]
-    pub(in crate::node) fn destination_state(&self) -> &'a SyntaxState {
+    pub(in crate::node) fn destination_state(&self) -> &'a State {
         self.destination_state
     }
 }
@@ -106,7 +107,7 @@ impl<'a> InsertRecovery<'a> {
 
         for (_, through, _) in outgoing {
             match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => {
                     let _ = recovery.forbidden.insert(name);
@@ -128,7 +129,7 @@ impl<'a> InsertRecovery<'a> {
 
             for (_, destination_terminal, destination_state) in destination {
                 match destination_terminal {
-                    Terminal::Null => unreachable!("Automata with null transition."),
+                    Terminal::Null => debug_panic!("Automata with null transition."),
 
                     Terminal::Token { name: matching, .. } => {
                         if !recovery.forbid(matching) {

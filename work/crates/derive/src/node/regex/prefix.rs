@@ -37,6 +37,7 @@
 
 use proc_macro2::Ident;
 
+use crate::utils::debug_panic;
 use crate::{
     node::regex::{operand::RegexOperand, operator::RegexOperator, Regex},
     utils::{PredictableCollection, Set, SetImpl},
@@ -84,7 +85,7 @@ impl Leftmost {
 impl RegexPrefix for Regex {
     fn leftmost(&self) -> Leftmost {
         match self {
-            Self::Operand(RegexOperand::Unresolved { .. }) => unreachable!("Unresolved operand."),
+            Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
 
             Self::Operand(RegexOperand::Debug { inner, .. }) => inner.leftmost(),
 
@@ -110,7 +111,7 @@ impl RegexPrefix for Regex {
 
                     RegexOperator::Concat => left,
 
-                    _ => unreachable!("Unsupported Binary operator."),
+                    _ => debug_panic!("Unsupported Binary operator."),
                 }
             }
         }

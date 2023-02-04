@@ -40,22 +40,29 @@ mod builder;
 mod compiler;
 mod regex;
 
+use std::time::{Duration, Instant};
 use syn::{
     parse::{Parse, ParseStream, Result},
     DeriveInput,
 };
 
 use crate::node::{builder::Builder, compiler::Compiler};
+use crate::BENCHMARK;
 
 pub struct Node {
     builder: Builder,
+    build_time: Duration,
 }
 
 impl Parse for Node {
     #[inline(always)]
     fn parse(input: ParseStream) -> Result<Self> {
+        let build_start = Instant::now();
+        let builder = Builder::try_from(&input.parse::<DeriveInput>()?)?;
+
         Ok(Self {
-            builder: Builder::try_from(&input.parse::<DeriveInput>()?)?,
+            builder,
+            build_time: build_start.elapsed(),
         })
     }
 }
@@ -63,6 +70,19 @@ impl Parse for Node {
 impl From<Node> for proc_macro::TokenStream {
     #[inline(always)]
     fn from(node: Node) -> Self {
-        Compiler::compile(&node.builder).into()
+        let name = node.builder.node_name().clone();
+        let compile_start = Instant::now();
+        let result = Compiler::compile(&node.builder).into();
+        let compile_time = compile_start.elapsed();
+
+        if BENCHMARK {
+            println!(
+                "Node {} compile time: {:?}",
+                name,
+                compile_time + node.build_time
+            )
+        }
+
+        result
     }
 }

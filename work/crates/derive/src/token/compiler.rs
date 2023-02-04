@@ -38,25 +38,25 @@
 use proc_macro2::Ident;
 use syn::Generics;
 
+use crate::utils::{debug_panic, AutomataContext};
 use crate::{
     token::{
         rule::{RuleIndex, RuleMeta},
-        scope::{ScannerState, Scope},
+        scope::Scope,
         terminal::Terminal,
         transition::Transition,
-        Token,
-        NULL,
+        Token, NULL,
     },
     utils::{Automata, Map, PredictableCollection, Set, SetImpl, State},
 };
 
 pub(super) struct Compiler {
     scope: Scope,
-    product_map: Map<ScannerState, RuleIndex>,
-    input: Set<(ScannerState, (char, char), ScannerState)>,
-    names: Map<ScannerState, ScannerState>,
-    pending: Vec<ScannerState>,
-    registered: Set<ScannerState>,
+    product_map: Map<State, RuleIndex>,
+    input: Set<(State, (char, char), State)>,
+    names: Map<State, State>,
+    pending: Vec<State>,
+    registered: Set<State>,
     result: Vec<Transition>,
 }
 
@@ -68,25 +68,24 @@ impl Compiler {
         mismatch: Ident,
         scope: Scope,
         automata: Automata<Scope>,
-        products: Map<ScannerState, RuleIndex>,
+        products: Map<State, RuleIndex>,
     ) -> Token {
+        let mut alphabet = scope.alphabet().clone().into_inner();
+        alphabet.insert(NULL);
+
         let input = automata
-            .transitions
+            .transitions()
             .into_iter()
             .map(|(from, through, to)| {
                 let incoming = match through {
-                    Terminal::Null => unreachable!("Automata with null transition."),
-                    Terminal::Product(..) => unreachable!("Unfiltered production terminal."),
+                    Terminal::Null => debug_panic!("Automata with null transition."),
+                    Terminal::Product(..) => debug_panic!("Unfiltered production terminal."),
                     Terminal::Character(character) => character,
                 };
 
-                let mut alphabet = scope.alphabet().clone().into_inner();
-
-                alphabet.insert(NULL);
-
                 alphabet
-                    .into_iter()
-                    .map(move |peek| (from, (incoming, peek), to))
+                    .iter()
+                    .map(move |peek| (*from, (*incoming, *peek), *to))
             })
             .flatten()
             .collect();
@@ -96,7 +95,7 @@ impl Compiler {
             product_map: Map::empty(),
             input,
             names: Map::empty(),
-            pending: vec![automata.start],
+            pending: vec![*automata.start()],
             registered: Set::empty(),
             result: Vec::new(),
         };
@@ -176,14 +175,14 @@ impl Compiler {
     }
 
     #[inline]
-    fn name_of(&mut self, original: ScannerState) -> ScannerState {
+    fn name_of(&mut self, original: State) -> State {
         *self
             .names
             .entry(original)
-            .or_insert_with(|| ScannerState::gen_state(&mut self.scope))
+            .or_insert_with(|| self.scope.gen_state())
     }
 
-    fn insert_product(&mut self, state: ScannerState, product: RuleIndex) {
+    fn insert_product(&mut self, state: State, product: RuleIndex) {
         let outgoing = self.outgoing_view(&state);
 
         let inner_characters = match self.inner_characters(&state, &outgoing) {
@@ -205,7 +204,7 @@ impl Compiler {
 
         let incoming = self.incoming_view(&state);
 
-        let new_state = ScannerState::gen_state(&mut self.scope);
+        let new_state = self.scope.gen_state();
         let _ = self.product_map.insert(new_state, product);
 
         for (_, (incoming, peek)) in outgoing {
@@ -226,8 +225,8 @@ impl Compiler {
     #[inline]
     fn inner_characters(
         &self,
-        from: &ScannerState,
-        outgoing: &Set<(ScannerState, (char, char))>,
+        from: &State,
+        outgoing: &Set<(State, (char, char))>,
     ) -> Option<Set<char>> {
         if outgoing.is_empty() {
             return None;
@@ -247,7 +246,7 @@ impl Compiler {
     }
 
     #[inline]
-    fn outgoing_view(&self, state: &ScannerState) -> Set<(ScannerState, (char, char))> {
+    fn outgoing_view(&self, state: &State) -> Set<(State, (char, char))> {
         self.input
             .iter()
             .filter_map(|(from, through, to)| {
@@ -261,7 +260,7 @@ impl Compiler {
     }
 
     #[inline]
-    fn incoming_view(&self, state: &ScannerState) -> Set<(ScannerState, (char, char))> {
+    fn incoming_view(&self, state: &State) -> Set<(State, (char, char))> {
         self.input
             .iter()
             .filter_map(|(from, through, to)| {
@@ -275,7 +274,7 @@ impl Compiler {
     }
 
     #[inline]
-    fn is_termination(&self, state: &ScannerState) -> bool {
+    fn is_termination(&self, state: &State) -> bool {
         !self.input.iter().any(|(from, _, _)| from == state)
     }
 }

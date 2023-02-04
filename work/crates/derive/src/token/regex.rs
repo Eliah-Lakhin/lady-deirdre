@@ -40,22 +40,15 @@ use syn::{
     parse::{Lookahead1, ParseStream},
     spanned::Spanned,
     token::Paren,
-    Error,
-    LitChar,
-    LitStr,
-    Result,
+    Error, LitChar, LitStr, Result,
 };
 
+use crate::utils::debug_panic;
 use crate::{
     token::{characters::CharacterSet, scope::Scope, NULL},
     utils::{
-        Applicability,
-        Automata,
-        AutomataContext,
-        Expression,
-        ExpressionOperand,
-        ExpressionOperator,
-        Map,
+        Applicability, Automata, AutomataContext, Expression, ExpressionOperand,
+        ExpressionOperator, Map,
     },
 };
 
@@ -113,7 +106,7 @@ impl RegexImpl for Regex {
         Ok(match self {
             Self::Operand(Operand::Any) => scope.any(),
 
-            Self::Operand(Operand::Inline { .. }) => unreachable!("Unresolved inline."),
+            Self::Operand(Operand::Inline { .. }) => debug_panic!("Unresolved inline."),
 
             Self::Operand(Operand::Debug { span, inner }) => {
                 let inner = inner.encode(scope)?;
@@ -188,7 +181,7 @@ impl RegexImpl for Regex {
                 scope.optional(inner)
             }
 
-            _ => unreachable!("Unsupported operation."),
+            _ => debug_panic!("Unsupported operation."),
         })
     }
 }

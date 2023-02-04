@@ -43,12 +43,9 @@ use std::{
 use proc_macro2::Ident;
 use syn::{Error, Result};
 
+use crate::utils::State;
 use crate::{
-    node::{
-        automata::{scope::SyntaxState, NodeAutomata},
-        builder::constructor::Constructor,
-        regex::terminal::Terminal,
-    },
+    node::{automata::NodeAutomata, builder::constructor::Constructor, regex::terminal::Terminal},
     utils::{Map, PredictableCollection, Set, SetImpl},
 };
 
@@ -56,7 +53,7 @@ impl AutomataVariables for NodeAutomata {
     fn variable_map(&self) -> Result<VariableMap> {
         let mut kinds = Map::empty();
 
-        for (_, through, _) in &self.transitions {
+        for (_, through, _) in self.transitions() {
             match through {
                 Terminal::Token {
                     capture: Some(capture),
@@ -97,7 +94,7 @@ impl AutomataVariables for NodeAutomata {
         let mut result = Map::with_capacity(kinds.len());
 
         for (capture, kind) in kinds {
-            let mut optional = Set::new([self.start]);
+            let mut optional = Set::new([*self.start()]);
             self.spread_without(&capture, &mut optional);
 
             let mut single = self.step_with(&capture, &optional);
@@ -109,7 +106,7 @@ impl AutomataVariables for NodeAutomata {
             let mut is_optional = false;
             let mut is_multiple = false;
 
-            for finish in &self.finish {
+            for finish in self.finish() {
                 if optional.contains(finish) {
                     is_optional = true;
                 }
@@ -145,11 +142,11 @@ impl AutomataVariables for NodeAutomata {
 
 impl AutomataPrivate for NodeAutomata {
     #[inline]
-    fn spread(&self, states: &mut Set<SyntaxState>) {
+    fn spread(&self, states: &mut Set<State>) {
         loop {
             let mut new_states = false;
 
-            for (from, _, to) in &self.transitions {
+            for (from, _, to) in self.transitions() {
                 if !states.contains(&from) || states.contains(to) {
                     continue;
                 }
@@ -164,11 +161,11 @@ impl AutomataPrivate for NodeAutomata {
         }
     }
 
-    fn spread_without(&self, variable: &Ident, states: &mut Set<SyntaxState>) {
+    fn spread_without(&self, variable: &Ident, states: &mut Set<State>) {
         loop {
             let mut new_states = false;
 
-            for (from, through, to) in &self.transitions {
+            for (from, through, to) in self.transitions() {
                 if !states.contains(&from) || states.contains(to) {
                     continue;
                 }
@@ -200,10 +197,10 @@ impl AutomataPrivate for NodeAutomata {
     }
 
     #[inline]
-    fn step_with(&self, variable: &Ident, states: &Set<SyntaxState>) -> Set<SyntaxState> {
+    fn step_with(&self, variable: &Ident, states: &Set<State>) -> Set<State> {
         let mut result = Set::empty();
 
-        for (from, through, to) in &self.transitions {
+        for (from, through, to) in self.transitions() {
             if !states.contains(&from) || result.contains(to) {
                 continue;
             }
@@ -236,11 +233,11 @@ pub(in crate::node) trait AutomataVariables {
 }
 
 trait AutomataPrivate {
-    fn spread(&self, states: &mut Set<SyntaxState>);
+    fn spread(&self, states: &mut Set<State>);
 
-    fn spread_without(&self, variable: &Ident, states: &mut Set<SyntaxState>);
+    fn spread_without(&self, variable: &Ident, states: &mut Set<State>);
 
-    fn step_with(&self, variable: &Ident, states: &Set<SyntaxState>) -> Set<SyntaxState>;
+    fn step_with(&self, variable: &Ident, states: &Set<State>) -> Set<State>;
 }
 
 #[derive(Default)]

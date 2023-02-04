@@ -37,7 +37,7 @@
 
 use std::{collections::HashSet, hash::Hash};
 
-use crate::utils::{predictable::PredictableHasher, Multimap, PredictableCollection};
+use crate::utils::{predictable::PredictableHasher, Map, PredictableCollection};
 
 pub type Set<V> = HashSet<V, PredictableHasher>;
 
@@ -98,12 +98,12 @@ impl<Value> SetImpl for Set<Value> {
     }
 
     #[inline]
-    fn group<K, V>(self, mut division: impl FnMut(Self::Value) -> (K, V)) -> Multimap<K, V>
+    fn group<K, V>(self, mut division: impl FnMut(Self::Value) -> (K, V)) -> Map<K, Set<V>>
     where
         K: Eq + Hash,
         V: Eq + Hash + Clone,
     {
-        let mut multimap = Multimap::empty();
+        let mut multimap = Map::empty();
 
         for value in self {
             let (key, value) = division(value);
@@ -149,7 +149,7 @@ pub trait SetImpl {
     where
         Self::Value: Clone;
 
-    fn group<K, V>(self, division: impl FnMut(Self::Value) -> (K, V)) -> Multimap<K, V>
+    fn group<K, V>(self, division: impl FnMut(Self::Value) -> (K, V)) -> Map<K, Set<V>>
     where
         K: Eq + Hash,
         V: Eq + Hash + Clone;

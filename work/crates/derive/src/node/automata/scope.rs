@@ -35,39 +35,48 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::ops::RangeFrom;
-
+use crate::utils::OptimizationStrategy;
 use crate::{
     node::regex::terminal::Terminal,
     utils::{AutomataContext, State},
 };
 
 pub(in crate::node) struct Scope {
-    state_generator: RangeFrom<SyntaxState>,
+    state: State,
+    strategy: OptimizationStrategy,
 }
 
 impl Default for Scope {
     #[inline(always)]
     fn default() -> Self {
         Self {
-            state_generator: 1..,
+            state: 1,
+            strategy: OptimizationStrategy::CANONICALIZE,
         }
     }
 }
 
 impl AutomataContext for Scope {
-    type State = SyntaxState;
     type Terminal = Terminal;
+
+    #[inline(always)]
+    fn gen_state(&mut self) -> State {
+        let state = self.state;
+
+        self.state += 1;
+
+        state
+    }
+
+    #[inline(always)]
+    fn strategy(&self) -> &OptimizationStrategy {
+        &self.strategy
+    }
 }
 
-pub(in crate::node) type SyntaxState = usize;
-
-impl State<Scope> for SyntaxState {
+impl Scope {
     #[inline(always)]
-    fn gen_state(context: &mut Scope) -> Self {
-        context
-            .state_generator
-            .next()
-            .expect("Internal error. State generator exceeded.")
+    pub fn set_strategy(&mut self, strategy: OptimizationStrategy) {
+        self.strategy = strategy;
     }
 }

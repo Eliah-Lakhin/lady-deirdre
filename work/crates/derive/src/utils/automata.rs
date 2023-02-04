@@ -43,37 +43,35 @@ use std::{
     ops::RangeFrom,
 };
 
+use crate::utils::deterministic::Deterministic;
 use crate::utils::{
-    deterministic::Deterministic,
-    transitions::{Transitions, TransitionsImpl},
-    AutomataContext, Map, PredictableCollection, Set, SetImpl, State,
+    transitions::Transitions, AutomataContext, Map, PredictableCollection, Set, SetImpl, State,
 };
+use syn::Result;
 
 pub struct Automata<C: AutomataContext> {
-    pub start: C::State,
-    pub finish: Set<C::State>,
-    pub transitions: Transitions<C::State, C::Terminal>,
+    pub(super) start: State,
+    pub(super) finish: Set<State>,
+    pub(super) transitions: Transitions<C::Terminal>,
 }
 
 impl<C: AutomataContext> Display for Automata<C>
 where
-    C::State: Ord,
     C::Terminal: Display + Ord,
 {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         struct Visitor<'a, 'f, C: AutomataContext> {
             original: &'a Automata<C>,
             formatter: &'a mut Formatter<'f>,
-            pending: VecDeque<&'a C::State>,
-            visited: Set<&'a C::State>,
-            names: Map<&'a C::State, usize>,
+            pending: VecDeque<&'a State>,
+            visited: Set<&'a State>,
+            names: Map<&'a State, usize>,
             generator: RangeFrom<usize>,
         }
 
         impl<'a, 'f, C> Visitor<'a, 'f, C>
         where
             C: AutomataContext,
-            C::State: Ord,
             C::Terminal: Display + Ord,
         {
             fn next(&mut self) -> std::fmt::Result {
@@ -81,8 +79,8 @@ where
                     let mut transitions = self
                         .original
                         .transitions
-                        .iter()
-                        .filter(|(from, _, _)| from == state)
+                        .into_iter()
+                        .filter(|(from, _, _)| from == &state)
                         .collect::<Vec<_>>();
 
                     transitions.sort_by(|a, b| {
@@ -143,7 +141,7 @@ where
             }
 
             #[inline]
-            fn name_of(&mut self, state: &'a C::State) -> usize {
+            fn name_of(&mut self, state: &'a State) -> usize {
                 *self.names.entry(state).or_insert_with(|| {
                     self.generator
                         .next()
@@ -175,16 +173,57 @@ impl<C: AutomataContext> Automata<C> {
         self.finish.contains(&self.start) || self.transitions.is_empty()
     }
 
+    #[inline(always)]
+    pub fn start(&self) -> &State {
+        &self.start
+    }
+
+    #[inline(always)]
+    pub fn finish(&self) -> &Set<State> {
+        &self.finish
+    }
+
+    #[inline(always)]
+    pub fn transitions(&self) -> &Transitions<C::Terminal> {
+        &self.transitions
+    }
+
+    #[inline(always)]
+    pub fn try_map(
+        &mut self,
+        map: impl FnMut(&State, &mut Set<(C::Terminal, State)>) -> Result<()>,
+    ) -> Result<()> {
+        self.transitions.try_map(map)
+    }
+
+    #[inline(always)]
+    pub fn retain(&mut self, map: impl FnMut(&State, &C::Terminal, &State) -> bool) {
+        self.transitions.retain(map)
+    }
+
     pub(super) fn canonicalize(&mut self, context: &mut C) {
-        self.reverse(context);
-        self.determine(context);
-        self.reverse(context);
-        self.determine(context);
+        let (deterministic, alphabet) = self.reverse(context);
+
+        if !deterministic {
+            *self = Deterministic::build(context, self, &alphabet);
+        }
+
+        let (deterministic, alphabet) = self.reverse(context);
+
+        if !deterministic {
+            *self = Deterministic::build(context, self, &alphabet);
+        }
     }
 
     #[inline(always)]
     pub(super) fn determine(&mut self, context: &mut C) {
-        *self = Deterministic::build(context, self);
+        let (deterministic, alphabet) = self.transitions.meta();
+
+        if deterministic {
+            return;
+        }
+
+        *self = Deterministic::build(context, self, &alphabet);
     }
 
     #[cfg(test)]
@@ -213,15 +252,11 @@ impl<C: AutomataContext> Automata<C> {
         self.finish.contains(state)
     }
 
-    fn reverse(&mut self, context: &mut C) {
-        self.transitions = take(&mut self.transitions)
-            .into_iter()
-            .map(|mut transition| {
-                swap(&mut transition.0, &mut transition.2);
+    fn reverse(&mut self, context: &mut C) -> (bool, Set<C::Terminal>) {
+        let (deterministic, alphabet, transitions) =
+            take(&mut self.transitions).into_reversed(self.finish.len() == 1);
 
-                transition
-            })
-            .collect();
+        self.transitions = transitions;
 
         match self.finish.single() {
             Some(mut finish) => {
@@ -230,12 +265,14 @@ impl<C: AutomataContext> Automata<C> {
             }
 
             None => {
-                let finish = replace(&mut self.start, State::gen_state(context));
+                let finish = replace(&mut self.start, context.gen_state());
 
                 for start in replace(&mut self.finish, Set::new([finish])) {
                     self.transitions.through_null(self.start, start);
                 }
             }
         }
+
+        (deterministic, alphabet)
     }
 }

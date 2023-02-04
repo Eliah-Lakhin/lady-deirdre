@@ -42,6 +42,7 @@ use crate::token::{
     regex::{InlineMap, Regex, RegexImpl},
     rule::{RuleIndex, RulePrecedence},
 };
+use crate::utils::debug_panic;
 
 pub(super) enum TokenVariant {
     Rule {
@@ -232,7 +233,7 @@ impl TokenVariant {
     pub(super) fn rule_name(&self) -> &Ident {
         match self {
             TokenVariant::Rule { name, .. } => name,
-            _ => unreachable!("Non-rule variant."),
+            _ => debug_panic!("Non-rule variant."),
         }
     }
 
@@ -240,7 +241,7 @@ impl TokenVariant {
     pub(super) fn rule_precedence(&self) -> RulePrecedence {
         match self {
             TokenVariant::Rule { precedence, .. } => precedence.clone().unwrap_or(1),
-            _ => unreachable!("Non-rule variant."),
+            _ => debug_panic!("Non-rule variant."),
         }
     }
 }

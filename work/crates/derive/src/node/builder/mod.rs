@@ -39,19 +39,11 @@ use std::collections::hash_map::Keys;
 
 use proc_macro2::Ident;
 use syn::{
-    parse::ParseStream,
-    spanned::Spanned,
-    AttrStyle,
-    Attribute,
-    Data,
-    DeriveInput,
-    Error,
-    Generics,
-    Result,
-    Type,
-    Variant,
+    parse::ParseStream, spanned::Spanned, AttrStyle, Attribute, Data, DeriveInput, Error, Generics,
+    Result, Type, Variant,
 };
 
+use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::{conflicts::CheckConflicts, scope::Scope, skip::IsSkipAutomata, NodeAutomata},
@@ -116,7 +108,7 @@ impl<'a> TryFrom<&'a DeriveInput> for Builder {
                 let span = match other {
                     Data::Struct(data) => data.struct_token.span,
                     Data::Union(data) => data.union_token.span,
-                    _ => unimplemented!(),
+                    _ => debug_panic!("Unsupported Item format."),
                 };
 
                 return Err(Error::new(

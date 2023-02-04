@@ -38,25 +38,22 @@
 use proc_macro2::Ident;
 use syn::{spanned::Spanned, Error, Result};
 
+use crate::utils::{debug_panic, State};
 use crate::{
-    node::{
-        automata::{scope::SyntaxState, NodeAutomata},
-        builder::Builder,
-        regex::terminal::Terminal,
-    },
+    node::{automata::NodeAutomata, builder::Builder, regex::terminal::Terminal},
     utils::{Map, PredictableCollection},
 };
 
 impl CheckConflicts for NodeAutomata {
     fn check_conflicts(&self, builder: &Builder, allow_skips: bool) -> Result<()> {
         struct OutgoingView<'a> {
-            map: Map<&'a SyntaxState, Map<&'a Ident, &'a Terminal>>,
+            map: Map<&'a State, Map<&'a Ident, &'a Terminal>>,
         }
 
         impl<'a> OutgoingView<'a> {
             fn insert(
                 &mut self,
-                from: &'a SyntaxState,
+                from: &'a State,
                 token: &'a Ident,
                 terminal: &'a Terminal,
             ) -> Result<()> {
@@ -66,7 +63,7 @@ impl CheckConflicts for NodeAutomata {
                     let mut message = String::new();
 
                     match terminal {
-                        Terminal::Null => unreachable!("Automata with null transition."),
+                        Terminal::Null => debug_panic!("Automata with null transition."),
 
                         Terminal::Token { name, .. } => {
                             message.push_str(&format!(
@@ -86,7 +83,7 @@ impl CheckConflicts for NodeAutomata {
                     }
 
                     match existed {
-                        Terminal::Null => unreachable!("Automata with null transition."),
+                        Terminal::Null => debug_panic!("Automata with null transition."),
 
                         Terminal::Token { .. } => {
                             message.push_str("matching of the same token in this expression.");
@@ -110,9 +107,9 @@ impl CheckConflicts for NodeAutomata {
 
         let mut view = OutgoingView { map: Map::empty() };
 
-        for (from, through, _) in &self.transitions {
+        for (from, through, _) in self.transitions() {
             match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, capture } => {
                     if let Some(capture) = capture {

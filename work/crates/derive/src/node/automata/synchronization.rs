@@ -39,6 +39,7 @@ use proc_macro2::{Ident, Span};
 use syn::spanned::Spanned;
 
 use crate::node::{automata::NodeAutomata, regex::terminal::Terminal};
+use crate::utils::debug_panic;
 
 pub(in crate::node) struct Synchronization {
     variant_name: Ident,
@@ -82,16 +83,16 @@ impl AutomataSynchronization for NodeAutomata {
         let mut open = Single::Vacant;
         let mut close = Single::Vacant;
 
-        for (from, through, to) in &self.transitions {
-            let start = from == &self.start;
-            let end = self.finish.contains(to);
+        for (from, through, to) in self.transitions() {
+            let start = from == self.start();
+            let end = self.finish().contains(to);
 
             if !start && !end {
                 continue;
             }
 
             match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => {
                     if start {

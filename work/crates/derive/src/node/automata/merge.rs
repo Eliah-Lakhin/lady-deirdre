@@ -39,13 +39,13 @@ use std::mem::take;
 
 use syn::{Error, Result};
 
-use crate::utils::AutomataContext;
+use crate::utils::{debug_panic, AutomataContext};
 use crate::{
     node::{
         automata::{scope::Scope, NodeAutomata},
         regex::terminal::Terminal,
     },
-    utils::{Map, MapImpl, MultimapImpl, PredictableCollection, SetImpl},
+    utils::{Map, PredictableCollection},
 };
 
 impl AutomataMergeCaptures for NodeAutomata {
@@ -53,107 +53,104 @@ impl AutomataMergeCaptures for NodeAutomata {
         loop {
             let mut has_changes = false;
 
-            self.transitions = take(&mut self.transitions)
-                .group(|(from, through, to)| (from, (through, to)))
-                .try_for_each(|_, transitions| {
-                    let count = transitions.len();
+            self.try_map(|_, transitions| {
+                let count = transitions.len();
 
-                    let mut tokens = Map::with_capacity(count);
-                    let mut nodes = Map::with_capacity(count);
+                let mut tokens = Map::with_capacity(count);
+                let mut nodes = Map::with_capacity(count);
 
-                    for (terminal, to) in take(transitions) {
-                        match &terminal {
-                            Terminal::Null => unreachable!("Automata with null transition."),
+                for (terminal, to) in take(transitions) {
+                    match &terminal {
+                        Terminal::Null => debug_panic!("Automata with null transition."),
 
-                            Terminal::Token {
-                                name,
-                                capture: None,
-                            } => {
-                                if !tokens.contains_key(name) {
-                                    let _ = tokens.insert(name.clone(), (terminal, to));
-                                }
+                        Terminal::Token {
+                            name,
+                            capture: None,
+                        } => {
+                            if !tokens.contains_key(name) {
+                                let _ = tokens.insert(name.clone(), (terminal, to));
                             }
-
-                            rule_a @ Terminal::Token {
-                                name,
-                                capture: Some(capture),
-                            } => match tokens.get(name) {
-                                None | Some((Terminal::Token { capture: None, .. }, _)) => {
-                                    let _ = tokens.insert(name.clone(), (terminal, to));
-                                }
-
-                                Some((
-                                    rule_b @ Terminal::Token {
-                                        capture: Some(_), ..
-                                    },
-                                    _,
-                                )) => {
-                                    return Err(Error::new(
-                                        capture.span(),
-                                        format!(
-                                            "Rule \"{}\" conflicts with rule \"{}\" by capturing \
-                                            the same Token in the same source code position into \
-                                            two distinct variables.",
-                                            rule_a, rule_b,
-                                        ),
-                                    ))
-                                }
-                                _ => (),
-                            },
-
-                            Terminal::Node {
-                                name,
-                                capture: None,
-                            } => {
-                                if !nodes.contains_key(name) {
-                                    let _ = nodes.insert(name.clone(), (terminal, to));
-                                }
-                            }
-
-                            rule_a @ Terminal::Node {
-                                name,
-                                capture: Some(capture),
-                            } => match nodes.get(name) {
-                                None | Some((Terminal::Node { capture: None, .. }, _)) => {
-                                    let _ = nodes.insert(name.clone(), (terminal, to));
-                                }
-
-                                Some((
-                                    rule_b @ Terminal::Node {
-                                        capture: Some(_), ..
-                                    },
-                                    _,
-                                )) => {
-                                    return Err(Error::new(
-                                        capture.span(),
-                                        format!(
-                                            "Rule \"{}\" conflicts with rule \"{}\" by capturing \
-                                            the same Node in the same source code position into \
-                                            two distinct variables.",
-                                            rule_a, rule_b,
-                                        ),
-                                    ))
-                                }
-                                _ => (),
-                            },
                         }
-                    }
 
-                    for (_, token) in tokens {
-                        transitions.insert(token);
-                    }
+                        rule_a @ Terminal::Token {
+                            name,
+                            capture: Some(capture),
+                        } => match tokens.get(name) {
+                            None | Some((Terminal::Token { capture: None, .. }, _)) => {
+                                let _ = tokens.insert(name.clone(), (terminal, to));
+                            }
 
-                    for (_, node) in nodes {
-                        transitions.insert(node);
-                    }
+                            Some((
+                                rule_b @ Terminal::Token {
+                                    capture: Some(_), ..
+                                },
+                                _,
+                            )) => {
+                                return Err(Error::new(
+                                    capture.span(),
+                                    format!(
+                                        "Rule \"{}\" conflicts with rule \"{}\" by capturing \
+                                        the same Token in the same source code position into \
+                                        two distinct variables.",
+                                        rule_a, rule_b,
+                                    ),
+                                ))
+                            }
+                            _ => (),
+                        },
 
-                    if count != transitions.len() {
-                        has_changes = true;
-                    }
+                        Terminal::Node {
+                            name,
+                            capture: None,
+                        } => {
+                            if !nodes.contains_key(name) {
+                                let _ = nodes.insert(name.clone(), (terminal, to));
+                            }
+                        }
 
-                    Ok(())
-                })?
-                .join(|from, (through, to)| (from, through, to));
+                        rule_a @ Terminal::Node {
+                            name,
+                            capture: Some(capture),
+                        } => match nodes.get(name) {
+                            None | Some((Terminal::Node { capture: None, .. }, _)) => {
+                                let _ = nodes.insert(name.clone(), (terminal, to));
+                            }
+
+                            Some((
+                                rule_b @ Terminal::Node {
+                                    capture: Some(_), ..
+                                },
+                                _,
+                            )) => {
+                                return Err(Error::new(
+                                    capture.span(),
+                                    format!(
+                                        "Rule \"{}\" conflicts with rule \"{}\" by capturing \
+                                        the same Node in the same source code position into \
+                                        two distinct variables.",
+                                        rule_a, rule_b,
+                                    ),
+                                ))
+                            }
+                            _ => (),
+                        },
+                    }
+                }
+
+                for (_, token) in tokens {
+                    transitions.insert(token);
+                }
+
+                for (_, node) in nodes {
+                    transitions.insert(node);
+                }
+
+                if count != transitions.len() {
+                    has_changes = true;
+                }
+
+                Ok(())
+            })?;
 
             if !has_changes {
                 break;

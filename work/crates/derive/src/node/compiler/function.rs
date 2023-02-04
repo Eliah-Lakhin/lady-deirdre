@@ -39,9 +39,10 @@ use std::{collections::VecDeque, ops::RangeFrom};
 
 use proc_macro2::{Ident, TokenStream};
 
+use crate::utils::{debug_panic, State};
 use crate::{
     node::{
-        automata::{scope::SyntaxState, variables::VariableMap, NodeAutomata},
+        automata::{variables::VariableMap, NodeAutomata},
         builder::kind::VariantKind,
         compiler::{
             delimiters::{PanicDelimiters, SynchronizationAction},
@@ -62,10 +63,10 @@ pub(in crate::node) struct Function<'a, 'b> {
     automata: &'a NodeAutomata,
     delimiters: PanicDelimiters<'a>,
     variables: &'a VariableMap,
-    pending: VecDeque<&'a SyntaxState>,
-    visited: Set<&'a SyntaxState>,
+    pending: VecDeque<&'a State>,
+    visited: Set<&'a State>,
     transitions: Vec<TokenStream>,
-    state_map: Map<&'a SyntaxState, usize>,
+    state_map: Map<&'a State, usize>,
     state_generator: RangeFrom<usize>,
 }
 
@@ -99,9 +100,9 @@ impl<'a, 'b> Function<'a, 'b> {
                 automata,
                 delimiters,
                 variables: &variables,
-                pending: VecDeque::from([&automata.start]),
-                visited: Set::new([&automata.start]),
-                transitions: Vec::with_capacity(automata.transitions.len() * 3),
+                pending: VecDeque::from([automata.start()]),
+                visited: Set::new([automata.start()]),
+                transitions: Vec::with_capacity(automata.transitions().length() * 3),
                 state_map: Map::empty(),
                 state_generator: 1..,
             };
@@ -197,9 +198,9 @@ impl<'a, 'b> Function<'a, 'b> {
                 automata,
                 delimiters,
                 variables,
-                pending: VecDeque::from([&automata.start]),
+                pending: VecDeque::from([automata.start()]),
                 visited: Set::empty(),
-                transitions: Vec::with_capacity(automata.transitions.len() * 3),
+                transitions: Vec::with_capacity(automata.transitions().length() * 3),
                 state_map: Map::empty(),
                 state_generator: 1..,
             };
@@ -278,7 +279,7 @@ impl<'a, 'b> Function<'a, 'b> {
         compiler.add_function(kind, body);
     }
 
-    fn handle_state(&mut self, state: &'a SyntaxState) {
+    fn handle_state(&mut self, state: &'a State) {
         let core = self.compiler.facade().core_crate();
         let option = self.compiler.facade().option();
 
@@ -288,7 +289,7 @@ impl<'a, 'b> Function<'a, 'b> {
 
         for (_, through, to) in &outgoing {
             let is_final = !self.has_outgoing(to);
-            let is_looping = state == to;
+            let is_looping = &state == to;
 
             let (finalize, set_state) = match (is_final, is_looping) {
                 (true, _) => (Some(quote! { break; }), None),
@@ -311,7 +312,7 @@ impl<'a, 'b> Function<'a, 'b> {
             };
 
             match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, capture } => {
                     let write = match capture {
@@ -377,7 +378,7 @@ impl<'a, 'b> Function<'a, 'b> {
             }
         }
 
-        match self.automata.finish.contains(state) {
+        match self.automata.finish().contains(state) {
             true => {
                 self.transitions.push(quote! {
                     (#from_name, _) => {
@@ -397,7 +398,7 @@ impl<'a, 'b> Function<'a, 'b> {
         }
     }
 
-    fn insert_recover(&mut self, state: &'a SyntaxState, outgoing: &TransitionsVector<'a>) {
+    fn insert_recover(&mut self, state: &'a State, outgoing: &TransitionsVector<'a>) {
         let core = self.compiler.facade().core_crate();
         let option = self.compiler.facade().option();
         let convert = self.compiler.facade().convert();
@@ -412,7 +413,7 @@ impl<'a, 'b> Function<'a, 'b> {
 
         for insert in recovery {
             let error = match insert.expected_terminal() {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => {
                     let token = name.to_string();
@@ -486,7 +487,7 @@ impl<'a, 'b> Function<'a, 'b> {
             };
 
             let reading = match insert.destination_terminal() {
-                Terminal::Null => unreachable!("Automata with null transition"),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { capture, .. } => {
                     let write = match capture {
@@ -540,7 +541,7 @@ impl<'a, 'b> Function<'a, 'b> {
         }
     }
 
-    fn panic_recovery(&mut self, state: &'a SyntaxState, outgoing: &TransitionsVector<'a>) {
+    fn panic_recovery(&mut self, state: &'a State, outgoing: &TransitionsVector<'a>) {
         let core = self.compiler.facade().core_crate();
         let option = self.compiler.facade().option();
         let vec = self.compiler.facade().vec();
@@ -583,7 +584,7 @@ impl<'a, 'b> Function<'a, 'b> {
 
         for (_, through, _) in outgoing {
             match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => {
                     panic_transitions.push(self.handle_panic_expected(
@@ -842,8 +843,8 @@ impl<'a, 'b> Function<'a, 'b> {
     }
 
     #[inline]
-    fn has_outgoing(&self, state: &SyntaxState) -> bool {
-        for (from, _, _) in &self.automata.transitions {
+    fn has_outgoing(&self, state: &State) -> bool {
+        for (from, _, _) in self.automata.transitions() {
             if from == state {
                 return true;
             }
@@ -853,7 +854,7 @@ impl<'a, 'b> Function<'a, 'b> {
     }
 
     #[inline(always)]
-    fn name_of(&mut self, state: &'a SyntaxState) -> usize {
+    fn name_of(&mut self, state: &'a State) -> usize {
         *self.state_map.entry(state).or_insert_with(|| {
             self.state_generator
                 .next()

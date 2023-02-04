@@ -35,8 +35,6 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::ops::RangeFrom;
-
 use crate::utils::OptimizationStrategy;
 use crate::{
     token::{characters::CharacterSet, terminal::Terminal, NULL},
@@ -45,13 +43,21 @@ use crate::{
 
 pub(super) struct Scope {
     alphabet: CharacterSet,
-    generator: RangeFrom<ScannerState>,
+    state: State,
     strategy: OptimizationStrategy,
 }
 
 impl AutomataContext for Scope {
-    type State = ScannerState;
     type Terminal = Terminal;
+
+    #[inline(always)]
+    fn gen_state(&mut self) -> State {
+        let state = self.state;
+
+        self.state += 1;
+
+        state
+    }
 
     #[inline(always)]
     fn strategy(&self) -> &OptimizationStrategy {
@@ -64,7 +70,7 @@ impl Scope {
     pub(super) fn new(alphabet: CharacterSet) -> Self {
         Self {
             alphabet,
-            generator: 1..,
+            state: 1,
             strategy: OptimizationStrategy::CANONICALIZE,
         }
     }
@@ -89,23 +95,11 @@ impl Scope {
 
     #[inline(always)]
     pub(super) fn reset(&mut self) {
-        self.generator = 1..;
+        self.state = 1;
     }
 
     #[inline(always)]
     pub(super) fn set_strategy(&mut self, strategy: OptimizationStrategy) {
         self.strategy = strategy;
-    }
-}
-
-pub(super) type ScannerState = usize;
-
-impl State<Scope> for ScannerState {
-    #[inline(always)]
-    fn gen_state(context: &mut Scope) -> Self {
-        context
-            .generator
-            .next()
-            .expect("Internal error. State generator exceeded.")
     }
 }

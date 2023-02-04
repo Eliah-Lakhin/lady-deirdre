@@ -38,6 +38,7 @@
 use proc_macro2::{Ident, Span};
 use syn::{spanned::Spanned, Attribute, Error, Result};
 
+use crate::utils::{AutomataContext, OptimizationStrategy};
 use crate::{
     node::{
         automata::{
@@ -226,7 +227,14 @@ impl Rule {
             "Internal error. Rule automata already built.",
         );
 
+        builder
+            .scope()
+            .set_strategy(OptimizationStrategy::DETERMINE);
         let mut automata = self.regex.encode(builder.scope())?;
+        builder
+            .scope()
+            .set_strategy(OptimizationStrategy::CANONICALIZE);
+        builder.scope().optimize(&mut automata);
 
         automata.merge_captures(builder.scope())?;
 

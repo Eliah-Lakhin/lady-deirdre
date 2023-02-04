@@ -42,7 +42,7 @@ use syn::{
     AttrStyle, Data, DeriveInput, Error, Generics, Result,
 };
 
-use crate::utils::OptimizationStrategy;
+use crate::utils::{debug_panic, OptimizationStrategy};
 use crate::{
     token::{
         characters::CharacterSet,
@@ -54,13 +54,9 @@ use crate::{
         transition::Transition,
         variant::TokenVariant,
     },
-    utils::{
-        AutomataContext, Facade, Map, MapImpl, MultimapImpl, PredictableCollection, Set, SetImpl,
-    },
+    utils::{AutomataContext, Facade, Map, PredictableCollection, Set, SetImpl},
+    BENCHMARK,
 };
-
-const DETERMINE_THRESHOLD: u128 = 200;
-const NONE_THRESHOLD: u128 = 1000;
 
 pub struct Token {
     pub(super) token_name: Ident,
@@ -72,6 +68,8 @@ pub struct Token {
 
 impl Parse for Token {
     fn parse(input: ParseStream) -> Result<Self> {
+        let compile_start = Instant::now();
+
         let input = input.parse::<DeriveInput>()?;
 
         let token_name = input.ident;
@@ -84,7 +82,7 @@ impl Parse for Token {
                 let span = match other {
                     Data::Struct(data) => data.struct_token.span,
                     Data::Union(data) => data.union_token.span,
-                    _ => unimplemented!(),
+                    _ => debug_panic!("Unsupported Item format."),
                 };
 
                 return Err(Error::new(
@@ -129,7 +127,7 @@ impl Parse for Token {
                     expression.inline(&inline_map)?;
 
                     if inline_map.insert(name, expression).is_some() {
-                        unreachable!("Inline expression redefined.");
+                        debug_panic!("Inline expression redefined.");
                     }
                 }
 
@@ -184,7 +182,7 @@ impl Parse for Token {
             .fold(None, |accumulator: Option<CharacterSet>, rule| {
                 let alphabet = match rule {
                     TokenVariant::Rule { expression, .. } => expression.alphabet(),
-                    _ => unreachable!("Non-rule variant."),
+                    _ => debug_panic!("Non-rule variant."),
                 };
 
                 Some(match accumulator {
@@ -199,19 +197,11 @@ impl Parse for Token {
             ))?;
 
         let mut scope = Scope::new(alphabet);
+        scope.set_strategy(OptimizationStrategy::NONE);
 
-        let optimization_threshold = Instant::now();
         let mut automata = rules
             .iter()
             .try_fold(None, |accumulator, rule| {
-                if optimization_threshold.elapsed().as_millis() > DETERMINE_THRESHOLD {
-                    scope.set_strategy(OptimizationStrategy::DETERMINE);
-                }
-
-                if optimization_threshold.elapsed().as_millis() > NONE_THRESHOLD {
-                    scope.set_strategy(OptimizationStrategy::NONE);
-                }
-
                 let rule_name;
                 let rule_index;
                 let rule_expression;
@@ -228,7 +218,7 @@ impl Parse for Token {
                         rule_expression = expression;
                     }
 
-                    _ => unreachable!("Non-rule variant."),
+                    _ => debug_panic!("Non-rule variant."),
                 }
 
                 let mut automata = rule_expression.encode(&mut scope)?;
@@ -252,69 +242,62 @@ impl Parse for Token {
             })?
             .expect("Internal error. Empty rule set.");
 
-        if scope.strategy() == &OptimizationStrategy::NONE {
-            scope.set_strategy(OptimizationStrategy::DETERMINE);
-            scope.optimize(&mut automata);
-        }
+        scope.set_strategy(OptimizationStrategy::DETERMINE);
+        scope.optimize(&mut automata);
 
         loop {
             let mut has_changes = false;
 
-            automata.transitions = automata
-                .transitions
-                .group(|(from, through, to)| (from, (through, to)))
-                .try_for_each(|_, transitions| {
-                    let mut products = Map::empty();
-                    let mut conflict = None;
+            automata.try_map(|_, transitions| {
+                let mut products = Map::empty();
+                let mut conflict = None;
 
-                    transitions.retain(|(through, to)| match through {
-                        Terminal::Product(index) => {
-                            let precedence = rules[*index].rule_precedence();
+                transitions.retain(|(through, to)| match through {
+                    Terminal::Product(index) => {
+                        let precedence = rules[*index].rule_precedence();
 
-                            if let Some((previous, _)) = products.insert(precedence, (*index, *to))
-                            {
-                                conflict = Some((*index, previous));
-                            }
-
-                            false
+                        if let Some((previous, _)) = products.insert(precedence, (*index, *to)) {
+                            conflict = Some((*index, previous));
                         }
 
-                        _ => true,
-                    });
-
-                    if let Some((a, b)) = conflict {
-                        let a = rules[a].rule_name();
-                        let b = rules[b].rule_name();
-
-                        return Err(Error::new(
-                            a.span(),
-                            format!(
-                                "This rule conflicts with {:?} rule. Both rules can match the same \
-                                substring.\nTo resolve ambiguity try to label these rules with \
-                                explicit distinct precedences using #[precedence(<number>)] \
-                                attribute.\nDefault precedence is 1. Rules with higher precedence \
-                                value have priority over the rules with lower precedence value.",
-                                b.to_string(),
-                            ),
-                        ));
+                        false
                     }
 
-                    if products.len() > 1 {
-                        has_changes = true;
-                    }
+                    _ => true,
+                });
 
-                    let product = products.iter().max_by_key(|(precedence, _)| *precedence);
+                if let Some((a, b)) = conflict {
+                    let a = rules[a].rule_name();
+                    let b = rules[b].rule_name();
 
-                    if let Some((_, (index, to))) = product {
-                        assert!(
-                            transitions.insert((Terminal::Product(*index), *to)),
-                            "Internal error. Duplicate production terminal.",
-                        );
-                    }
+                    return Err(Error::new(
+                        a.span(),
+                        format!(
+                            "This rule conflicts with {:?} rule. Both rules can match the same \
+                            substring.\nTo resolve ambiguity try to label these rules with \
+                            explicit distinct precedences using #[precedence(<number>)] \
+                            attribute.\nDefault precedence is 1. Rules with higher precedence \
+                            value have priority over the rules with lower precedence value.",
+                            b.to_string(),
+                        ),
+                    ));
+                }
 
-                    Ok(())
-                })?
-                .join(|from, (through, to)| (from, through, to));
+                if products.len() > 1 {
+                    has_changes = true;
+                }
+
+                let product = products.iter().max_by_key(|(precedence, _)| *precedence);
+
+                if let Some((_, (index, to))) = product {
+                    assert!(
+                        transitions.insert((Terminal::Product(*index), *to)),
+                        "Internal error. Duplicate production terminal.",
+                    );
+                }
+
+                Ok(())
+            })?;
 
             if !has_changes {
                 break;
@@ -323,30 +306,26 @@ impl Parse for Token {
             scope.optimize(&mut automata);
         }
 
-        if scope.strategy() != &OptimizationStrategy::CANONICALIZE {
-            scope.set_strategy(OptimizationStrategy::CANONICALIZE);
-            scope.optimize(&mut automata);
-        }
+        scope.set_strategy(OptimizationStrategy::CANONICALIZE);
+        scope.optimize(&mut automata);
 
         let mut products = Map::empty();
         let mut matched_products = Set::empty();
 
-        automata
-            .transitions
-            .retain(|(from, through, _)| match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
-                Terminal::Character(..) => true,
-                Terminal::Product(index) => {
-                    assert!(
-                        products.insert(*from, *index).is_none(),
-                        "Internal error. Unresolved ambiguity.",
-                    );
+        automata.retain(|from, through, _| match through {
+            Terminal::Null => debug_panic!("Automata with null transition."),
+            Terminal::Character(..) => true,
+            Terminal::Product(index) => {
+                assert!(
+                    products.insert(*from, *index).is_none(),
+                    "Internal error. Unresolved ambiguity.",
+                );
 
-                    let _ = matched_products.insert(*index);
+                let _ = matched_products.insert(*index);
 
-                    false
-                }
-            });
+                false
+            }
+        });
 
         for (index, rule) in rules.iter().enumerate() {
             match rule {
@@ -371,9 +350,25 @@ impl Parse for Token {
 
         let rules = rules.into_iter().map(RuleMeta::from).collect();
 
-        Ok(Compiler::compile(
-            token_name, generics, rules, mismatch, scope, automata, products,
-        ))
+        let result = Ok(Compiler::compile(
+            token_name.clone(),
+            generics,
+            rules,
+            mismatch,
+            scope,
+            automata,
+            products,
+        ));
+
+        if BENCHMARK {
+            println!(
+                "Token {} compile time: {:?}",
+                token_name,
+                compile_start.elapsed(),
+            )
+        }
+
+        result
     }
 }
 

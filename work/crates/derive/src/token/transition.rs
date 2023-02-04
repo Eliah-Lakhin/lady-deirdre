@@ -40,10 +40,10 @@ use std::{cmp::Ordering, ops::RangeInclusive};
 use proc_macro2::{Span, TokenStream};
 use syn::LitChar;
 
+use crate::utils::{debug_panic, State};
 use crate::{
     token::{
         rule::{RuleIndex, RuleMeta},
-        scope::ScannerState,
         NULL,
     },
     utils::{Facade, Set},
@@ -51,10 +51,10 @@ use crate::{
 
 #[derive(PartialEq, Eq, PartialOrd)]
 pub(super) struct Transition {
-    from: ScannerState,
+    from: State,
     incoming: Group,
     peek: Group,
-    to: Option<ScannerState>,
+    to: Option<State>,
     product: Option<RuleIndex>,
 }
 
@@ -80,10 +80,10 @@ impl Ord for Transition {
 impl Transition {
     #[inline(always)]
     pub(super) fn new(
-        from: ScannerState,
+        from: State,
         incoming: Set<char>,
         peek: Set<char>,
-        to: Option<ScannerState>,
+        to: Option<State>,
         product: Option<RuleIndex>,
     ) -> Self {
         Self {
@@ -134,7 +134,7 @@ impl Transition {
         };
 
         let to = match (&self.to, &self.product) {
-            (None, None) => unreachable!("Dead state."),
+            (None, None) => debug_panic!("Dead state."),
 
             (None, Some(index)) => {
                 let in_place = rules[*index].output_in_place(facade);
@@ -227,7 +227,7 @@ impl Group {
 
     fn output(&self) -> TokenStream {
         match self {
-            Self::Placeholder => unreachable!("An attempt to output placeholder"),
+            Self::Placeholder => debug_panic!("An attempt to output placeholder"),
             Self::Subgroups { grouped, .. } => {
                 let grouped = grouped.iter().map(Subgroup::output);
                 quote! { #( #grouped )|* }

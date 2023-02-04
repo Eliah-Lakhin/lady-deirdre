@@ -37,25 +37,24 @@
 
 mod automata;
 mod context;
+mod debug;
 mod deterministic;
 mod expression;
 mod facade;
 mod map;
-mod multimap;
 mod predictable;
 mod set;
-mod state;
 mod transitions;
+
+pub(crate) use debug::debug_panic;
 
 pub use crate::utils::{
     automata::Automata,
-    context::{AutomataContext, AutomataTerminal, OptimizationStrategy},
+    context::{AutomataContext, AutomataTerminal, OptimizationStrategy, State},
     expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
     facade::Facade,
     map::{Map, MapImpl},
-    multimap::{Multimap, MultimapImpl},
     predictable::PredictableCollection,
     set::{Set, SetImpl},
-    state::State,
     transitions::Transitions,
 };

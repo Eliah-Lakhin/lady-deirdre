@@ -38,13 +38,14 @@
 use syn::{Error, Result};
 
 use crate::node::{automata::NodeAutomata, regex::terminal::Terminal};
+use crate::utils::debug_panic;
 
 impl IsSkipAutomata for NodeAutomata {
     fn is_skip(&self) -> Result<()> {
-        for (from, through, to) in &self.transitions {
-            if from != &self.start || !self.finish.contains(to) {
+        for (from, through, to) in self.transitions() {
+            if from != self.start() || !self.finish().contains(to) {
                 match through {
-                    Terminal::Null => unreachable!("Automata with null transition"),
+                    Terminal::Null => debug_panic!("Automata with null transition."),
 
                     Terminal::Node { name, .. } | Terminal::Token { name, .. } => {
                         return Err(Error::new(

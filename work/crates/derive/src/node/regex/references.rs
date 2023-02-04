@@ -38,6 +38,7 @@
 use proc_macro2::Ident;
 use syn::{Error, Result};
 
+use crate::utils::debug_panic;
 use crate::{
     node::{
         builder::{kind::VariantKind, Builder},
@@ -51,7 +52,7 @@ impl CheckReferences for Regex {
         use VariantKind::*;
 
         match self {
-            Self::Operand(RegexOperand::Unresolved { .. }) => unreachable!("Unresolved operand."),
+            Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
 
             Self::Operand(RegexOperand::Debug { inner, .. }) => {
                 inner.check_references(context, builder)
@@ -86,7 +87,7 @@ impl CheckReferences for Regex {
                 };
 
                 match (context, reference.kind()) {
-                    (Unspecified(..), _) => unreachable!("Unspecified variant with rule."),
+                    (Unspecified(..), _) => debug_panic!("Unspecified variant with rule."),
 
                     (Comment(..), _) => {
                         return Err(Error::new(

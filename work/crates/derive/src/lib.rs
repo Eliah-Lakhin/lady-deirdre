@@ -52,6 +52,8 @@ mod node;
 mod token;
 mod utils;
 
+const BENCHMARK: bool = false;
+
 #[doc = include_str!("./token/readme.md")]
 #[proc_macro_derive(Token, attributes(define, rule, precedence, constructor, mismatch))]
 pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

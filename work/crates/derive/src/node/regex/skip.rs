@@ -38,11 +38,12 @@
 use syn::{Error, Result};
 
 use crate::node::regex::{operand::RegexOperand, Regex};
+use crate::utils::debug_panic;
 
 impl IsSkipRegex for Regex {
     fn is_skip(&self) -> Result<()> {
         match self {
-            Self::Operand(RegexOperand::Unresolved { .. }) => unreachable!("Unresolved operand."),
+            Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
 
             Self::Operand(RegexOperand::Debug { inner, .. }) => inner.is_skip(),
 

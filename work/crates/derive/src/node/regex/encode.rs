@@ -37,13 +37,11 @@
 
 use syn::{Error, Result};
 
+use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::{
-            merge::AutomataMergeCaptures,
-            scope::Scope,
-            variables::AutomataVariables,
-            NodeAutomata,
+            merge::AutomataMergeCaptures, scope::Scope, variables::AutomataVariables, NodeAutomata,
         },
         regex::{operand::RegexOperand, operator::RegexOperator, terminal::Terminal, Regex},
     },
@@ -54,7 +52,7 @@ impl Encode for Regex {
     #[inline(always)]
     fn encode(&self, scope: &mut Scope) -> Result<NodeAutomata> {
         match self {
-            Self::Operand(RegexOperand::Unresolved { .. }) => unreachable!("Unresolved operand."),
+            Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
 
             Self::Operand(RegexOperand::Debug { span, inner }) => {
                 let mut inner = inner.encode(scope)?;
@@ -133,7 +131,7 @@ impl Encode for Regex {
 
                     RegexOperator::Optional => Ok(scope.optional(inner)),
 
-                    _ => unreachable!("Unsupported Unary operator."),
+                    _ => debug_panic!("Unsupported Unary operator."),
                 }
             }
 
@@ -148,7 +146,7 @@ impl Encode for Regex {
                 match operator {
                     RegexOperator::Union => Ok(scope.union(left, right)),
                     RegexOperator::Concat => Ok(scope.concatenate(left, right)),
-                    _ => unreachable!("Unsupported Binary operator."),
+                    _ => debug_panic!("Unsupported Binary operator."),
                 }
             }
         }

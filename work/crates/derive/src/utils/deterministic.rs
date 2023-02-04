@@ -35,37 +35,32 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use crate::utils::transitions::Closure;
 use crate::utils::{
-    transitions::{Transitions, TransitionsImpl},
-    Automata,
-    AutomataContext,
-    AutomataTerminal,
-    PredictableCollection,
-    Set,
-    SetImpl,
-    State,
+    transitions::Transitions, Automata, AutomataContext, Map, PredictableCollection, Set, State,
 };
 
 pub(super) struct Deterministic<'a, C: AutomataContext> {
     context: &'a mut C,
     original: &'a Automata<C>,
-    alphabet: Set<C::Terminal>,
-    pending: Vec<(C::State, Set<C::State>)>,
-    registered: Vec<(C::State, Set<C::State>)>,
-    transitions: Transitions<C::State, C::Terminal>,
+    alphabet: &'a Set<C::Terminal>,
+    pending: Vec<(State, Closure)>,
+    registered: Map<Closure, State>,
+    transitions: Transitions<C::Terminal>,
 }
 
 impl<'a, C: AutomataContext> Deterministic<'a, C> {
-    pub(super) fn build(context: &'a mut C, original: &'a Automata<C>) -> Automata<C> {
-        let mut alphabet = original.transitions.alphabet();
-        alphabet.remove(&C::Terminal::null());
+    pub(super) fn build(
+        context: &'a mut C,
+        original: &'a Automata<C>,
+        alphabet: &'a Set<C::Terminal>,
+    ) -> Automata<C> {
+        let mut start = Closure::default();
 
-        let start = original
-            .transitions
-            .closure_of(original.start, C::Terminal::null());
+        start.of_null(&original.transitions, original.start);
 
-        let mut pending = Vec::with_capacity(original.transitions.len());
-        let registered = Vec::with_capacity(original.transitions.len());
+        let mut pending = Vec::with_capacity(original.transitions.length());
+        let registered = Map::with_capacity(original.transitions.length());
 
         pending.push((original.start, start));
 
@@ -75,7 +70,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             alphabet,
             pending,
             registered,
-            transitions: Transitions::empty(),
+            transitions: Transitions::default(),
         };
 
         while deterministic.pop() {}
@@ -83,14 +78,16 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
         let finish = deterministic
             .registered
             .iter()
-            .filter_map(|(state, closure)| {
-                if closure.intersection(&original.finish).next().is_some() {
-                    Some(*state)
-                } else {
-                    None
+            .filter_map(|(closure, state)| {
+                for original_state in closure {
+                    if original.finish.contains(original_state) {
+                        return Some(*state);
+                    }
                 }
+
+                None
             })
-            .collect();
+            .collect::<Set<_>>();
 
         Automata {
             start: original.start,
@@ -105,13 +102,13 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             Some(pair) => pair,
         };
 
-        self.registered.push((from, closure.clone()));
+        let _ = self.registered.insert(closure.clone(), from);
 
-        for symbol in self.alphabet.clone() {
-            let mut target = Set::empty();
+        for symbol in self.alphabet {
+            let mut target = Closure::default();
 
-            for state in closure.iter().cloned() {
-                target.append(self.original.transitions.closure_of(state, symbol.clone()));
+            for state in closure.into_iter().cloned() {
+                target.of(&self.original.transitions, state, symbol);
             }
 
             if target.is_empty() {
@@ -120,17 +117,15 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
 
             let to = self.push(target);
 
-            self.transitions.insert((from, symbol, to));
+            self.transitions.through(from, symbol.clone(), to);
         }
 
         true
     }
 
-    fn push(&mut self, closure: Set<C::State>) -> C::State {
-        for (state, registered) in self.registered.iter() {
-            if registered == &closure {
-                return *state;
-            }
+    fn push(&mut self, closure: Closure) -> State {
+        if let Some(state) = self.registered.get(&closure) {
+            return *state;
         }
 
         for (state, pending) in self.pending.iter() {
@@ -139,16 +134,16 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             }
         }
 
-        match closure.single() {
-            None => {
-                let state = C::State::gen_state(&mut self.context);
-
+        match closure.state() {
+            Some(state) => {
                 self.pending.push((state, closure));
 
                 state
             }
 
-            Some(state) => {
+            None => {
+                let state = self.context.gen_state();
+
                 self.pending.push((state, closure));
 
                 state

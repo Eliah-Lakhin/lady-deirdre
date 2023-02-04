@@ -37,6 +37,7 @@
 
 use proc_macro2::{Ident, TokenStream};
 
+use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::variables::{VariableKind, VariableMap, VariableMeta, VariableRepetition},
@@ -113,7 +114,7 @@ impl VariableMeta {
                 let vec = facade.vec();
 
                 match terminal {
-                    Terminal::Null => unreachable!("Automata with null transition."),
+                    Terminal::Null => debug_panic!("Automata with null transition."),
 
                     Terminal::Token { .. } => Some(quote! {
                         #vec::push(&mut #variable, #core::lexis::TokenRef::nil());

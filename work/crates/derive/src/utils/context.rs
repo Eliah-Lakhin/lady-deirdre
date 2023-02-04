@@ -38,46 +38,33 @@
 use std::{hash::Hash, mem::replace};
 
 use crate::utils::{
-    automata::Automata,
-    transitions::{Transitions, TransitionsImpl},
-    Map, PredictableCollection, Set, SetImpl, State,
+    automata::Automata, debug_panic, transitions::Transitions, Map, PredictableCollection, Set,
+    SetImpl,
 };
 
+pub type State = usize;
+
 pub trait AutomataContext: Sized {
-    type State: State<Self>;
     type Terminal: AutomataTerminal;
+
+    fn gen_state(&mut self) -> State;
 
     fn copy(&mut self, automata: &Automata<Self>) -> Automata<Self> {
         let mut state_map =
-            Map::with_capacity(automata.transitions.len() + automata.finish.len() + 1);
+            Map::with_capacity(automata.transitions.length() + automata.finish.len() + 1);
 
-        let start = Self::State::gen_state(self);
+        let start = self.gen_state();
 
-        let _ = state_map.insert(&automata.start, start);
+        let _ = state_map.insert(automata.start, start);
 
-        let transitions = automata
-            .transitions
-            .iter()
-            .map(|(from, through, to)| {
-                let from = *state_map
-                    .entry(from)
-                    .or_insert_with(|| Self::State::gen_state(self));
-                let to = *state_map
-                    .entry(to)
-                    .or_insert_with(|| Self::State::gen_state(self));
+        let mut transitions = automata.transitions.clone();
 
-                (from, through.clone(), to)
-            })
-            .collect::<Transitions<_, _>>();
+        transitions.rename(|state| *state_map.entry(state).or_insert_with(|| self.gen_state()));
 
         let finish = automata
             .finish
             .iter()
-            .map(|state| {
-                *state_map
-                    .entry(state)
-                    .or_insert_with(|| Self::State::gen_state(self))
-            })
+            .map(|state| *state_map.entry(*state).or_insert_with(|| self.gen_state()))
             .collect::<Set<_>>();
 
         Automata {
@@ -89,11 +76,11 @@ pub trait AutomataContext: Sized {
 
     fn terminal(&mut self, terminals: Set<Self::Terminal>) -> Automata<Self> {
         if terminals.is_empty() {
-            unreachable!("An attempt to create a terminal of empty set.");
+            debug_panic!("An attempt to create a terminal of empty set.");
         }
 
-        let start = Self::State::gen_state(self);
-        let finish = Self::State::gen_state(self);
+        let start = self.gen_state();
+        let finish = self.gen_state();
 
         let mut transitions = Transitions::with_capacity(terminals.len());
 
@@ -109,9 +96,9 @@ pub trait AutomataContext: Sized {
     }
 
     fn union(&mut self, mut a: Automata<Self>, b: Automata<Self>) -> Automata<Self> {
-        let start = Self::State::gen_state(self);
+        let start = self.gen_state();
 
-        a.transitions.append(b.transitions);
+        a.transitions.merge(b.transitions);
 
         a.transitions.through_null(start, a.start);
         a.transitions.through_null(start, b.start);
@@ -129,7 +116,7 @@ pub trait AutomataContext: Sized {
             a.transitions.through_null(a_finish, b.start);
         }
 
-        a.transitions.append(b.transitions);
+        a.transitions.merge(b.transitions);
 
         self.optimize(&mut a);
 
@@ -148,7 +135,7 @@ pub trait AutomataContext: Sized {
     }
 
     fn optional(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
-        let start = Self::State::gen_state(self);
+        let start = self.gen_state();
 
         inner.finish.insert(start);
         inner
@@ -182,7 +169,7 @@ pub enum OptimizationStrategy {
     CANONICALIZE,
 }
 
-pub trait AutomataTerminal: Clone + Eq + Hash {
+pub trait AutomataTerminal: Clone + Eq + Hash + 'static {
     fn null() -> Self;
 
     fn is_null(&self) -> bool;
@@ -192,13 +179,28 @@ pub trait AutomataTerminal: Clone + Eq + Hash {
 mod tests {
     use std::ops::RangeFrom;
 
-    use crate::utils::{AutomataContext, AutomataTerminal, Set, SetImpl, State};
+    use crate::utils::{
+        AutomataContext, AutomataTerminal, OptimizationStrategy, Set, SetImpl, State,
+    };
 
-    struct TestContext(RangeFrom<TestState>);
+    struct TestContext(State, OptimizationStrategy);
 
     impl AutomataContext for TestContext {
-        type State = TestState;
         type Terminal = TestTerminal;
+
+        #[inline(always)]
+        fn gen_state(&mut self) -> State {
+            let state = self.0;
+
+            self.0 += 1;
+
+            state
+        }
+
+        #[inline(always)]
+        fn strategy(&self) -> &OptimizationStrategy {
+            &self.1
+        }
     }
 
     type TestTerminal = &'static str;
@@ -206,26 +208,18 @@ mod tests {
     impl AutomataTerminal for TestTerminal {
         #[inline(always)]
         fn null() -> Self {
-            ""
+            "ε"
         }
 
         #[inline(always)]
         fn is_null(&self) -> bool {
-            self.is_empty()
-        }
-    }
-
-    type TestState = usize;
-
-    impl State<TestContext> for TestState {
-        fn gen_state(context: &mut TestContext) -> Self {
-            context.0.next().unwrap()
+            self == &"ε"
         }
     }
 
     #[test]
     fn test_automata() {
-        let mut context = TestContext(1..);
+        let mut context = TestContext(1, OptimizationStrategy::CANONICALIZE);
 
         let foo = context.terminal(Set::new(["foo"]));
         let bar = context.terminal(Set::new(["bar"]));

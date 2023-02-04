@@ -38,20 +38,24 @@
 use std::cmp::Ordering;
 
 use crate::node::{
-    automata::{scope::SyntaxState, NodeAutomata},
+    automata::NodeAutomata,
     builder::{kind::VariantKind, Builder},
     regex::terminal::Terminal,
 };
+use crate::utils::{debug_panic, State};
 
-pub(in crate::node) type TransitionsVector<'a> = Vec<&'a (SyntaxState, Terminal, SyntaxState)>;
+pub(in crate::node) type TransitionsVector<'a> = Vec<(&'a State, &'a Terminal, &'a State)>;
 
 impl<'a> TransitionsVectorImpl<'a> for TransitionsVector<'a> {
-    fn outgoing(automata: &'a NodeAutomata, state: &'a SyntaxState) -> Self {
-        let mut outgoing = automata
-            .transitions
-            .iter()
-            .filter(|(from, _, _)| from == state)
-            .collect::<Vec<_>>();
+    fn outgoing(automata: &'a NodeAutomata, state: &'a State) -> Self {
+        let mut outgoing = match automata.transitions().outgoing(state) {
+            None => return vec![],
+
+            Some(outgoing) => outgoing
+                .iter()
+                .map(|(through, to)| (state, through, to))
+                .collect::<Vec<_>>(),
+        };
 
         outgoing.sort_by(|a, b| {
             if a.2 < b.2 {
@@ -81,7 +85,7 @@ impl<'a> TransitionsVectorImpl<'a> for TransitionsVector<'a> {
 
         self.into_iter()
             .filter(|(_, through, _)| match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => !skip_tokens.contains(name),
 
@@ -99,7 +103,7 @@ impl<'a> TransitionsVectorImpl<'a> for TransitionsVector<'a> {
 
         for (_, through, _) in self {
             match through {
-                Terminal::Null => unreachable!("Automata with null transition."),
+                Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => tokens.push(name.to_string()),
 
@@ -112,7 +116,7 @@ impl<'a> TransitionsVectorImpl<'a> for TransitionsVector<'a> {
 }
 
 pub(in crate::node) trait TransitionsVectorImpl<'a> {
-    fn outgoing(automata: &'a NodeAutomata, state: &'a SyntaxState) -> Self;
+    fn outgoing(automata: &'a NodeAutomata, state: &'a State) -> Self;
 
     fn filter_skip(self, builder: &Builder) -> Self;
 

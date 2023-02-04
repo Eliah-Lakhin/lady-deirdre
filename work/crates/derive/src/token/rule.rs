@@ -37,6 +37,7 @@
 
 use proc_macro2::{Ident, TokenStream};
 
+use crate::utils::debug_panic;
 use crate::{token::variant::TokenVariant, utils::Facade};
 
 pub(super) type RuleIndex = usize;
@@ -65,7 +66,7 @@ impl From<TokenVariant> for RuleMeta {
                 constructor,
             },
 
-            _ => unreachable!("Non-rule variant."),
+            _ => debug_panic!("Non-rule variant."),
         }
     }
 }

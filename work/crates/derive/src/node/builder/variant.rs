@@ -38,6 +38,7 @@
 use proc_macro2::{Ident, Span};
 use syn::{spanned::Spanned, AttrStyle, Error, Result, Variant};
 
+use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::{synchronization::Synchronization, variables::VariableMap, NodeAutomata},
@@ -156,7 +157,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
 
             (kind @ Unspecified(..), None) => kind,
 
-            (Sentence(..), _) => unreachable!("Variant kind set to Sentence."),
+            (Sentence(..), _) => debug_panic!("Variant kind set to Sentence."),
         };
 
         match (&kind, &synchronization) {
