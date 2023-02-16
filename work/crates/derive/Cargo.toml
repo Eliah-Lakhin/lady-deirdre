@@ -37,7 +37,7 @@
 
 [package]
 name = "lady-deirdre-derive"
-version = "1.0.2"
+version = "1.0.3"
 authors = ["Ilya Lakhin (Илья Александрович Лахин) <eliah.lakhin@gmail.com>"]
 edition = "2021"
 description = "Compiler front-end foundation technology. Macro crate."
