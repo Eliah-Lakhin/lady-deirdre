@@ -40,15 +40,24 @@ use syn::{
     parse::{Lookahead1, ParseStream},
     spanned::Spanned,
     token::Paren,
-    Error, LitChar, LitStr, Result,
+    Error,
+    LitChar,
+    LitStr,
+    Result,
 };
 
-use crate::utils::debug_panic;
 use crate::{
     token::{characters::CharacterSet, scope::Scope, NULL},
     utils::{
-        Applicability, Automata, AutomataContext, Expression, ExpressionOperand,
-        ExpressionOperator, Map,
+        debug_panic,
+        Applicability,
+        Automata,
+        AutomataContext,
+        Expression,
+        ExpressionOperand,
+        ExpressionOperator,
+        Map,
+        OptimizationStrategy,
     },
 };
 
@@ -109,6 +118,8 @@ impl RegexImpl for Regex {
             Self::Operand(Operand::Inline { .. }) => debug_panic!("Unresolved inline."),
 
             Self::Operand(Operand::Debug { span, inner }) => {
+                scope.set_strategy(OptimizationStrategy::CANONICALIZE);
+
                 let inner = inner.encode(scope)?;
 
                 return Err(Error::new(

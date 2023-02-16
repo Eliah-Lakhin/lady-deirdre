@@ -35,14 +35,19 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::Ident;
 use std::time::Instant;
+
+use proc_macro2::Ident;
 use syn::{
     parse::{Parse, ParseStream},
-    AttrStyle, Data, DeriveInput, Error, Generics, Result,
+    AttrStyle,
+    Data,
+    DeriveInput,
+    Error,
+    Generics,
+    Result,
 };
 
-use crate::utils::{debug_panic, OptimizationStrategy};
 use crate::{
     token::{
         characters::CharacterSet,
@@ -54,7 +59,16 @@ use crate::{
         transition::Transition,
         variant::TokenVariant,
     },
-    utils::{AutomataContext, Facade, Map, PredictableCollection, Set, SetImpl},
+    utils::{
+        debug_panic,
+        AutomataContext,
+        Facade,
+        Map,
+        OptimizationStrategy,
+        PredictableCollection,
+        Set,
+        SetImpl,
+    },
     BENCHMARK,
 };
 
@@ -422,7 +436,7 @@ impl From<Token> for proc_macro::TokenStream {
 
             true => {
                 let variants = input.rules.into_iter().map(|rule| {
-                    let index = rule.index();
+                    let index = rule.public_index();
                     let in_place = rule.output_in_place(&facade);
 
                     quote! { #index => #in_place }

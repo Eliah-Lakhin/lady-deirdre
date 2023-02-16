@@ -40,13 +40,12 @@ use std::{cmp::Ordering, ops::RangeInclusive};
 use proc_macro2::{Span, TokenStream};
 use syn::LitChar;
 
-use crate::utils::{debug_panic, State};
 use crate::{
     token::{
         rule::{RuleIndex, RuleMeta},
         NULL,
     },
-    utils::{Facade, Set},
+    utils::{debug_panic, Facade, Set, State},
 };
 
 #[derive(PartialEq, Eq, PartialOrd)]
@@ -119,7 +118,7 @@ impl Transition {
                 let peek = self.peek.output();
 
                 quote! {
-                    (#from, #peek, _)
+                    (#from, _, #peek)
                 }
             }
 

@@ -37,8 +37,10 @@
 
 use proc_macro2::{Ident, TokenStream};
 
-use crate::utils::debug_panic;
-use crate::{token::variant::TokenVariant, utils::Facade};
+use crate::{
+    token::variant::TokenVariant,
+    utils::{debug_panic, Facade},
+};
 
 pub(super) type RuleIndex = usize;
 pub(super) type RulePrecedence = usize;
@@ -73,8 +75,8 @@ impl From<TokenVariant> for RuleMeta {
 
 impl RuleMeta {
     #[inline]
-    pub(super) fn index(&self) -> &RuleIndex {
-        &self.index
+    pub(super) fn public_index(&self) -> RuleIndex {
+        self.index + 1
     }
 
     #[inline]
@@ -124,7 +126,7 @@ impl RuleMeta {
             }
 
             Some(..) => {
-                let index = &self.index;
+                let index = self.public_index();
 
                 quote! {
                     kind = #index
