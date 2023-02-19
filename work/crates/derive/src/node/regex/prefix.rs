@@ -126,10 +126,28 @@ impl RegexPrefix for Regex {
                 let mut leftmost = inner.leftmost();
 
                 match operator {
-                    RegexOperator::ZeroOrMore { .. } | RegexOperator::Optional => {
-                        leftmost.optional = true
+                    RegexOperator::ZeroOrMore { separator } => match leftmost.optional {
+                        true => {
+                            if let Some(separator) = separator {
+                                leftmost.append(separator.leftmost());
+                            }
+                        }
+
+                        false => leftmost.optional = true,
+                    },
+
+                    RegexOperator::OneOrMore { separator } => {
+                        if leftmost.optional {
+                            if let Some(separator) = separator {
+                                let separator = separator.leftmost();
+
+                                leftmost.optional = separator.optional;
+                                leftmost.append(separator);
+                            }
+                        }
                     }
-                    RegexOperator::OneOrMore { .. } => (),
+
+                    RegexOperator::Optional => leftmost.optional = true,
 
                     _ => debug_panic!("Unsupported Unary operator."),
                 }
