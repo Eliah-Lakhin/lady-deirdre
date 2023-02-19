@@ -37,15 +37,23 @@
 
 use syn::{Error, Result};
 
-use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::{
-            merge::AutomataMergeCaptures, scope::Scope, variables::AutomataVariables, NodeAutomata,
+            merge::AutomataMergeCaptures,
+            scope::Scope,
+            variables::AutomataVariables,
+            NodeAutomata,
         },
-        regex::{operand::RegexOperand, operator::RegexOperator, terminal::Terminal, Regex},
+        regex::{
+            operand::RegexOperand,
+            operator::RegexOperator,
+            prefix::RegexPrefix,
+            terminal::Terminal,
+            Regex,
+        },
     },
-    utils::{AutomataContext, Set, SetImpl},
+    utils::{debug_panic, AutomataContext, OptimizationStrategy, Set, SetImpl},
 };
 
 impl Encode for Regex {
@@ -55,6 +63,8 @@ impl Encode for Regex {
             Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
 
             Self::Operand(RegexOperand::Debug { span, inner }) => {
+                let leftmost = inner.leftmost();
+                scope.set_strategy(OptimizationStrategy::CANONICALIZE);
                 let mut inner = inner.encode(scope)?;
 
                 inner.merge_captures(scope)?;
@@ -65,8 +75,9 @@ impl Encode for Regex {
                     *span,
                     format!(
                         "This expression is a subject for debugging.\n\nCapturing variables \
-                        are:\n{:#}\nState machine transitions are:\n{:#}",
-                        variables, inner,
+                        are:\n{:#}\nState machine transitions are:\n{:#}\nLeftmost set \
+                        is:\n{:#}\n",
+                        variables, inner, leftmost
                     ),
                 ));
             }

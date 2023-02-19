@@ -35,18 +35,43 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::fmt::{Display, Formatter};
+
 use proc_macro2::Ident;
 
-use crate::utils::debug_panic;
 use crate::{
     node::regex::{operand::RegexOperand, operator::RegexOperator, Regex},
-    utils::{PredictableCollection, Set, SetImpl},
+    utils::{debug_panic, PredictableCollection, Set, SetImpl},
 };
 
 #[derive(Clone, Default)]
 pub(in crate::node) struct Leftmost {
+    optional: bool,
     tokens: Set<Ident>,
     nodes: Set<Ident>,
+}
+
+impl Display for Leftmost {
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut tokens = self.tokens.iter().cloned().collect::<Vec<_>>();
+
+        tokens.sort();
+
+        for name in &tokens {
+            writeln!(formatter, "    ${}", name)?;
+        }
+
+        let mut nodes = self.nodes.iter().cloned().collect::<Vec<_>>();
+
+        nodes.sort();
+
+        for name in &nodes {
+            writeln!(formatter, "    {}", name)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Leftmost {
@@ -68,6 +93,7 @@ impl Leftmost {
     #[inline(always)]
     fn new_token(token: Ident) -> Self {
         Self {
+            optional: false,
             tokens: Set::new([token]),
             nodes: Set::empty(),
         }
@@ -76,6 +102,7 @@ impl Leftmost {
     #[inline(always)]
     fn new_node(node: Ident) -> Self {
         Self {
+            optional: false,
             tokens: Set::empty(),
             nodes: Set::new([node]),
         }
@@ -93,7 +120,22 @@ impl RegexPrefix for Regex {
 
             Self::Operand(RegexOperand::Rule { name, .. }) => Leftmost::new_node(name.clone()),
 
-            Self::Unary { inner, .. } => inner.leftmost(),
+            Self::Unary {
+                operator, inner, ..
+            } => {
+                let mut leftmost = inner.leftmost();
+
+                match operator {
+                    RegexOperator::ZeroOrMore { .. } | RegexOperator::Optional => {
+                        leftmost.optional = true
+                    }
+                    RegexOperator::OneOrMore { .. } => (),
+
+                    _ => debug_panic!("Unsupported Unary operator."),
+                }
+
+                leftmost
+            }
 
             Self::Binary {
                 operator,
@@ -104,12 +146,24 @@ impl RegexPrefix for Regex {
 
                 match operator {
                     RegexOperator::Union => {
-                        left.append(right.leftmost());
+                        let right = right.leftmost();
+
+                        left.optional = left.optional | right.optional;
+                        left.append(right);
 
                         left
                     }
 
-                    RegexOperator::Concat => left,
+                    RegexOperator::Concat => {
+                        if left.optional {
+                            let right = right.leftmost();
+
+                            left.optional = right.optional;
+                            left.append(right);
+                        }
+
+                        left
+                    }
 
                     _ => debug_panic!("Unsupported Binary operator."),
                 }
