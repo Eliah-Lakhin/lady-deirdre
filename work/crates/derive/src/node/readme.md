@@ -430,7 +430,7 @@ enum MyNode {
 
   - ### Synchronization.
 
-    **Format:** `#[syncrhronization]`.
+    **Format:** `#[synchronization]`.
 
     Specifies a globally unique nested context for the error recovery
     synchronization.
