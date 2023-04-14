@@ -38,7 +38,12 @@
 use std::{hash::Hash, mem::replace};
 
 use crate::utils::{
-    automata::Automata, debug_panic, transitions::Transitions, Map, PredictableCollection, Set,
+    automata::Automata,
+    debug_panic,
+    transitions::Transitions,
+    Map,
+    PredictableCollection,
+    Set,
     SetImpl,
 };
 
@@ -123,10 +128,9 @@ pub trait AutomataContext: Sized {
         a
     }
 
-    fn repeat(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
+    fn repeat_one(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
         for finish in &inner.finish {
             inner.transitions.through_null(*finish, inner.start);
-            inner.transitions.through_null(inner.start, *finish);
         }
 
         self.optimize(&mut inner);
@@ -134,13 +138,20 @@ pub trait AutomataContext: Sized {
         inner
     }
 
-    fn optional(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
-        let start = self.gen_state();
+    fn repeat_zero(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
+        for finish in &inner.finish {
+            inner.transitions.through_null(*finish, inner.start);
+        }
 
-        inner.finish.insert(start);
+        inner.finish.insert(inner.start);
+
+        self.optimize(&mut inner);
+
         inner
-            .transitions
-            .through_null(start, replace(&mut inner.start, start));
+    }
+
+    fn optional(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
+        inner.finish.insert(inner.start);
 
         self.optimize(&mut inner);
 
@@ -180,7 +191,12 @@ mod tests {
     use std::ops::RangeFrom;
 
     use crate::utils::{
-        AutomataContext, AutomataTerminal, OptimizationStrategy, Set, SetImpl, State,
+        AutomataContext,
+        AutomataTerminal,
+        OptimizationStrategy,
+        Set,
+        SetImpl,
+        State,
     };
 
     struct TestContext(State, OptimizationStrategy);
@@ -234,7 +250,7 @@ mod tests {
             let foo_or_bar = context.copy(&foo_or_bar);
             context.concatenate(comma, foo_or_bar)
         };
-        let repeat_comma_foo_or_bar = context.repeat(comma_foo_or_bar);
+        let repeat_comma_foo_or_bar = context.repeat_zero(comma_foo_or_bar);
         let one_or_more = context.concatenate(foo_or_bar, repeat_comma_foo_or_bar);
 
         assert!(!one_or_more.test(vec![]));

@@ -100,14 +100,7 @@ impl Encode for Regex {
                 let inner = inner.encode(scope)?;
 
                 match operator {
-                    RegexOperator::OneOrMore { separator: None } => {
-                        let zero_or_more = {
-                            let inner = scope.copy(&inner);
-                            scope.repeat(inner)
-                        };
-
-                        Ok(scope.concatenate(inner, zero_or_more))
-                    }
+                    RegexOperator::OneOrMore { separator: None } => Ok(scope.repeat_one(inner)),
 
                     RegexOperator::OneOrMore {
                         separator: Some(separator),
@@ -118,12 +111,12 @@ impl Encode for Regex {
                             let inner = scope.copy(&inner);
                             scope.concatenate(separator, inner)
                         };
-                        let repeat_rest = scope.repeat(rest);
+                        let repeat_rest = scope.repeat_zero(rest);
 
                         Ok(scope.concatenate(inner, repeat_rest))
                     }
 
-                    RegexOperator::ZeroOrMore { separator: None } => Ok(scope.repeat(inner)),
+                    RegexOperator::ZeroOrMore { separator: None } => Ok(scope.repeat_zero(inner)),
 
                     RegexOperator::ZeroOrMore {
                         separator: Some(separator),
@@ -134,7 +127,7 @@ impl Encode for Regex {
                             let inner = scope.copy(&inner);
                             scope.concatenate(separator, inner)
                         };
-                        let repeat_rest = scope.repeat(rest);
+                        let repeat_rest = scope.repeat_zero(rest);
                         let one_or_more = scope.concatenate(inner, repeat_rest);
 
                         Ok(scope.optional(one_or_more))

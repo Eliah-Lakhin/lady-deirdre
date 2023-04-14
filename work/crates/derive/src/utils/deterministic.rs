@@ -35,14 +35,19 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::utils::transitions::Closure;
 use crate::utils::{
-    transitions::Transitions, Automata, AutomataContext, Map, PredictableCollection, Set, State,
+    transitions::{Closure, Transitions},
+    Automata,
+    AutomataContext,
+    Map,
+    PredictableCollection,
+    Set,
+    State,
 };
 
 pub(super) struct Deterministic<'a, C: AutomataContext> {
     context: &'a mut C,
-    original: &'a Automata<C>,
+    original: &'a Transitions<C::Terminal>,
     alphabet: &'a Set<C::Terminal>,
     pending: Vec<(State, Closure)>,
     registered: Map<Closure, State>,
@@ -52,26 +57,30 @@ pub(super) struct Deterministic<'a, C: AutomataContext> {
 impl<'a, C: AutomataContext> Deterministic<'a, C> {
     pub(super) fn build(
         context: &'a mut C,
-        original: &'a Automata<C>,
         alphabet: &'a Set<C::Terminal>,
+        start: &'a Set<State>,
+        finish: &'a Set<State>,
+        transitions: &'a Transitions<C::Terminal>,
     ) -> Automata<C> {
-        let mut start = Closure::default();
+        let mut start_closure = Closure::default();
 
-        start.of_null(&original.transitions, original.start);
+        for start in start {
+            start_closure.of_null(transitions, *start);
+        }
 
-        let mut pending = Vec::with_capacity(original.transitions.length());
-        let registered = Map::with_capacity(original.transitions.length());
-
-        pending.push((original.start, start));
+        let pending = Vec::with_capacity(transitions.length());
+        let registered = Map::with_capacity(transitions.length());
 
         let mut deterministic = Self {
             context,
-            original,
+            original: transitions,
             alphabet,
             pending,
             registered,
             transitions: Transitions::default(),
         };
+
+        let start = deterministic.force_push(start_closure);
 
         while deterministic.pop() {}
 
@@ -80,7 +89,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             .iter()
             .filter_map(|(closure, state)| {
                 for original_state in closure {
-                    if original.finish.contains(original_state) {
+                    if finish.contains(original_state) {
                         return Some(*state);
                     }
                 }
@@ -90,7 +99,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             .collect::<Set<_>>();
 
         Automata {
-            start: original.start,
+            start,
             finish,
             transitions: deterministic.transitions,
         }
@@ -108,7 +117,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             let mut target = Closure::default();
 
             for state in closure.into_iter().cloned() {
-                target.of(&self.original.transitions, state, symbol);
+                target.of(&self.original, state, symbol);
             }
 
             if target.is_empty() {
@@ -134,6 +143,11 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             }
         }
 
+        self.force_push(closure)
+    }
+
+    #[inline]
+    fn force_push(&mut self, closure: Closure) -> State {
         match closure.state() {
             Some(state) => {
                 self.pending.push((state, closure));

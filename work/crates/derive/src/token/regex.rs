@@ -168,7 +168,7 @@ impl RegexImpl for Regex {
             } => {
                 let inner = inner.encode(scope)?;
 
-                scope.repeat(inner)
+                scope.repeat_zero(inner)
             }
 
             Self::Unary {
@@ -177,10 +177,7 @@ impl RegexImpl for Regex {
             } => {
                 let inner = inner.encode(scope)?;
 
-                let left = scope.copy(&inner);
-                let right = scope.repeat(inner);
-
-                scope.concatenate(left, right)
+                scope.repeat_one(inner)
             }
 
             Self::Unary {

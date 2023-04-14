@@ -39,11 +39,19 @@ use std::collections::hash_map::Keys;
 
 use proc_macro2::Ident;
 use syn::{
-    parse::ParseStream, spanned::Spanned, AttrStyle, Attribute, Data, DeriveInput, Error, Generics,
-    Result, Type, Variant,
+    parse::ParseStream,
+    spanned::Spanned,
+    AttrStyle,
+    Attribute,
+    Data,
+    DeriveInput,
+    Error,
+    Generics,
+    Result,
+    Type,
+    Variant,
 };
 
-use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::{conflicts::CheckConflicts, scope::Scope, skip::IsSkipAutomata, NodeAutomata},
@@ -58,7 +66,7 @@ use crate::{
             Regex,
         },
     },
-    utils::{Map, PredictableCollection, Set},
+    utils::{debug_panic, Map, PredictableCollection, Set},
 };
 
 pub(in crate::node) mod constructor;

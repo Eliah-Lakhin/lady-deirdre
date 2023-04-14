@@ -35,12 +35,19 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::utils::{
-    debug_panic, AutomataTerminal, Map, PredictableCollection, Set, SetImpl, State,
-};
-use std::collections::BTreeSet;
-use std::mem::take;
+use std::{collections::BTreeSet, mem::take};
+
 use syn::Result;
+
+use crate::utils::{
+    debug_panic,
+    AutomataTerminal,
+    Map,
+    PredictableCollection,
+    Set,
+    SetImpl,
+    State,
+};
 
 #[derive(Clone)]
 pub struct Transitions<T: AutomataTerminal> {

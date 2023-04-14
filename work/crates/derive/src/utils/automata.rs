@@ -39,15 +39,23 @@ use std::{
     cmp::Ordering,
     collections::VecDeque,
     fmt::{Display, Formatter},
-    mem::{replace, swap, take},
+    mem::take,
     ops::RangeFrom,
 };
 
-use crate::utils::deterministic::Deterministic;
-use crate::utils::{
-    transitions::Transitions, AutomataContext, Map, PredictableCollection, Set, SetImpl, State,
-};
 use syn::Result;
+
+use crate::utils::{
+    debug_panic,
+    deterministic::Deterministic,
+    transitions::Transitions,
+    AutomataContext,
+    Map,
+    PredictableCollection,
+    Set,
+    SetImpl,
+    State,
+};
 
 pub struct Automata<C: AutomataContext> {
     pub(super) start: State,
@@ -202,16 +210,58 @@ impl<C: AutomataContext> Automata<C> {
     }
 
     pub(super) fn canonicalize(&mut self, context: &mut C) {
-        let (deterministic, alphabet) = self.reverse(context);
+        let (deterministic, alphabet, transitions) =
+            take(&mut self.transitions).into_reversed(self.finish.is_single());
 
-        if !deterministic {
-            *self = Deterministic::build(context, self, &alphabet);
+        match deterministic {
+            true => {
+                self.transitions = transitions;
+
+                let finish = match self.finish.single() {
+                    Some(finish) => finish,
+                    None => debug_panic!("Reversed DFA with multiple start states."),
+                };
+
+                self.finish = Set::new([self.start]);
+                self.start = finish;
+            }
+
+            false => {
+                *self = Deterministic::build(
+                    context,
+                    &alphabet,
+                    &self.finish,
+                    &Set::new([self.start]),
+                    &transitions,
+                );
+            }
         }
 
-        let (deterministic, alphabet) = self.reverse(context);
+        let (deterministic, alphabet, transitions) =
+            take(&mut self.transitions).into_reversed(self.finish.is_single());
 
-        if !deterministic {
-            *self = Deterministic::build(context, self, &alphabet);
+        match deterministic {
+            true => {
+                self.transitions = transitions;
+
+                let finish = match self.finish.single() {
+                    Some(finish) => finish,
+                    None => debug_panic!("Reversed DFA with multiple start states."),
+                };
+
+                self.finish = Set::new([self.start]);
+                self.start = finish;
+            }
+
+            false => {
+                *self = Deterministic::build(
+                    context,
+                    &alphabet,
+                    &self.finish,
+                    &Set::new([self.start]),
+                    &transitions,
+                );
+            }
         }
     }
 
@@ -223,7 +273,13 @@ impl<C: AutomataContext> Automata<C> {
             return;
         }
 
-        *self = Deterministic::build(context, self, &alphabet);
+        *self = Deterministic::build(
+            context,
+            &alphabet,
+            &Set::new([self.start]),
+            &self.finish,
+            &self.transitions,
+        );
     }
 
     #[cfg(test)]
@@ -250,29 +306,5 @@ impl<C: AutomataContext> Automata<C> {
         }
 
         self.finish.contains(state)
-    }
-
-    fn reverse(&mut self, context: &mut C) -> (bool, Set<C::Terminal>) {
-        let (deterministic, alphabet, transitions) =
-            take(&mut self.transitions).into_reversed(self.finish.len() == 1);
-
-        self.transitions = transitions;
-
-        match self.finish.single() {
-            Some(mut finish) => {
-                swap(&mut self.start, &mut finish);
-                self.finish = Set::new([finish]);
-            }
-
-            None => {
-                let finish = replace(&mut self.start, context.gen_state());
-
-                for start in replace(&mut self.finish, Set::new([finish])) {
-                    self.transitions.through_null(self.start, start);
-                }
-            }
-        }
-
-        (deterministic, alphabet)
     }
 }
