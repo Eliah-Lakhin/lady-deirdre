@@ -35,59 +35,31 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::mem::take;
+
 use syn::spanned::Spanned;
 
-use crate::node::regex::{operand::RegexOperand, operator::RegexOperator, span::SetSpan, Regex};
+use crate::{
+    node::regex::{operand::RegexOperand, operator::RegexOperator, span::SetSpan, Regex},
+    utils::debug_panic,
+};
 
 impl Inject for Regex {
     fn surround(&mut self, injection: &Self) {
-        match self {
-            Self::Operand(RegexOperand::Debug { inner, .. }) => {
-                inner.surround(injection);
-            }
+        self.inject(injection);
 
-            operand @ Self::Operand { .. } => {
-                let mut injection = injection.clone();
+        let span = self.span();
+        let mut injection = injection.clone();
+        injection.set_span(span);
 
-                if let Self::Operand(operand) = operand {
-                    injection.set_span(operand.span());
-                }
-
-                *operand = Self::Binary {
-                    operator: RegexOperator::Concat,
-                    left: Box::new(injection.clone()),
-                    right: Box::new(Self::Binary {
-                        operator: RegexOperator::Concat,
-                        left: Box::new(operand.clone()),
-                        right: Box::new(injection),
-                    }),
-                };
-            }
-
-            Self::Unary { operator, inner } => {
-                match operator {
-                    RegexOperator::ZeroOrMore {
-                        separator: Some(separator),
-                    } => {
-                        separator.surround(injection);
-                    }
-
-                    RegexOperator::OneOrMore {
-                        separator: Some(separator),
-                    } => {
-                        separator.surround(injection);
-                    }
-
-                    _ => (),
-                }
-
-                inner.surround(injection);
-            }
-
-            Self::Binary { left, right, .. } => {
-                left.surround(injection);
-                right.surround(injection);
-            }
+        *self = Self::Binary {
+            operator: RegexOperator::Concat,
+            left: Box::new(injection.clone()),
+            right: Box::new(Self::Binary {
+                operator: RegexOperator::Concat,
+                left: Box::new(self.clone()),
+                right: Box::new(injection),
+            }),
         }
     }
 
@@ -99,41 +71,44 @@ impl Inject for Regex {
 
             Self::Operand { .. } => (),
 
-            Self::Unary { operator, inner } => {
-                match operator {
-                    RegexOperator::ZeroOrMore {
-                        separator: Some(separator),
-                    } => {
-                        separator.surround(injection);
-                    }
+            Self::Unary { operator, inner } => match operator {
+                RegexOperator::OneOrMore { separator }
+                | RegexOperator::ZeroOrMore { separator } => {
+                    if let Some(mut taken_separator) = take(separator) {
+                        let span = taken_separator.span();
 
-                    RegexOperator::ZeroOrMore { separator } => {
+                        taken_separator.inject(injection);
+
                         let mut injection = injection.clone();
+                        injection.set_span(span);
 
-                        injection.set_span(inner.span());
-
-                        *separator = Some(Box::new(injection));
+                        *separator = Some(Box::new(Self::Binary {
+                            operator: RegexOperator::Concat,
+                            left: taken_separator,
+                            right: Box::new(injection),
+                        }));
                     }
 
-                    RegexOperator::OneOrMore {
-                        separator: Some(separator),
-                    } => {
-                        separator.surround(injection);
-                    }
+                    let span = inner.span();
 
-                    RegexOperator::OneOrMore { separator } => {
-                        let mut injection = injection.clone();
+                    inner.inject(injection);
 
-                        injection.set_span(inner.span());
+                    let mut injection = injection.clone();
+                    injection.set_span(span);
 
-                        *separator = Some(Box::new(injection));
-                    }
-
-                    _ => (),
+                    *inner = Box::new(Self::Binary {
+                        operator: RegexOperator::Concat,
+                        left: inner.clone(),
+                        right: Box::new(injection),
+                    });
                 }
 
-                inner.inject(injection);
-            }
+                RegexOperator::Optional => {
+                    inner.inject(injection);
+                }
+
+                _ => debug_panic!("Unsupported Unary operator."),
+            },
 
             Self::Binary {
                 operator,

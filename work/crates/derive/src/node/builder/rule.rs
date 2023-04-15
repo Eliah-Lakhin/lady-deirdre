@@ -38,7 +38,6 @@
 use proc_macro2::{Ident, Span};
 use syn::{spanned::Spanned, Attribute, Error, Result};
 
-use crate::utils::{AutomataContext, OptimizationStrategy};
 use crate::{
     node::{
         automata::{
@@ -57,7 +56,7 @@ use crate::{
             Regex,
         },
     },
-    utils::Set,
+    utils::{AutomataContext, OptimizationStrategy, Set},
 };
 
 pub(in crate::node) struct Rule {

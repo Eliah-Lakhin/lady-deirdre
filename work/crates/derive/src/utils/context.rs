@@ -143,7 +143,12 @@ pub trait AutomataContext: Sized {
             inner.transitions.through_null(*finish, inner.start);
         }
 
-        inner.finish.insert(inner.start);
+        let start = self.gen_state();
+
+        inner.transitions.through_null(start, inner.start);
+
+        inner.start = start;
+        inner.finish.insert(start);
 
         self.optimize(&mut inner);
 
@@ -151,7 +156,12 @@ pub trait AutomataContext: Sized {
     }
 
     fn optional(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
-        inner.finish.insert(inner.start);
+        let start = self.gen_state();
+
+        inner.transitions.through_null(start, inner.start);
+
+        inner.start = start;
+        inner.finish.insert(start);
 
         self.optimize(&mut inner);
 

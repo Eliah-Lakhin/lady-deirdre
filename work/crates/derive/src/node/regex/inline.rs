@@ -40,9 +40,12 @@ use std::mem::take;
 use proc_macro2::Ident;
 use syn::{Error, Result};
 
-use crate::node::{
-    builder::Builder,
-    regex::{operand::RegexOperand, span::SetSpan, Regex},
+use crate::{
+    node::{
+        builder::Builder,
+        regex::{operand::RegexOperand, operator::RegexOperator, span::SetSpan, Regex},
+    },
+    utils::debug_panic,
 };
 
 impl Inline for Regex {
@@ -79,7 +82,26 @@ impl Inline for Regex {
 
             Self::Operand(RegexOperand::Rule { .. }) => Ok(()),
 
-            Self::Unary { inner, .. } => inner.inline(builder),
+            Self::Unary { operator, inner } => {
+                match operator {
+                    RegexOperator::ZeroOrMore {
+                        separator: Some(operator),
+                    } => operator.inline(builder)?,
+
+                    RegexOperator::OneOrMore {
+                        separator: Some(operator),
+                    } => operator.inline(builder)?,
+
+                    RegexOperator::ZeroOrMore { separator: None } => (),
+
+                    RegexOperator::OneOrMore { separator: None } => (),
+
+                    RegexOperator::Optional => (),
+
+                    _ => debug_panic!("Unsupported Unary operator."),
+                }
+                inner.inline(builder)
+            }
 
             Self::Binary { left, right, .. } => {
                 left.inline(builder)?;

@@ -6,7 +6,7 @@ macro_rules! debug_panic {
             https://github.com/Eliah-Lakhin/lady-deirdre/issues\n\n\
             Message: {}\n\
             File: {}\n\
-            Line: {}\n
+            Line: {}\n\
             Column: {}",
             $message,
             ::std::file!(),

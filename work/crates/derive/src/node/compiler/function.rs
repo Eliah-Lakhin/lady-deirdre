@@ -39,7 +39,6 @@ use std::{collections::VecDeque, ops::RangeFrom};
 
 use proc_macro2::{Ident, TokenStream};
 
-use crate::utils::{debug_panic, State};
 use crate::{
     node::{
         automata::{variables::VariableMap, NodeAutomata},
@@ -52,7 +51,7 @@ use crate::{
         },
         regex::terminal::Terminal,
     },
-    utils::{Map, PredictableCollection, Set, SetImpl},
+    utils::{debug_panic, Map, PredictableCollection, Set, SetImpl, State},
 };
 
 pub(in crate::node) struct Function<'a, 'b> {
