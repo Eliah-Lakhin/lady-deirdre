@@ -37,8 +37,10 @@
 
 use syn::{Error, Result};
 
-use crate::node::{automata::NodeAutomata, regex::terminal::Terminal};
-use crate::utils::debug_panic;
+use crate::{
+    node::{automata::NodeAutomata, regex::terminal::Terminal},
+    utils::debug_panic,
+};
 
 impl IsSkipAutomata for NodeAutomata {
     fn is_skip(&self) -> Result<()> {

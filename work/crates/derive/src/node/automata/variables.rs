@@ -43,10 +43,9 @@ use std::{
 use proc_macro2::Ident;
 use syn::{Error, Result};
 
-use crate::utils::State;
 use crate::{
     node::{automata::NodeAutomata, builder::constructor::Constructor, regex::terminal::Terminal},
-    utils::{Map, PredictableCollection, Set, SetImpl},
+    utils::{Map, PredictableCollection, Set, SetImpl, State},
 };
 
 impl AutomataVariables for NodeAutomata {

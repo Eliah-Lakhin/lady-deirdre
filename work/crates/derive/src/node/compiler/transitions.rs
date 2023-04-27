@@ -37,12 +37,14 @@
 
 use std::cmp::Ordering;
 
-use crate::node::{
-    automata::NodeAutomata,
-    builder::{kind::VariantKind, Builder},
-    regex::terminal::Terminal,
+use crate::{
+    node::{
+        automata::NodeAutomata,
+        builder::{kind::VariantKind, Builder},
+        regex::terminal::Terminal,
+    },
+    utils::{debug_panic, State},
 };
-use crate::utils::{debug_panic, State};
 
 pub(in crate::node) type TransitionsVector<'a> = Vec<(&'a State, &'a Terminal, &'a State)>;
 

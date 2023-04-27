@@ -38,16 +38,25 @@
 use proc_macro2::Ident;
 use syn::Generics;
 
-use crate::utils::{debug_panic, AutomataContext};
 use crate::{
     token::{
         rule::{RuleIndex, RuleMeta},
         scope::Scope,
         terminal::Terminal,
         transition::Transition,
-        Token, NULL,
+        Token,
+        NULL,
     },
-    utils::{Automata, Map, PredictableCollection, Set, SetImpl, State},
+    utils::{
+        debug_panic,
+        Automata,
+        AutomataContext,
+        Map,
+        PredictableCollection,
+        Set,
+        SetImpl,
+        State,
+    },
 };
 
 pub(super) struct Compiler {

@@ -39,7 +39,6 @@ use std::vec::IntoIter;
 
 use proc_macro2::Ident;
 
-use crate::utils::{debug_panic, State};
 use crate::{
     node::{
         automata::NodeAutomata,
@@ -47,7 +46,7 @@ use crate::{
         compiler::transitions::{TransitionsVector, TransitionsVectorImpl},
         regex::terminal::Terminal,
     },
-    utils::{PredictableCollection, Set},
+    utils::{debug_panic, PredictableCollection, Set, State},
 };
 
 pub(in crate::node) struct Insert<'a> {

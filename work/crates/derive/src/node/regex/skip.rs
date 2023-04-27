@@ -37,8 +37,10 @@
 
 use syn::{Error, Result};
 
-use crate::node::regex::{operand::RegexOperand, Regex};
-use crate::utils::debug_panic;
+use crate::{
+    node::regex::{operand::RegexOperand, Regex},
+    utils::debug_panic,
+};
 
 impl IsSkipRegex for Regex {
     fn is_skip(&self) -> Result<()> {

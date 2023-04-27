@@ -44,9 +44,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod arena;
-mod std;
 mod incremental;
 pub mod lexis;
+mod std;
 pub mod syntax;
 
 pub use crate::incremental::Document;

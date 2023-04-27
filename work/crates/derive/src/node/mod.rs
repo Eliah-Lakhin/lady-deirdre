@@ -41,13 +41,16 @@ mod compiler;
 mod regex;
 
 use std::time::{Duration, Instant};
+
 use syn::{
     parse::{Parse, ParseStream, Result},
     DeriveInput,
 };
 
-use crate::node::{builder::Builder, compiler::Compiler};
-use crate::BENCHMARK;
+use crate::{
+    node::{builder::Builder, compiler::Compiler},
+    BENCHMARK,
+};
 
 pub struct Node {
     builder: Builder,

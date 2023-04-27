@@ -40,7 +40,9 @@ use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
-    Error, LitChar, Result,
+    Error,
+    LitChar,
+    Result,
 };
 
 use crate::{

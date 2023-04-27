@@ -35,10 +35,9 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::utils::OptimizationStrategy;
 use crate::{
     token::{characters::CharacterSet, terminal::Terminal, NULL},
-    utils::{Automata, AutomataContext, Set, SetImpl, State},
+    utils::{Automata, AutomataContext, OptimizationStrategy, Set, SetImpl, State},
 };
 
 pub(super) struct Scope {

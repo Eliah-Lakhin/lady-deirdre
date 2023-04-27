@@ -39,7 +39,7 @@
 
 #[cfg(not(feature = "std"))]
 pub use ::alloc::{
-    borrow::{ToOwned, Cow},
+    borrow::{Cow, ToOwned},
     boxed::Box,
     collections::{
         btree_map::Iter as BTreeMapIter,
@@ -81,7 +81,7 @@ pub use ::core::{
         Iterator,
         Map,
     },
-    marker::{PhantomData, Sized, Sync, Copy},
+    marker::{Copy, PhantomData, Sized, Sync},
     matches,
     mem::{forget, replace, take, transmute, ManuallyDrop, MaybeUninit},
     num::NonZeroUsize,

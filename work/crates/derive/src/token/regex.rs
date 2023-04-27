@@ -313,8 +313,7 @@ impl ExpressionOperand<Operator> for Operand {
     }
 }
 
-//todo
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub(super) enum Operator {
     Union = 10,
     Concat = 20,

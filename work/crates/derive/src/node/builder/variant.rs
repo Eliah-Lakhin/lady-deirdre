@@ -38,14 +38,13 @@
 use proc_macro2::{Ident, Span};
 use syn::{spanned::Spanned, AttrStyle, Error, Result, Variant};
 
-use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::{synchronization::Synchronization, variables::VariableMap, NodeAutomata},
         builder::{constructor::Constructor, kind::VariantKind, rule::Rule, Builder},
         regex::{prefix::Leftmost, Regex},
     },
-    utils::{PredictableCollection, Set},
+    utils::{debug_panic, PredictableCollection, Set},
 };
 
 pub(in crate::node) struct NodeVariant {

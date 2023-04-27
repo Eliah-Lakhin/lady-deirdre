@@ -39,13 +39,12 @@ use std::mem::take;
 
 use syn::{Error, Result};
 
-use crate::utils::{debug_panic, AutomataContext};
 use crate::{
     node::{
         automata::{scope::Scope, NodeAutomata},
         regex::terminal::Terminal,
     },
-    utils::{Map, PredictableCollection},
+    utils::{debug_panic, AutomataContext, Map, PredictableCollection},
 };
 
 impl AutomataMergeCaptures for NodeAutomata {

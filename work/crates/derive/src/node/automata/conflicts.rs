@@ -38,10 +38,9 @@
 use proc_macro2::Ident;
 use syn::{spanned::Spanned, Error, Result};
 
-use crate::utils::{debug_panic, State};
 use crate::{
     node::{automata::NodeAutomata, builder::Builder, regex::terminal::Terminal},
-    utils::{Map, PredictableCollection},
+    utils::{debug_panic, Map, PredictableCollection, State},
 };
 
 impl CheckConflicts for NodeAutomata {

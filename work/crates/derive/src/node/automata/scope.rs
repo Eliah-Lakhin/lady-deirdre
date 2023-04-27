@@ -35,10 +35,9 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::utils::OptimizationStrategy;
 use crate::{
     node::regex::terminal::Terminal,
-    utils::{AutomataContext, State},
+    utils::{AutomataContext, OptimizationStrategy, State},
 };
 
 pub(in crate::node) struct Scope {

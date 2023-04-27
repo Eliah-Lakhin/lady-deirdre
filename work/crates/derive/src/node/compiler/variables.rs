@@ -37,14 +37,13 @@
 
 use proc_macro2::{Ident, TokenStream};
 
-use crate::utils::debug_panic;
 use crate::{
     node::{
         automata::variables::{VariableKind, VariableMap, VariableMeta, VariableRepetition},
         compiler::Compiler,
         regex::terminal::Terminal,
     },
-    utils::Facade,
+    utils::{debug_panic, Facade},
 };
 
 impl VariableMap {

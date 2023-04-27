@@ -38,11 +38,13 @@
 use proc_macro2::Ident;
 use syn::{spanned::Spanned, AttrStyle, Error, ExprLit, Lit, Result, Variant};
 
-use crate::token::{
-    regex::{InlineMap, Regex, RegexImpl},
-    rule::{RuleIndex, RulePrecedence},
+use crate::{
+    token::{
+        regex::{InlineMap, Regex, RegexImpl},
+        rule::{RuleIndex, RulePrecedence},
+    },
+    utils::debug_panic,
 };
-use crate::utils::debug_panic;
 
 pub(super) enum TokenVariant {
     Rule {

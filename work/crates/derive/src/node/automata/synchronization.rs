@@ -38,8 +38,10 @@
 use proc_macro2::{Ident, Span};
 use syn::spanned::Spanned;
 
-use crate::node::{automata::NodeAutomata, regex::terminal::Terminal};
-use crate::utils::debug_panic;
+use crate::{
+    node::{automata::NodeAutomata, regex::terminal::Terminal},
+    utils::debug_panic,
+};
 
 pub(in crate::node) struct Synchronization {
     variant_name: Ident,

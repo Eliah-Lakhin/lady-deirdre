@@ -38,13 +38,12 @@
 use proc_macro2::Ident;
 use syn::{Error, Result};
 
-use crate::utils::debug_panic;
 use crate::{
     node::{
         builder::{kind::VariantKind, Builder},
         regex::{operand::RegexOperand, Regex},
     },
-    utils::{PredictableCollection, Set, SetImpl},
+    utils::{debug_panic, PredictableCollection, Set, SetImpl},
 };
 
 impl CheckReferences for Regex {
