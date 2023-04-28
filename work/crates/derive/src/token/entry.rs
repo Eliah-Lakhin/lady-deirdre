@@ -51,16 +51,15 @@ use syn::{
 use crate::{
     token::{
         characters::CharacterSet,
-        compiler::Compiler,
         regex::{InlineMap, Regex, RegexImpl},
-        rule::RuleMeta,
+        rule::{RuleIndex, RuleMeta},
         scope::Scope,
         terminal::Terminal,
-        transition::Transition,
         variant::TokenVariant,
     },
     utils::{
         debug_panic,
+        Automata,
         AutomataContext,
         Facade,
         Map,
@@ -68,6 +67,7 @@ use crate::{
         PredictableCollection,
         Set,
         SetImpl,
+        State,
     },
     BENCHMARK,
 };
@@ -77,7 +77,9 @@ pub struct Token {
     pub(super) generics: Generics,
     pub(super) rules: Vec<RuleMeta>,
     pub(super) mismatch: Ident,
-    pub(super) transitions: Vec<Transition>,
+    pub(super) scope: Scope,
+    pub(super) automata: Automata<Scope>,
+    pub(super) products: Map<State, RuleIndex>,
 }
 
 impl Parse for Token {
@@ -323,6 +325,10 @@ impl Parse for Token {
         scope.set_strategy(OptimizationStrategy::CANONICALIZE);
         scope.optimize(&mut automata);
 
+        scope.reset();
+
+        automata = scope.copy(&automata);
+
         let mut products = Map::empty();
         let mut matched_products = Set::empty();
 
@@ -364,127 +370,31 @@ impl Parse for Token {
 
         let rules = rules.into_iter().map(RuleMeta::from).collect();
 
-        let result = Ok(Compiler::compile(
-            token_name.clone(),
+        if BENCHMARK {
+            println!(
+                "Token {} build time: {:?}",
+                token_name,
+                compile_start.elapsed(),
+            )
+        }
+
+        Ok(Self {
+            token_name,
             generics,
             rules,
             mismatch,
             scope,
             automata,
             products,
-        ));
-
-        if BENCHMARK {
-            println!(
-                "Token {} compile time: {:?}",
-                token_name,
-                compile_start.elapsed(),
-            )
-        }
-
-        result
+        })
     }
 }
 
 impl From<Token> for proc_macro::TokenStream {
-    fn from(mut input: Token) -> Self {
+    fn from(token: Token) -> Self {
         let facade = Facade::new();
-        let core = facade.core_crate();
 
-        let token_name = input.token_name;
-        let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-        let transitions = input
-            .transitions
-            .iter()
-            .map(|transition| transition.output(&facade, &mut input.rules))
-            .collect::<Vec<_>>();
-
-        let start = 1usize;
-        let mismatch = &input.mismatch;
-
-        let mut token_in_use = false;
-        let mut kind_in_use = false;
-
-        for rule in &input.rules {
-            token_in_use = token_in_use || rule.uses_token_variable();
-            kind_in_use = kind_in_use || rule.uses_kind_variable();
-        }
-
-        let token_init = match token_in_use {
-            false => None,
-            true => Some(quote! {
-                let mut token = Self::#mismatch;
-            }),
-        };
-
-        let kind_init = match kind_in_use {
-            false => None,
-            true => Some(quote! {
-                let mut kind = 0;
-            }),
-        };
-
-        let result = match kind_in_use {
-            false => {
-                if token_in_use {
-                    quote! { token }
-                } else {
-                    quote! { Self::#mismatch }
-                }
-            }
-
-            true => {
-                let variants = input.rules.into_iter().map(|rule| {
-                    let index = rule.public_index();
-                    let in_place = rule.output_in_place(&facade);
-
-                    quote! { #index => #in_place }
-                });
-
-                if token_in_use {
-                    quote! {
-                        match kind {
-                            #( #variants, )*
-                            _ => token,
-                        }
-                    }
-                } else {
-                    quote! {
-                        match kind {
-                            #( #variants, )*
-                            _ => Self::#mismatch,
-                        }
-                    }
-                }
-            }
-        };
-
-        let output = quote! {
-            impl #impl_generics #core::lexis::Token for #token_name #ty_generics
-            #where_clause
-            {
-                fn new(session: &mut impl #core::lexis::LexisSession) -> Self {
-                    #[allow(unused_mut)]
-                    let mut state = #start;
-                    #token_init;
-                    #kind_init;
-
-                    loop {
-                        let current = #core::lexis::LexisSession::character(session);
-                        #core::lexis::LexisSession::advance(session);
-                        let next = #core::lexis::LexisSession::character(session);
-
-                        match (state, current, next) {
-                            #( #transitions )*
-                            _ => break,
-                        }
-                    }
-
-                    #result
-                }
-            }
-        };
+        let output = token.output(&facade);
 
         output.into()
     }

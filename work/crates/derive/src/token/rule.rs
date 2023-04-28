@@ -48,7 +48,6 @@ pub(super) type RulePrecedence = usize;
 pub(super) struct RuleMeta {
     name: Ident,
     index: RuleIndex,
-    derive_in_use: bool,
     constructor: Option<Ident>,
 }
 
@@ -64,7 +63,6 @@ impl From<TokenVariant> for RuleMeta {
             } => Self {
                 name,
                 index,
-                derive_in_use: false,
                 constructor,
             },
 
@@ -74,63 +72,25 @@ impl From<TokenVariant> for RuleMeta {
 }
 
 impl RuleMeta {
-    #[inline]
-    pub(super) fn public_index(&self) -> RuleIndex {
-        self.index + 1
-    }
+    pub(super) fn output(&self, facade: &Facade) -> TokenStream {
+        let index = self.index + 1;
 
-    #[inline]
-    pub(super) fn uses_token_variable(&self) -> bool {
-        self.derive_in_use && self.constructor.is_none()
-    }
-
-    #[inline]
-    pub(super) fn uses_kind_variable(&self) -> bool {
-        self.derive_in_use && self.constructor.is_some()
-    }
-
-    #[inline]
-    pub(super) fn output_in_place(&self, facade: &Facade) -> TokenStream {
         match &self.constructor {
             None => {
                 let name = &self.name;
 
-                quote! {
-                    Self::#name
-                }
+                quote!(#index => Self::#name,)
             }
 
             Some(constructor) => {
                 let core = facade.core_crate();
-
                 let span = constructor.span();
 
-                quote_spanned! {span=>
+                let constructor = quote_spanned!(span=>
                     Self::#constructor(#core::lexis::LexisSession::substring(session))
-                }
-            }
-        }
-    }
+                );
 
-    #[inline]
-    pub(super) fn output_derive(&mut self) -> TokenStream {
-        self.derive_in_use = true;
-
-        match &self.constructor {
-            None => {
-                let name = &self.name;
-
-                quote! {
-                    token = Self::#name
-                }
-            }
-
-            Some(..) => {
-                let index = self.public_index();
-
-                quote! {
-                    kind = #index
-                }
+                quote!(#index => #constructor,)
             }
         }
     }

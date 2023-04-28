@@ -36,13 +36,12 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 mod characters;
-mod compiler;
 mod entry;
+mod output;
 mod regex;
 mod rule;
 mod scope;
 mod terminal;
-mod transition;
 mod variant;
 
 const NULL: char = '\0';

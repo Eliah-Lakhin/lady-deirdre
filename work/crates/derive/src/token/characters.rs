@@ -179,8 +179,7 @@ impl CharacterSet {
                 return Err(Error::new(
                     self.span,
                     format!(
-                        "An exclusion character '{}' not found in any parsable rule \
-                        alphabet.",
+                        "An exclusion character '{}' is not present in any parsable rule.",
                         character.escape_debug(),
                     ),
                 ));
@@ -194,7 +193,7 @@ impl CharacterSet {
     }
 
     #[inline(always)]
-    pub(super) fn into_inner(self) -> Set<char> {
-        self.set
+    pub(super) fn inner(&self) -> &Set<char> {
+        &self.set
     }
 }

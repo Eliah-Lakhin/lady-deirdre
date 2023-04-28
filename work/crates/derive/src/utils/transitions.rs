@@ -112,6 +112,11 @@ impl<T: AutomataTerminal> Transitions<T> {
         self.view.get(from)
     }
 
+    #[inline(always)]
+    pub fn view(&self) -> &Map<State, Set<(T, State)>> {
+        &self.view
+    }
+
     pub fn length(&self) -> usize {
         self.length
     }
