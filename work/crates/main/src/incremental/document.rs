@@ -308,6 +308,17 @@ pub struct Document<N: Node> {
     pub(super) references: References<N>,
 }
 
+// Safety: Tree instance stores data on the heap, and the References instance
+//         refers Tree's heap objects only.
+unsafe impl<N: Node> Send for Document<N> {}
+
+// Safety:
+//   1. Tree and References data mutations can only happen through
+//      the &mut Document exclusive interface that invalidates all other
+//      references to the inner data of the Document's Tree.
+//   2. All "weak" references are safe indexes into the Document's inner data.
+unsafe impl<N: Node> Sync for Document<N> {}
+
 impl<N: Node> Drop for Document<N> {
     fn drop(&mut self) {
         let _ = unsafe { self.tree.free(&mut self.references) };
