@@ -37,7 +37,7 @@
 
 [package]
 name = "lady-deirdre"
-version = "1.0.4"
+version = "1.0.5"
 authors = ["Ilya Lakhin (Илья Александрович Лахин) <eliah.lakhin@gmail.com>"]
 edition = "2021"
 description = "Compiler front-end foundation technology. Main Crate."
