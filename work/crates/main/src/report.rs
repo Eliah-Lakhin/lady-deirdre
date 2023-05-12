@@ -35,26 +35,88 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("../readme.md")]
-//TODO check warnings regularly
-#![allow(warnings)]
-#![allow(unused_unsafe)]
-#![deny(missing_docs)]
-#![no_implicit_prelude]
-#![cfg_attr(not(feature = "std"), no_std)]
+use crate::std::String;
 
-pub mod arena;
-mod incremental;
-pub mod lexis;
-mod report;
-mod std;
-pub mod syntax;
+macro_rules! debug_unreachable (
+    ($message:expr) => {
+        {
+            #[cfg(debug_assertions)]
+            {
+                $crate::report::system_panic!($message);
+            }
 
-pub use crate::incremental::Document;
+            $crate::std::unreachable_unchecked()
+        }
+    };
 
-extern crate self as lady_deirdre;
+    ($message:expr, $($args:tt)*) => {
+        $crate::report::debug_unreachable!($crate::std::format!($message, $($args)*))
+    };
+);
+
+macro_rules! system_panic (
+    ($message:expr) => {{
+        #[cfg(feature = "std")]
+        {
+            if !$crate::std::panicking() {
+                $crate::std::panic!(
+                    "{}",
+                    $crate::report::error_message!($message),
+                );
+            }
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            $crate::report::panic_once(
+                $crate::report::error_message!($message),
+            );
+        }
+    }};
+
+    ($message:expr, $($args:tt)*) => {
+        $crate::report::system_panic!($crate::std::format!($message, $($args)*))
+    };
+);
+
+macro_rules! error_message (
+    ($message:expr) => {
+        $crate::std::format!(
+r#" !! LADY DEIRDRE INTERNAL ERROR
+ !!
+ !! This is bug.
+ !! If you see this message, please open an Issue: https://github.com/Eliah-Lakhin/lady-deirdre/issues
+ !!
+ !! Message: {}
+ !! File: {}
+ !! Line: {}
+ !! Column: {}
+"#,
+            $message,
+            $crate::std::file!(),
+            $crate::std::line!(),
+            $crate::std::column!(),
+        )
+    };
+
+    ($message:expr, $($args:tt)*) => {
+        $crate::report::error_message!($crate::std::format!($message, $($args)*))
+    };
+);
 
 #[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-extern crate core;
+pub(crate) fn panic_once(message: String) {
+    use crate::std::*;
+
+    static FLAG: AtomicUsize = AtomicUsize::new(0);
+
+    if FLAG.fetch_add(1, AtomicOrdering::SeqCst) == 1 {
+        return;
+    }
+
+    panic!("{}", message);
+}
+
+pub(crate) use debug_unreachable;
+pub(crate) use error_message;
+pub(crate) use system_panic;
