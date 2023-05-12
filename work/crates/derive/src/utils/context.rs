@@ -198,8 +198,6 @@ pub trait AutomataTerminal: Clone + Eq + Hash + 'static {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::RangeFrom;
-
     use crate::utils::{
         AutomataContext,
         AutomataTerminal,

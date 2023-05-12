@@ -37,6 +37,7 @@
 
 use std::mem::take;
 
+use proc_macro2::Ident;
 use syn::{Error, Result};
 
 use crate::{
@@ -44,7 +45,7 @@ use crate::{
         automata::{scope::Scope, NodeAutomata},
         regex::terminal::Terminal,
     },
-    utils::{debug_panic, AutomataContext, Map, PredictableCollection},
+    utils::{debug_panic, AutomataContext, Map, PredictableCollection, State},
 };
 
 impl AutomataMergeCaptures for NodeAutomata {
@@ -55,20 +56,31 @@ impl AutomataMergeCaptures for NodeAutomata {
             self.try_map(|_, transitions| {
                 let count = transitions.len();
 
-                let mut tokens = Map::with_capacity(count);
-                let mut nodes = Map::with_capacity(count);
+                let mut tokens = Map::<Ident, (Terminal, State)>::with_capacity(count);
+                let mut nodes = Map::<Ident, (Terminal, State)>::with_capacity(count);
 
                 for (terminal, to) in take(transitions) {
                     match &terminal {
                         Terminal::Null => debug_panic!("Automata with null transition."),
 
-                        Terminal::Token {
+                        rule_a @ Terminal::Token {
                             name,
                             capture: None,
                         } => {
-                            if !tokens.contains_key(name) {
-                                let _ = tokens.insert(name.clone(), (terminal, to));
+                            if let Some((rule_b, rule_b_to)) = tokens.get(name) {
+                                if *rule_b_to != to {
+                                    return Err(Error::new(
+                                        name.span(),
+                                        format!(
+                                            "Rule \"{}\" conflicts with capturing rule \"{}\" \
+                                            that leads to the different execution flow.",
+                                            rule_a, rule_b,
+                                        ),
+                                    ));
+                                }
                             }
+
+                            let _ = tokens.insert(name.clone(), (terminal, to));
                         }
 
                         rule_a @ Terminal::Token {
@@ -76,6 +88,19 @@ impl AutomataMergeCaptures for NodeAutomata {
                             capture: Some(capture),
                         } => match tokens.get(name) {
                             None | Some((Terminal::Token { capture: None, .. }, _)) => {
+                                if let Some((rule_b, rule_b_state)) = tokens.get(name) {
+                                    if *rule_b_state != to {
+                                        return Err(Error::new(
+                                            capture.span(),
+                                            format!(
+                                                "Capturing rule \"{}\" conflicts with rule \"{}\" \
+                                                that leads to the different execution flow.",
+                                                rule_a, rule_b,
+                                            ),
+                                        ));
+                                    }
+                                }
+
                                 let _ = tokens.insert(name.clone(), (terminal, to));
                             }
 
@@ -98,13 +123,24 @@ impl AutomataMergeCaptures for NodeAutomata {
                             _ => (),
                         },
 
-                        Terminal::Node {
+                        rule_a @ Terminal::Node {
                             name,
                             capture: None,
                         } => {
-                            if !nodes.contains_key(name) {
-                                let _ = nodes.insert(name.clone(), (terminal, to));
+                            if let Some((rule_b, rule_b_to)) = nodes.get(name) {
+                                if *rule_b_to != to {
+                                    return Err(Error::new(
+                                        name.span(),
+                                        format!(
+                                            "Rule \"{}\" conflicts with capturing rule \"{}\" \
+                                            that leads to the different execution flow.",
+                                            rule_a, rule_b,
+                                        ),
+                                    ));
+                                }
                             }
+
+                            let _ = nodes.insert(name.clone(), (terminal, to));
                         }
 
                         rule_a @ Terminal::Node {
@@ -112,6 +148,19 @@ impl AutomataMergeCaptures for NodeAutomata {
                             capture: Some(capture),
                         } => match nodes.get(name) {
                             None | Some((Terminal::Node { capture: None, .. }, _)) => {
+                                if let Some((rule_b, rule_b_state)) = nodes.get(name) {
+                                    if *rule_b_state != to {
+                                        return Err(Error::new(
+                                            capture.span(),
+                                            format!(
+                                                "Capturing rule \"{}\" conflicts with rule \"{}\" \
+                                                that leads to the different execution flow.",
+                                                rule_a, rule_b,
+                                            ),
+                                        ));
+                                    }
+                                }
+
                                 let _ = nodes.insert(name.clone(), (terminal, to));
                             }
 
