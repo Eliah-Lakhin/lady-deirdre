@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{lexis::Site, std::*};
+use crate::{lexis::Site, report::debug_unreachable, std::*};
 
 pub(crate) const NULL: char = '\0';
 
@@ -51,17 +51,8 @@ pub(crate) unsafe fn get_lexis_character(mut characters: Chars<'_>) -> char {
             character
         }
 
-        None => {
-            #[cfg(debug_assertions)]
-            {
-                unreachable!("Internal error. Empty characters iterator.");
-            }
-
-            #[allow(unreachable_code)]
-            unsafe {
-                unreachable_unchecked()
-            }
-        }
+        // Safety: Upheld by the caller.
+        None => unsafe { debug_unreachable!("Empty characters iterator.") },
     }
 }
 

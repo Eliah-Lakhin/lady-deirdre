@@ -47,6 +47,7 @@ use crate::{
         utils::{array_copy_to, array_shift, capacity},
     },
     lexis::Length,
+    report::debug_assert,
     std::*,
     syntax::Node,
 };

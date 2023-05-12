@@ -39,6 +39,7 @@ use crate::{
     arena::{Id, Identifiable},
     incremental::{storage::ChildRefIndex, Document},
     lexis::{Length, Site, SiteRef, SiteSpan, TokenCount, TokenCursor, TokenRef},
+    report::debug_assert,
     std::*,
     syntax::Node,
 };
@@ -242,10 +243,7 @@ impl<'document, N: Node> DocumentCursor<'document, N> {
 
                 unsafe { self.peek_chunk_ref.next() };
 
-                debug_assert!(
-                    !self.peek_chunk_ref.is_dangling(),
-                    "Internal error. Dangling peek ref.",
-                );
+                debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
             }
 
             return false;
@@ -254,10 +252,7 @@ impl<'document, N: Node> DocumentCursor<'document, N> {
         while self.peek_distance > target {
             unsafe { self.peek_chunk_ref.back() }
 
-            debug_assert!(
-                !self.peek_chunk_ref.is_dangling(),
-                "Internal error. Dangling peek ref.",
-            );
+            debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
 
             self.peek_distance -= 1;
         }

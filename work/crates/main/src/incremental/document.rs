@@ -56,6 +56,7 @@ use crate::{
         TokenCount,
         CHUNK_SIZE,
     },
+    report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
     syntax::{Cluster, NoSyntax, Node, NodeRef, SyntaxTree, NON_ROOT_RULE, ROOT_RULE},
 };
@@ -359,7 +360,7 @@ impl<N: Node> SourceCode for Document<N> {
 
         debug_assert!(
             !chunk_ref.is_dangling(),
-            "Internal error. Dangling chunk ref in the References repository."
+            "Dangling chunk ref in the References repository."
         );
 
         Some(unsafe { chunk_ref.token() })
@@ -371,7 +372,7 @@ impl<N: Node> SourceCode for Document<N> {
 
         debug_assert!(
             !chunk_ref.is_dangling(),
-            "Internal error. Dangling chunk ref in the References repository."
+            "Dangling chunk ref in the References repository."
         );
 
         Some(unsafe { chunk_ref.token_mut() })
@@ -390,7 +391,7 @@ impl<N: Node> SourceCode for Document<N> {
 
         debug_assert!(
             !chunk_ref.is_dangling(),
-            "Internal error. Dangling chunk ref in the References repository."
+            "Dangling chunk ref in the References repository."
         );
 
         Some(unsafe { chunk_ref.string() })
@@ -402,7 +403,7 @@ impl<N: Node> SourceCode for Document<N> {
 
         debug_assert!(
             !chunk_ref.is_dangling(),
-            "Internal error. Dangling chunk ref in the References repository."
+            "Dangling chunk ref in the References repository."
         );
 
         Some(*unsafe { chunk_ref.span() })
@@ -671,7 +672,7 @@ impl<N: Node> Document<N> {
         if head_offset > 0 {
             debug_assert!(
                 !head.is_dangling(),
-                "Internal error. Dangling reference with non-zero offset.",
+                "Dangling reference with non-zero offset.",
             );
 
             input.push(split_left(unsafe { head.string() }, head_offset));
@@ -712,7 +713,7 @@ impl<N: Node> Document<N> {
         if tail_offset > 0 {
             debug_assert!(
                 !tail.is_dangling(),
-                "Internal error. Dangling reference with non-zero offset.",
+                "Dangling reference with non-zero offset.",
             );
 
             let length = unsafe { *tail.span() };
@@ -815,7 +816,7 @@ impl<N: Node> Document<N> {
         if head.is_dangling() {
             debug_assert!(
                 product.tail_ref.is_dangling(),
-                "Internal error. Dangling head and non-dangling tail.",
+                "Dangling head and non-dangling tail.",
             );
 
             let token_count = product.count() - skip;
@@ -841,7 +842,7 @@ impl<N: Node> Document<N> {
 
                 let chunk_ref = self.tree.lookup(&mut point);
 
-                debug_assert_eq!(point, 0, "Internal error. Bad span alignment.");
+                debug_assert_eq!(point, 0, "Bad span alignment.");
 
                 chunk_ref
             };
@@ -887,7 +888,7 @@ impl<N: Node> Document<N> {
 
             let chunk_ref = middle.lookup(&mut point);
 
-            debug_assert_eq!(point, 0, "Internal error. Bad span alignment.");
+            debug_assert_eq!(point, 0, "Bad span alignment.");
 
             chunk_ref
         };
@@ -924,7 +925,7 @@ impl<N: Node> Document<N> {
 
             let chunk_ref = self.tree.lookup(&mut point);
 
-            debug_assert_eq!(point, 0, "Internal error. Bad span alignment.");
+            debug_assert_eq!(point, 0, "Bad span alignment.");
 
             chunk_ref
         };
@@ -1080,10 +1081,7 @@ impl<N: Node> Document<N> {
 
                     let mut tail = self.tree.lookup(&mut parsed_end_site);
 
-                    debug_assert_eq!(
-                        parsed_end_site, 0,
-                        "Internal error. Incorrect span alignment."
-                    );
+                    debug_assert_eq!(parsed_end_site, 0, "Incorrect span alignment.");
 
                     while !tail.is_dangling() {
                         let has_cache = unsafe { tail.cache().is_some() };
@@ -1141,19 +1139,10 @@ impl<N: Node> ClusterCache<N> {
                 let chunk_ref_index = match &token_ref.chunk_ref {
                     Ref::Repository { index, .. } => *index,
 
-                    _ => {
-                        #[cfg(debug_assertions)]
-                        {
-                            unreachable!(
-                                "Internal error. Incorrect cluster cache end site Ref type.",
-                            );
-                        }
-
-                        #[allow(unreachable_code)]
-                        unsafe {
-                            unreachable_unchecked()
-                        }
-                    }
+                    // Safety: Document chunks stored in Repository.
+                    _ => unsafe {
+                        debug_unreachable!("Incorrect cluster cache end site Ref type.")
+                    },
                 };
 
                 let chunk_ref = unsafe { references.chunks().get_unchecked(chunk_ref_index) };

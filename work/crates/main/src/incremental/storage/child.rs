@@ -43,6 +43,7 @@ use crate::{
         page::Page,
     },
     lexis::{Length, TokenCount},
+    report::debug_assert,
     std::*,
     syntax::Node,
 };

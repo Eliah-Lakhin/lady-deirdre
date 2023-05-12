@@ -45,6 +45,7 @@ use crate::{
         utils::capacity,
     },
     lexis::Length,
+    report::debug_assert,
     std::*,
     syntax::Node,
 };

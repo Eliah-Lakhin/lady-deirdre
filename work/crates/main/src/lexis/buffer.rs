@@ -50,6 +50,7 @@ use crate::{
         TokenCount,
         TokenRef,
     },
+    report::debug_unreachable,
     std::*,
     syntax::Node,
     Document,
@@ -335,17 +336,9 @@ impl<T: Token> TokenBuffer<T> {
                 match self.sites.pop() {
                     Some(site) => site,
 
-                    None => {
-                        #[cfg(debug_assertions)]
-                        {
-                            unreachable!("Internal error. TokenBuffer inconsistency.");
-                        }
-
-                        #[allow(unreachable_code)]
-                        unsafe {
-                            unreachable_unchecked()
-                        }
-                    }
+                    // Safety: Underlying TokenBuffer collections represent
+                    //         a sequence of Chunks.
+                    None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
                 }
             }
         };

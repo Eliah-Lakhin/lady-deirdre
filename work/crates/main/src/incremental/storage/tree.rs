@@ -46,6 +46,7 @@ use crate::{
         utils::{capacity, Spread},
     },
     lexis::{Length, Site, TokenCount},
+    report::{debug_assert, debug_assert_eq},
     std::*,
     syntax::Node,
 };

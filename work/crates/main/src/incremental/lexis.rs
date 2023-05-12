@@ -46,6 +46,7 @@ use crate::{
         Token,
         TokenCount,
     },
+    report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
 };
@@ -123,17 +124,8 @@ impl<'source, N: Node> IncrementalLexisSession<'source, N> {
                 unsafe { get_lexis_character(first.chars()) }
             }
 
-            None => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Empty Lexer input.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by 4.
+            None => unsafe { debug_unreachable!("Empty Lexer input.") },
         };
 
         let cursor = Cursor {
@@ -416,7 +408,7 @@ impl<N: Node> Cursor<N> {
                 if self.input_index < input.len() {
                     let string = unsafe { input.get_unchecked(self.input_index) };
 
-                    debug_assert!(!string.is_empty(), "Internal error. Empty input string.");
+                    debug_assert!(!string.is_empty(), "Empty input string.");
 
                     self.character = unsafe { get_lexis_character(string.chars()) };
 
@@ -430,7 +422,7 @@ impl<N: Node> Cursor<N> {
 
                 let string = unsafe { self.tail_ref.string() };
 
-                debug_assert!(!string.is_empty(), "Internal error. Empty tail string.");
+                debug_assert!(!string.is_empty(), "Empty tail string.");
 
                 self.character = unsafe { get_lexis_character(string.chars()) };
             }
@@ -460,7 +452,7 @@ impl<N: Node> Cursor<N> {
 
                 let string = unsafe { self.tail_ref.string() };
 
-                debug_assert!(!string.is_empty(), "Internal error. Empty tail string.");
+                debug_assert!(!string.is_empty(), "Empty tail string.");
 
                 self.character = unsafe { get_lexis_character(string.chars()) };
             }

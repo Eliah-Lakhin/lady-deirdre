@@ -39,6 +39,7 @@ use crate::{
     arena::{Id, Identifiable, Ref, Repository},
     incremental::storage::{ChildRefIndex, ClusterCache, References, Tree},
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
+    report::{debug_assert, debug_assert_eq},
     std::*,
     syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, SyntaxRule, SyntaxSession, ROOT_RULE},
 };
@@ -370,10 +371,7 @@ impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
         cluster_ref: Ref,
     ) -> (ClusterCache<N>, Site, Length) {
         if TypeId::of::<N>() == TypeId::of::<NoSyntax<<N as Node>::Token>>() {
-            debug_assert_eq!(
-                rule, ROOT_RULE,
-                "Internal error. An attempt to reparse void syntax.",
-            );
+            debug_assert_eq!(rule, ROOT_RULE, "An attempt to reparse void syntax.",);
 
             return (
                 ClusterCache {
@@ -485,10 +483,7 @@ impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
 
                 unsafe { self.peek_chunk_ref.next() };
 
-                debug_assert!(
-                    !self.peek_chunk_ref.is_dangling(),
-                    "Internal error. Dangling peek ref.",
-                );
+                debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.",);
             }
 
             return false;
@@ -497,10 +492,7 @@ impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
         while self.peek_distance > target {
             unsafe { self.peek_chunk_ref.back() }
 
-            debug_assert!(
-                !self.peek_chunk_ref.is_dangling(),
-                "Internal error. Dangling peek ref.",
-            );
+            debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
 
             self.peek_distance -= 1;
             self.peek_site -= unsafe { *self.peek_chunk_ref.span() };

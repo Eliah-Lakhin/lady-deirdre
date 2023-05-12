@@ -35,6 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(not(feature = "std"))]
 use crate::std::String;
 
 macro_rules! debug_unreachable (
@@ -53,6 +54,46 @@ macro_rules! debug_unreachable (
         $crate::report::debug_unreachable!($crate::std::format!($message, $($args)*))
     };
 );
+
+macro_rules! debug_assert {
+    ($assertion:expr, $message:expr) => {
+        #[cfg(debug_assertions)]
+        {
+            if !$assertion {
+                $crate::report::system_panic!($message);
+            }
+        }
+    };
+
+    ($assertion:expr, $message:expr, $($args:tt)*) => {
+        #[cfg(debug_assertions)]
+        {
+            if !$assertion {
+                $crate::report::system_panic!($message, $($args)*);
+            }
+        }
+    };
+}
+
+macro_rules! debug_assert_eq {
+    ($left:expr, $right:expr, $message:expr) => {
+        $crate::report::debug_assert!($left == $right, $message);
+    };
+
+    ($left:expr, $right:expr, $message:expr, $($args:tt)*) => {
+        $crate::report::debug_assert!($left == $right, $message, $($args)*);
+    };
+}
+
+macro_rules! debug_assert_ne {
+    ($left:expr, $right:expr, $message:expr) => {
+        $crate::report::debug_assert!($left != $right, $message);
+    };
+
+    ($left:expr, $right:expr, $message:expr, $($args:tt)*) => {
+        $crate::report::debug_assert!($left != $right, $message, $($args)*);
+    };
+}
 
 macro_rules! system_panic (
     ($message:expr) => {{
@@ -117,6 +158,9 @@ pub(crate) fn panic_once(message: String) {
     panic!("{}", message);
 }
 
+pub(crate) use debug_assert;
+pub(crate) use debug_assert_eq;
+pub(crate) use debug_assert_ne;
 pub(crate) use debug_unreachable;
 pub(crate) use error_message;
 pub(crate) use system_panic;

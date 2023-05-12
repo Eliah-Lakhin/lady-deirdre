@@ -192,10 +192,7 @@ where
 {
     type Token = N::Token;
 
-    type Cursor<'a>
-    where
-        Self: 'a,
-    = S::Cursor<'a>;
+    type Cursor<'a> = S::Cursor<'a> where Self: 'a;
 
     #[inline(always)]
     fn contains(&self, chunk_ref: &Ref) -> bool {
@@ -250,10 +247,7 @@ where
 {
     type Node = N;
 
-    type ErrorIterator<'a>
-    where
-        Self: 'a,
-    = BufferErrorIterator<'a, Self::Node>;
+    type ErrorIterator<'a> = BufferErrorIterator<'a, Self::Node> where Self: 'a;
 
     #[inline(always)]
     fn root(&self) -> &NodeRef {

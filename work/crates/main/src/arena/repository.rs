@@ -1,5 +1,6 @@
 use crate::{
     arena::{Ref, RefIndex, RefVersion},
+    report::{debug_assert, debug_unreachable},
     std::*,
 };
 
@@ -230,7 +231,7 @@ impl<T> Repository<T> {
             Some(vacant) => {
                 debug_assert!(
                     matches!(vacant, RepositoryEntry::Vacant(..)),
-                    "Internal error. Occupied entry in the next position.",
+                    "Occupied entry in the next position.",
                 );
 
                 self.next = match replace(
@@ -301,7 +302,7 @@ impl<T> Repository<T> {
             Some(vacant) => {
                 debug_assert!(
                     matches!(vacant, RepositoryEntry::Vacant(..)),
-                    "Internal error. Occupied entry in the next position.",
+                    "Occupied entry in the next position.",
                 );
 
                 self.next = match replace(
@@ -549,10 +550,7 @@ impl<T> Repository<T> {
     ///     state.
     #[inline(always)]
     pub unsafe fn make_ref(&self, index: RefIndex) -> Ref {
-        debug_assert!(
-            index < self.entries.len(),
-            "Internal error. Index out of bounds."
-        );
+        debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         #[allow(unreachable_code)]
         let entry = unsafe { self.entries.get_unchecked(index) };
@@ -561,20 +559,13 @@ impl<T> Repository<T> {
             RepositoryEntry::Occupied { revision, .. }
             | RepositoryEntry::Reserved { revision, .. } => *revision,
 
-            RepositoryEntry::Vacant(..) => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!(
-                        "Internal error. An attempt to make a reference from index pointing to \
-                        vacant entry."
-                    );
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by the caller.
+            RepositoryEntry::Vacant(..) => unsafe {
+                debug_unreachable!(
+                    "Internal error. An attempt to make a reference from index \
+                    pointing to vacant entry."
+                );
+            },
         };
 
         Ref::Repository { index, version }
@@ -599,27 +590,15 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied state.
     #[inline(always)]
     pub unsafe fn get_unchecked(&self, index: RefIndex) -> &T {
-        debug_assert!(
-            index < self.entries.len(),
-            "Internal error. Index out of bounds."
-        );
+        debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked(index) };
 
         match entry {
             RepositoryEntry::Occupied { data, .. } => data,
 
-            _ => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to index into non-occupied entry.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by the caller.
+            _ => unsafe { debug_unreachable!("An attempt to index into non-occupied entry.") },
         }
     }
 
@@ -644,27 +623,15 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied state.
     #[inline(always)]
     pub unsafe fn get_unchecked_mut(&mut self, index: RefIndex) -> &mut T {
-        debug_assert!(
-            index < self.entries.len(),
-            "Internal error. Index out of bounds."
-        );
+        debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
 
         match entry {
             RepositoryEntry::Occupied { data, .. } => data,
 
-            _ => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to index into non-occupied entry.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by the caller.
+            _ => unsafe { debug_unreachable!("An attempt to index into non-occupied entry.") },
         }
     }
 
@@ -713,10 +680,7 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
     pub unsafe fn set_unchecked(&mut self, index: RefIndex, data: T) {
-        debug_assert!(
-            index < self.entries.len(),
-            "Internal error. Index out of bounds."
-        );
+        debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
 
@@ -725,17 +689,10 @@ impl<T> Repository<T> {
                 *revision
             }
 
-            RepositoryEntry::Vacant(..) => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to write into vacant entry.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by the caller.
+            RepositoryEntry::Vacant(..) => unsafe {
+                debug_unreachable!("An attempt to write into vacant entry.")
+            },
         };
 
         *entry = RepositoryEntry::Occupied { data, revision };
@@ -786,10 +743,7 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
     pub unsafe fn remove_unchecked(&mut self, index: RefIndex) {
-        debug_assert!(
-            index < self.entries.len(),
-            "Internal error. Index out of bounds."
-        );
+        debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
 
@@ -800,17 +754,10 @@ impl<T> Repository<T> {
         match occupied {
             RepositoryEntry::Occupied { .. } | RepositoryEntry::Reserved { .. } => (),
 
-            RepositoryEntry::Vacant { .. } => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to remove vacant entry.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by the caller.
+            RepositoryEntry::Vacant { .. } => unsafe {
+                debug_unreachable!("An attempt to remove vacant entry.")
+            },
         };
 
         self.next = index;
@@ -896,10 +843,7 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
     pub unsafe fn upgrade(&mut self, index: RefIndex) {
-        debug_assert!(
-            index < self.entries.len(),
-            "Internal error. Index out of bounds."
-        );
+        debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
 
@@ -908,17 +852,10 @@ impl<T> Repository<T> {
                 *revision = self.revision;
             }
 
-            RepositoryEntry::Vacant { .. } => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to update revision of vacant entry.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            // Safety: Upheld by the caller.
+            RepositoryEntry::Vacant { .. } => unsafe {
+                debug_unreachable!("An attempt to update revision of vacant entry.")
+            },
         };
     }
 }
