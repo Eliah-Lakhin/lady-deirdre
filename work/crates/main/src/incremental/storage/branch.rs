@@ -207,7 +207,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
             child_layer: PhantomData::default(),
         };
 
-        let pointer = unsafe { NonNull::new_unchecked(Box::leak(Box::new(branch))) };
+        let pointer = unsafe { NonNull::new_unchecked(Box::into_raw(Box::new(branch))) };
 
         BranchRef { pointer }
     }
@@ -987,22 +987,21 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
     // 4. `self` Branch is not a root branch.
     #[inline]
     pub(super) unsafe fn add_child_left(
-        &mut self,
+        mut self,
         root_length: Length,
         mut head_subtraction: Length,
         mut item_length: Length,
         mut item_variant: ItemRefVariant<N>,
     ) -> Option<ItemRefVariant<N>> {
-        let mut branch = unsafe { self.as_mut() };
-
         loop {
+            let this = self;
+            let branch = unsafe { self.as_mut() };
+
             branch.inner.spans[0] -= head_subtraction;
 
             match branch.inner.occupied < capacity(Branch::<ChildLayer, N>::BRANCHING) {
                 true => {
-                    let branch_variant = ItemRefVariant::from_branch(BranchRef {
-                        pointer: unsafe { NonNull::new_unchecked(branch) },
-                    });
+                    let branch_variant = ItemRefVariant::from_branch(this);
 
                     let parent_ref_index = ChildRefIndex {
                         item: branch_variant,
@@ -1081,12 +1080,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                         let _ = branch.deflate(0, Branch::<ChildLayer, N>::BRANCHING - 1);
                     }
 
-                    let branch_variant = unsafe {
-                        BranchRef {
-                            pointer: NonNull::new_unchecked(branch),
-                        }
-                        .into_variant()
-                    };
+                    let branch_variant = unsafe { this.into_variant() };
 
                     let _ = unsafe {
                         branch.update_children(
@@ -1103,14 +1097,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                     match branch.inner.parent.is_dangling() {
                         false => match ChildLayer::descriptor() {
                             LayerDescriptor::Branch => {
-                                branch = unsafe {
-                                    branch
-                                        .inner
-                                        .parent
-                                        .item
-                                        .as_branch_mut::<ChildLayer>()
-                                        .as_mut()
-                                };
+                                self = *branch.inner.parent.item.as_branch_mut::<ChildLayer>();
                                 continue;
                             }
 
@@ -1152,10 +1139,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                                 let new_root = unsafe { new_root_ref.as_mut() };
 
                                 new_root.inner.children[0] = new_sibling_variant;
-                                new_root.inner.children[1] =
-                                    ItemRefVariant::from_branch(BranchRef {
-                                        pointer: NonNull::new_unchecked(branch),
-                                    });
+                                new_root.inner.children[1] = ItemRefVariant::from_branch(this);
 
                                 new_root.inner.spans[0] = item_length;
                                 new_root.inner.spans[1] = root_length - head_subtraction;
@@ -1178,15 +1162,16 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
     // 4. `self` Branch is not a root branch.
     #[inline]
     pub(super) unsafe fn add_child_right(
-        &mut self,
+        mut self,
         root_length: Length,
         mut tail_subtraction: Length,
         mut item_length: Length,
         mut item_variant: ItemRefVariant<N>,
     ) -> Option<ItemRefVariant<N>> {
-        let mut branch = unsafe { self.as_mut() };
-
         loop {
+            let this = self;
+            let branch = unsafe { self.as_mut() };
+
             unsafe {
                 *branch
                     .inner
@@ -1197,9 +1182,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
             match branch.inner.occupied < capacity(Branch::<ChildLayer, N>::BRANCHING) {
                 true => {
                     let parent_ref_index = ChildRefIndex {
-                        item: ItemRefVariant::from_branch(BranchRef {
-                            pointer: unsafe { NonNull::new_unchecked(branch) },
-                        }),
+                        item: ItemRefVariant::from_branch(this),
                         index: branch.inner.occupied,
                     };
 
@@ -1285,14 +1268,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                     match branch.inner.parent.is_dangling() {
                         false => match ChildLayer::descriptor() {
                             LayerDescriptor::Branch => {
-                                branch = unsafe {
-                                    branch
-                                        .inner
-                                        .parent
-                                        .item
-                                        .as_branch_mut::<ChildLayer>()
-                                        .as_mut()
-                                };
+                                self = *branch.inner.parent.item.as_branch_mut::<ChildLayer>();
                                 continue;
                             }
 
@@ -1333,10 +1309,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                             {
                                 let new_root = unsafe { new_root_ref.as_mut() };
 
-                                new_root.inner.children[0] =
-                                    ItemRefVariant::from_branch(BranchRef {
-                                        pointer: NonNull::new_unchecked(branch),
-                                    });
+                                new_root.inner.children[0] = ItemRefVariant::from_branch(this);
                                 new_root.inner.children[1] = new_sibling_variant;
 
                                 new_root.inner.spans[0] = root_length - tail_subtraction;

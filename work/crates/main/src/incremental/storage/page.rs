@@ -231,7 +231,7 @@ impl<N: Node> Page<N> {
             clusters: unsafe { MaybeUninit::uninit().assume_init() },
         };
 
-        let pointer = unsafe { NonNull::new_unchecked(Box::leak(Box::new(page))) };
+        let pointer = unsafe { NonNull::new_unchecked(Box::into_raw(Box::new(page))) };
 
         PageRef { pointer }
     }
