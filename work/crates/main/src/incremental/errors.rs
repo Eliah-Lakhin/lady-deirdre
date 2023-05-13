@@ -43,14 +43,14 @@ use crate::{
 };
 
 pub struct DocumentErrorIterator<'document, N: Node> {
-    pub(super) id: &'document Id,
+    pub(super) id: Id,
     pub(super) cursor: ChildRefIndex<N>,
     pub(super) current: RepositoryIterator<'document, N::Error>,
 }
 
 impl<'document, N: Node> Identifiable for DocumentErrorIterator<'document, N> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.id
     }
 }

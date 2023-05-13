@@ -54,7 +54,7 @@ pub struct DocumentCursor<'document, N: Node> {
 
 impl<'document, N: Node> Identifiable for DocumentCursor<'document, N> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.document.id()
     }
 }
@@ -150,7 +150,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
         let chunk_ref = unsafe { self.document.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: *self.document.id(),
+            id: self.document.id(),
             chunk_ref,
         }
     }
@@ -170,7 +170,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
         let chunk_ref = unsafe { self.document.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: *self.document.id(),
+            id: self.document.id(),
             chunk_ref,
         }
         .site_ref()
@@ -179,7 +179,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
         if self.end_chunk_ref.is_dangling() {
-            return SiteRef::new_code_end(*self.document.id());
+            return SiteRef::new_code_end(self.document.id());
         }
 
         let ref_index = unsafe { self.end_chunk_ref.chunk_ref_index() };
@@ -187,7 +187,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
         let chunk_ref = unsafe { self.document.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: *self.document.id(),
+            id: self.document.id(),
             chunk_ref,
         }
         .site_ref()

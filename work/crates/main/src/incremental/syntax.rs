@@ -45,7 +45,7 @@ use crate::{
 };
 
 pub struct IncrementalSyntaxSession<'document, N: Node> {
-    id: &'document Id,
+    id: Id,
     tree: &'document mut Tree<N>,
     references: &'document mut References<N>,
     pending: Pending<N>,
@@ -58,7 +58,7 @@ pub struct IncrementalSyntaxSession<'document, N: Node> {
 
 impl<'document, N: Node> Identifiable for IncrementalSyntaxSession<'document, N> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.id
     }
 }
@@ -189,7 +189,7 @@ impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'do
         let chunk_ref = unsafe { self.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: *self.id,
+            id: self.id,
             chunk_ref,
         }
     }
@@ -215,7 +215,7 @@ impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'do
         let chunk_ref = unsafe { self.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: *self.id,
+            id: self.id,
             chunk_ref,
         }
         .site_ref()
@@ -223,7 +223,7 @@ impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'do
 
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
-        SiteRef::new_code_end(*self.id)
+        SiteRef::new_code_end(self.id)
     }
 }
 
@@ -237,7 +237,7 @@ impl<'document, N: Node> SyntaxSession<'document> for IncrementalSyntaxSession<'
             let node_ref = self.pending.nodes.insert(node);
 
             return NodeRef {
-                id: *self.id,
+                id: self.id,
                 cluster_ref: self.pending.cluster_ref,
                 node_ref,
             };
@@ -252,7 +252,7 @@ impl<'document, N: Node> SyntaxSession<'document> for IncrementalSyntaxSession<'
                 let cluster_ref_index = unsafe { self.next_chunk_ref.cache_index() };
 
                 let result = NodeRef {
-                    id: *self.id,
+                    id: self.id,
                     cluster_ref: unsafe { self.references.clusters().make_ref(cluster_ref_index) },
                     node_ref: Ref::Primary,
                 };
@@ -339,7 +339,7 @@ impl<'document, N: Node> SyntaxSession<'document> for IncrementalSyntaxSession<'
         }
 
         NodeRef {
-            id: *self.id,
+            id: self.id,
             cluster_ref,
             node_ref: Ref::Primary,
         }
@@ -350,7 +350,7 @@ impl<'document, N: Node> SyntaxSession<'document> for IncrementalSyntaxSession<'
         self.pending.successful = false;
 
         ErrorRef {
-            id: *self.id,
+            id: self.id,
             cluster_ref: self.pending.cluster_ref,
             error_ref: self.pending.errors.insert(error),
         }
@@ -362,7 +362,7 @@ impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
     // 1. `head` belongs to the `tree` instance.
     // 2. All references of the `tree` belong to `references` instance.
     pub(super) unsafe fn run(
-        id: &'document Id,
+        id: Id,
         tree: &'document mut Tree<N>,
         references: &'document mut References<N>,
         rule: SyntaxRule,
@@ -444,13 +444,13 @@ impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
                 let chunk_ref = unsafe { self.references.chunks().make_ref(chunk_ref_index) };
 
                 TokenRef {
-                    id: *self.id,
+                    id: self.id,
                     chunk_ref,
                 }
                 .site_ref()
             }
 
-            true => SiteRef::new_code_end(*self.id),
+            true => SiteRef::new_code_end(self.id),
         }
     }
 
@@ -483,7 +483,7 @@ impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
 
                 unsafe { self.peek_chunk_ref.next() };
 
-                debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.",);
+                debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
             }
 
             return false;

@@ -164,8 +164,8 @@ impl Debug for ClusterRef {
 
 impl Identifiable for ClusterRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 
@@ -208,7 +208,7 @@ impl ClusterRef {
         &self,
         tree: &'tree impl SyntaxTree<Node = N>,
     ) -> Option<&'tree Cluster<N>> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -230,7 +230,7 @@ impl ClusterRef {
         &self,
         tree: &'tree mut impl SyntaxTree<Node = N>,
     ) -> Option<&'tree mut Cluster<N>> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -255,7 +255,7 @@ impl ClusterRef {
     /// the cluster using [`NodeRef::unlink`](crate::syntax::NodeRef::unlink) function.
     #[inline]
     pub fn link_node<N: Node>(&self, tree: &mut impl SyntaxTree<Node = N>, node: N) -> NodeRef {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return NodeRef::nil();
         }
 
@@ -296,7 +296,7 @@ impl ClusterRef {
         tree: &mut impl SyntaxTree<Node = N>,
         error: N::Error,
     ) -> ErrorRef {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return ErrorRef::nil();
         }
 
@@ -323,7 +323,7 @@ impl ClusterRef {
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return false;
         }
 

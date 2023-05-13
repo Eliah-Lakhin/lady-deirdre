@@ -186,8 +186,8 @@ impl<T: Token, S: Borrow<str>> From<S> for TokenBuffer<T> {
 
 impl<T: Token> Identifiable for TokenBuffer<T> {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 

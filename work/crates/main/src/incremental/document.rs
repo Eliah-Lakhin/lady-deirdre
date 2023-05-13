@@ -339,8 +339,8 @@ impl<N: Node> Debug for Document<N> {
 
 impl<N: Node> Identifiable for Document<N> {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 
@@ -447,7 +447,7 @@ impl<N: Node> SyntaxTree for Document<N> {
         let current = (&self.root_cluster.errors).into_iter();
 
         Self::ErrorIterator {
-            id: &self.id,
+            id: self.id,
             cursor,
             current,
         }
@@ -506,7 +506,7 @@ impl<N: Node> Default for Document<N> {
         let mut tree = Tree::default();
         let mut references = References::default();
 
-        let root_cluster = Self::initial_parse(&id, &mut tree, &mut references);
+        let root_cluster = Self::initial_parse(id, &mut tree, &mut references);
 
         let root_node_ref = NodeRef {
             id,
@@ -555,7 +555,7 @@ impl<N: Node> Document<N> {
         let mut tree =
             unsafe { Tree::from_chunks(&mut references, token_count, spans, strings, tokens) };
 
-        let root_cluster = Self::initial_parse(&id, &mut tree, &mut references);
+        let root_cluster = Self::initial_parse(id, &mut tree, &mut references);
 
         let root_node_ref = NodeRef {
             id,
@@ -1042,7 +1042,7 @@ impl<N: Node> Document<N> {
 
                     let (cluster_cache, parsed_end_site, _lookahead) = unsafe {
                         IncrementalSyntaxSession::run(
-                            &self.id,
+                            self.id,
                             &mut self.tree,
                             &mut self.references,
                             rule,
@@ -1067,7 +1067,7 @@ impl<N: Node> Document<N> {
 
                     let (cluster_cache, mut parsed_end_site, _lookahead) = unsafe {
                         IncrementalSyntaxSession::run(
-                            &self.id,
+                            self.id,
                             &mut self.tree,
                             &mut self.references,
                             ROOT_RULE,
@@ -1105,7 +1105,7 @@ impl<N: Node> Document<N> {
     // 1. All references of the `tree` belong to `references` instance.
     #[inline(always)]
     fn initial_parse<'document>(
-        id: &'document Id,
+        id: Id,
         tree: &'document mut Tree<N>,
         references: &'document mut References<N>,
     ) -> Cluster<N> {

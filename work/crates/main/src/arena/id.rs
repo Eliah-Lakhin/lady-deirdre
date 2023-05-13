@@ -116,7 +116,7 @@ impl Id {
 
     /// Returns `true` if the [Id] instance refers invalid data.
     #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
+    pub const fn is_nil(self) -> bool {
         self.inner == 0
     }
 
@@ -136,5 +136,5 @@ impl Id {
 pub trait Identifiable {
     /// Returns a reference to a globally unique identifier of the data container this object
     /// belongs to.  
-    fn id(&self) -> &Id;
+    fn id(&self) -> Id;
 }

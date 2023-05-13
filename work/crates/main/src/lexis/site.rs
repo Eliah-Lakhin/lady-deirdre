@@ -135,10 +135,10 @@ impl Debug for SiteRef {
 
 impl Identifiable for SiteRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.id(),
-            SiteRefInner::CodeEnd(code_id) => code_id,
+            SiteRefInner::CodeEnd(code_id) => *code_id,
         }
     }
 }
@@ -149,7 +149,7 @@ unsafe impl ToSite for SiteRef {
         match &self.0 {
             SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.chunk_ref),
 
-            SiteRefInner::CodeEnd(id) => match id == code.id() {
+            SiteRefInner::CodeEnd(id) => match id == &code.id() {
                 false => None,
                 true => Some(code.length()),
             },
@@ -160,7 +160,7 @@ unsafe impl ToSite for SiteRef {
     fn is_valid_site(&self, code: &impl SourceCode) -> bool {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.is_valid_ref(code),
-            SiteRefInner::CodeEnd(id) => id == code.id(),
+            SiteRefInner::CodeEnd(id) => id == &code.id(),
         }
     }
 }

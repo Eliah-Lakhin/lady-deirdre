@@ -180,7 +180,7 @@ where
     S: SourceCode<Token = N::Token>,
 {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.code.id()
     }
 }
@@ -366,7 +366,7 @@ impl TransduceRef for NodeRef {
         &self,
         context: &'context ParseContext<N, S, R>,
     ) -> Option<&'context R> {
-        if &self.id != context.id() {
+        if self.id != context.id() {
             return None;
         }
 
@@ -384,7 +384,7 @@ impl TransduceRef for NodeRef {
         &self,
         context: &'context mut ParseContext<N, S, R>,
     ) -> Option<&'context mut R> {
-        if &self.id != context.id() {
+        if self.id != context.id() {
             return None;
         }
 
@@ -402,7 +402,7 @@ impl TransduceRef for NodeRef {
         &self,
         context: &ParseContext<N, S, R>,
     ) -> Option<SiteSpan> {
-        if &self.id != context.id() {
+        if self.id != context.id() {
             return None;
         }
 
@@ -439,7 +439,7 @@ where
     Tr: Transducer<N, S, R>,
 {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.context.id()
     }
 }
@@ -559,7 +559,7 @@ where
         let node_ref = unsafe { cluster.nodes.make_ref(self.pending_node_index) };
 
         NodeRef {
-            id: *self.context.id(),
+            id: self.context.id(),
             cluster_ref: Ref::Primary,
             node_ref,
         }
@@ -569,7 +569,7 @@ where
     fn error(&mut self, error: <Self::Node as Node>::Error) -> ErrorRef {
         match &mut self.pending_errors {
             None => {
-                let id = *self.context.id();
+                let id = self.context.id();
 
                 let (_, cluster) = unsafe { self.context.cluster.as_mut().unwrap_unchecked() };
 
@@ -581,7 +581,7 @@ where
             }
 
             Some(errors) => ErrorRef {
-                id: *self.context.id(),
+                id: self.context.id(),
                 cluster_ref: Ref::Primary,
                 error_ref: errors.insert(error),
             },

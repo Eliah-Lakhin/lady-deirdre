@@ -205,7 +205,7 @@ pub trait SourceCode: Identifiable {
     /// the source code [length](crate::lexis::SourceCode::length) value.
     #[inline(always)]
     fn end_site_ref(&self) -> SiteRef {
-        SiteRef::new_code_end(*self.id())
+        SiteRef::new_code_end(self.id())
     }
 
     /// Returns a total number of UTF-8 characters inside the source code text.

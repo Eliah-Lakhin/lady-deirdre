@@ -28,7 +28,7 @@ pub struct IntStorage {
 }
 
 impl Identifiable for IntStorage {
-    fn id(&self) -> &Id { &self.id }
+    fn id(&self) -> Id { self.id }
 }
 
 impl IntStorage {
@@ -75,7 +75,7 @@ pub struct IntRef {
 }
 
 impl Identifiable for IntRef {
-    fn id(&self) -> &Id { &self.id }
+    fn id(&self) -> Id { self.id }
 }
 
 impl IntRef {

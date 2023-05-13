@@ -312,8 +312,8 @@ impl Debug for TokenRef {
 
 impl Identifiable for TokenRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 
@@ -357,7 +357,7 @@ impl TokenRef {
         &self,
         code: &'code impl SourceCode<Token = T>,
     ) -> Option<&'code T> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
@@ -386,7 +386,7 @@ impl TokenRef {
         &self,
         code: &'code mut impl SourceCode<Token = T>,
     ) -> Option<&'code mut T> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
@@ -407,7 +407,7 @@ impl TokenRef {
         &self,
         code: &'code impl SourceCode<Token = T>,
     ) -> Option<ChunkRef<'code, T>> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
@@ -435,7 +435,7 @@ impl TokenRef {
     /// function under the hood.
     #[inline(always)]
     pub fn site<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<Site> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
@@ -456,7 +456,7 @@ impl TokenRef {
         &self,
         code: &'code impl SourceCode<Token = T>,
     ) -> Option<&'code str> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
@@ -474,7 +474,7 @@ impl TokenRef {
     /// function under the hood.
     #[inline(always)]
     pub fn length<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<Length> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
@@ -492,7 +492,7 @@ impl TokenRef {
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, code: &impl SourceCode) -> bool {
-        &self.id == code.id() && code.contains(&self.chunk_ref)
+        self.id == code.id() && code.contains(&self.chunk_ref)
     }
 
     /// Turns this weak reference into the Token string first character weak reference of the

@@ -357,8 +357,8 @@ impl Debug for NodeRef {
 
 impl Identifiable for NodeRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 
@@ -402,7 +402,7 @@ impl NodeRef {
         &self,
         tree: &'tree impl SyntaxTree<Node = N>,
     ) -> Option<&'tree N> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -432,7 +432,7 @@ impl NodeRef {
         &self,
         tree: &'tree mut impl SyntaxTree<Node = N>,
     ) -> Option<&'tree mut N> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -468,7 +468,7 @@ impl NodeRef {
     /// the hood.
     #[inline(always)]
     pub fn unlink<N: Node>(&self, tree: &mut impl SyntaxTree<Node = N>) -> Option<N> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -489,7 +489,7 @@ impl NodeRef {
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return false;
         }
 

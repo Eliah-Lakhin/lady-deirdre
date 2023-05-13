@@ -351,8 +351,8 @@ impl Debug for ErrorRef {
 
 impl Identifiable for ErrorRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 
@@ -396,7 +396,7 @@ impl ErrorRef {
         &self,
         tree: &'tree impl SyntaxTree<Node = N>,
     ) -> Option<&'tree <N as Node>::Error> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -421,7 +421,7 @@ impl ErrorRef {
         &self,
         tree: &'tree mut impl SyntaxTree<Node = N>,
     ) -> Option<&'tree mut <N as Node>::Error> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -456,7 +456,7 @@ impl ErrorRef {
         &self,
         tree: &mut impl SyntaxTree<Node = N>,
     ) -> Option<<N as Node>::Error> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
@@ -477,7 +477,7 @@ impl ErrorRef {
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return false;
         }
 

@@ -121,8 +121,8 @@ impl<N: Node> Debug for SyntaxBuffer<N> {
 
 impl<N: Node> Identifiable for SyntaxBuffer<N> {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 
@@ -139,7 +139,7 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     #[inline(always)]
     fn errors(&self) -> Self::ErrorIterator<'_> {
         BufferErrorIterator {
-            id: &self.id,
+            id: self.id,
             inner: (&self.cluster.errors).into_iter(),
         }
     }
@@ -199,13 +199,13 @@ impl<N: Node> SyntaxBuffer<N> {
 }
 
 pub struct BufferErrorIterator<'tree, N: Node> {
-    pub(super) id: &'tree Id,
+    pub(super) id: Id,
     pub(super) inner: RepositoryIterator<'tree, N::Error>,
 }
 
 impl<'tree, N: Node> Identifiable for BufferErrorIterator<'tree, N> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.id
     }
 }

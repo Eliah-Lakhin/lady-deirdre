@@ -134,8 +134,8 @@ where
     C: TokenCursor<'code, Token = <N as Node>::Token>,
 {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
     }
 }
 

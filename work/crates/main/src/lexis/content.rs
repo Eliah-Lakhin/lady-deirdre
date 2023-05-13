@@ -187,7 +187,7 @@ pub struct ChunkIterator<'code, C: TokenCursor<'code>> {
 
 impl<'code, C: TokenCursor<'code>> Identifiable for ChunkIterator<'code, C> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.cursor.id()
     }
 }
@@ -227,7 +227,7 @@ pub struct CharIterator<'code, C: TokenCursor<'code>> {
 
 impl<'code, C: TokenCursor<'code>> Identifiable for CharIterator<'code, C> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.cursor.id()
     }
 }

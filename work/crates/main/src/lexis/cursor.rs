@@ -269,7 +269,7 @@ pub struct TokenBufferCursor<'code, T: Token> {
 
 impl<'code, T: Token> Identifiable for TokenBufferCursor<'code, T> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.buffer.id()
     }
 }
@@ -377,7 +377,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
         }
 
         TokenRef {
-            id: *self.buffer.id(),
+            id: self.buffer.id(),
             chunk_ref: Sequence::<Self::Token>::make_ref(distance),
         }
     }
@@ -400,7 +400,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
             loop {
                 if index >= self.buffer.token_count() {
-                    self.end_site_ref = SiteRef::new_code_end(*self.buffer.id());
+                    self.end_site_ref = SiteRef::new_code_end(self.buffer.id());
                     break;
                 }
 
@@ -408,7 +408,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
                 if peek_site > self.end_site {
                     self.end_site_ref = TokenRef {
-                        id: *self.buffer.id(),
+                        id: self.buffer.id(),
                         chunk_ref: Sequence::<Self::Token>::make_ref(index),
                     }
                     .site_ref();
@@ -441,7 +441,7 @@ impl<'code, T: Token> TokenBufferCursor<'code, T> {
         }
 
         let end_site_ref = match span.end >= buffer.length() {
-            true => SiteRef::new_code_end(*buffer.id()),
+            true => SiteRef::new_code_end(buffer.id()),
             false => SiteRef::nil(),
         };
 
