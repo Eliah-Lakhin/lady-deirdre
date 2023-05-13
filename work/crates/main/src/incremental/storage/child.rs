@@ -43,7 +43,7 @@ use crate::{
         page::Page,
     },
     lexis::{Length, TokenCount},
-    report::debug_assert,
+    report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
 };
@@ -131,17 +131,7 @@ impl<N: Node> ChildRefIndex<N> {
                         match self.index <= tail.index {
                             true => Some(tail.index - self.index),
 
-                            false => {
-                                #[cfg(debug_assertions)]
-                                {
-                                    unreachable!("Internal error. Head is ahead of tail.");
-                                }
-
-                                #[allow(unreachable_code)]
-                                unsafe {
-                                    unreachable_unchecked()
-                                }
-                            }
+                            false => unsafe { debug_unreachable!("Head is ahead of tail.") },
                         }
                     }
 
@@ -348,19 +338,9 @@ impl<N: Node> ChildRefIndex<N> {
         match unsafe { page.clusters.get_unchecked(self.index).assume_init_ref() } {
             Some(cache_entry) => cache_entry.ref_index,
 
-            None => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!(
-                        "Internal error. An attempt to get RefIndex of undefined ClusterCache."
-                    );
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            None => unsafe {
+                debug_unreachable!("An attempt to get RefIndex of undefined ClusterCache.")
+            },
         }
     }
 
@@ -392,17 +372,7 @@ impl<N: Node> ChildRefIndex<N> {
         } {
             Some(cache_entry) => cache_entry.ref_index,
 
-            None => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to remove undefined ClusterCache.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            None => unsafe { debug_unreachable!("An attempt to remove undefined ClusterCache.") },
         }
     }
 
@@ -470,17 +440,7 @@ impl<N: Node> ChildRefIndex<N> {
                 cache_entry.cache = cache;
             }
 
-            None => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. An attempt to remove undefined ClusterCache.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            None => unsafe { debug_unreachable!("An attempt to remove undefined ClusterCache.") },
         }
     }
 

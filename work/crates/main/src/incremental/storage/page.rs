@@ -47,7 +47,7 @@ use crate::{
         utils::{array_copy_to, array_shift, capacity},
     },
     lexis::Length,
-    report::debug_assert,
+    report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
 };
@@ -543,49 +543,19 @@ impl<N: Node> PageRef<N> {
 
             let new_span = match spans.next() {
                 Some(span) => span,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Spans iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
             };
 
             debug_assert!(new_span > 0, "Internal error. Zero input span.");
 
             let new_string = match strings.next() {
                 Some(string) => string,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Strings iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Strings iterator exceeded.") },
             };
 
             let new_token = match tokens.next() {
                 Some(token) => token,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Tokens iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
             };
 
             let span = unsafe { page.spans.get_unchecked_mut(index) };
@@ -777,49 +747,19 @@ impl<N: Node> PageRef<N> {
             let new_span = match spans.next() {
                 Some(span) => span,
 
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Spans iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
             };
 
             debug_assert!(new_span > 0, "Internal error. Zero input span.");
 
             let new_string = match strings.next() {
                 Some(string) => string,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Strings iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Strings iterator exceeded.") },
             };
 
             let new_token = match tokens.next() {
                 Some(token) => token,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Tokens iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
             };
 
             length += new_span;

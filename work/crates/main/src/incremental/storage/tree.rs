@@ -46,7 +46,7 @@ use crate::{
         utils::{capacity, Spread},
     },
     lexis::{Length, Site, TokenCount},
-    report::{debug_assert, debug_assert_eq},
+    report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
     syntax::Node,
 };
@@ -72,17 +72,7 @@ impl<N: Node> Default for Tree<N> {
 
 impl<N: Node> Drop for Tree<N> {
     fn drop(&mut self) {
-        #[cfg(feature = "std")]
-        {
-            if self.height != 0 {
-                println!("Internal error. Document memory leak.");
-            }
-        }
-
-        #[cfg(not(feature = "std"))]
-        {
-            assert_eq!(self.height, 0, "Internal error. Document memory leak.");
-        }
+        debug_assert_eq!(self.height, 0, "Document memory leak.");
     }
 }
 
@@ -124,49 +114,19 @@ impl<N: Node> Tree<N> {
 
             let span = match spans.next() {
                 Some(span) => span,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Spans iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
             };
 
             debug_assert!(span > 0, "Internal error. Zero input span.");
 
             let string = match strings.next() {
                 Some(string) => string,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Strings iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Strings iterator exceeded.") },
             };
 
             let token = match tokens.next() {
                 Some(token) => token,
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Tokens iterator exceeded.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
             };
 
             length += span;
@@ -201,17 +161,7 @@ impl<N: Node> Tree<N> {
                     unsafe { page.clusters.get_unchecked_mut(index).write(None) };
                 }
 
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Missing last page.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Missing last page.") },
             }
         }
 
@@ -267,17 +217,7 @@ impl<N: Node> Tree<N> {
                                 current
                             }
 
-                            None => {
-                                #[cfg(debug_assertions)]
-                                {
-                                    unreachable!("Internal error. Missing last branch.");
-                                }
-
-                                #[allow(unreachable_code)]
-                                unsafe {
-                                    unreachable_unchecked()
-                                }
-                            }
+                            None => unsafe { debug_unreachable!("Missing last branch.") },
                         };
 
                         unsafe { child_ref.as_mut().parent = ChildRefIndex { item: *last, index } };
@@ -298,17 +238,7 @@ impl<N: Node> Tree<N> {
                         };
                     }
 
-                    None => {
-                        #[cfg(debug_assertions)]
-                        {
-                            unreachable!("Internal error. Missing last branch.");
-                        }
-
-                        #[allow(unreachable_code)]
-                        unsafe {
-                            unreachable_unchecked()
-                        }
-                    }
+                    None => unsafe { debug_unreachable!("Missing last branch.") },
                 }
             }
         }
@@ -319,17 +249,7 @@ impl<N: Node> Tree<N> {
             let mut next = match first_item {
                 Some(first_item) => first_item,
 
-                None => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Missing layer first item.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                None => unsafe { debug_unreachable!("Missing layer first item.") },
             };
 
             first_item = None;
@@ -397,17 +317,7 @@ impl<N: Node> Tree<N> {
                         unsafe { *branch.inner.children.get_unchecked_mut(index) = child_variant };
                     }
 
-                    None => {
-                        #[cfg(debug_assertions)]
-                        {
-                            unreachable!("Internal error. Missing last branch.");
-                        }
-
-                        #[allow(unreachable_code)]
-                        unsafe {
-                            unreachable_unchecked()
-                        }
-                    }
+                    None => unsafe { debug_unreachable!("Missing last branch.") },
                 }
             }
         }
@@ -415,33 +325,13 @@ impl<N: Node> Tree<N> {
         let first_page = match first_page {
             Some(first_page) => first_page,
 
-            None => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Missing first page.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            None => unsafe { debug_unreachable!("Missing first page.") },
         };
 
         let last_page = match last_page {
             Some(last_page) => last_page,
 
-            None => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Missing last page.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            None => unsafe { debug_unreachable!("Missing last page.") },
         };
 
         Self {
@@ -638,17 +528,7 @@ impl<N: Node> Tree<N> {
         }
 
         match self.height {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Incorrect height.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Incorrect height.") },
 
             1 => {
                 page.occupied + insert >= remove
@@ -1108,17 +988,7 @@ impl<N: Node> Tree<N> {
         }
 
         match self.height {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Incorrect height.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Incorrect height.") },
 
             1 => unsafe { self.root.as_page_mut().as_mut().parent.make_dangle() },
 
@@ -1157,17 +1027,7 @@ impl<N: Node> Tree<N> {
         let right = &mut other.root;
 
         let new_root = match depth {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Incorrect height.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Incorrect height.") },
 
             1 => {
                 let left_ref = unsafe { left.as_page_mut() };
@@ -1268,17 +1128,7 @@ impl<N: Node> Tree<N> {
         let left = &mut self.root;
 
         let new_root = match depth {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Incorrect height.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Incorrect height.") },
 
             1 => {
                 let left_ref = unsafe { left.as_page_mut() };
@@ -1373,17 +1223,7 @@ impl<N: Node> Tree<N> {
         other.height = 0;
 
         let new_root = match self.height {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Incorrect height.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Incorrect height.") },
 
             1 => {
                 let left_ref = unsafe { left.as_page_mut() };

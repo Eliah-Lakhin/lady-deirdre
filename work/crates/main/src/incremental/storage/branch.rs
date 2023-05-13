@@ -44,7 +44,7 @@ use crate::{
         utils::{array_copy_to, array_shift, capacity},
     },
     lexis::Length,
-    report::debug_assert,
+    report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
 };
@@ -227,17 +227,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
             let child = unsafe { self.inner.children.get_unchecked_mut(index) };
 
             match height {
-                0 | 1 => {
-                    #[cfg(debug_assertions)]
-                    {
-                        unreachable!("Internal error. Incorrect height.");
-                    }
-
-                    #[allow(unreachable_code)]
-                    unsafe {
-                        unreachable_unchecked()
-                    }
-                }
+                0 | 1 => unsafe { debug_unreachable!("Incorrect height.") },
 
                 2 => {
                     debug_assert!(
@@ -642,17 +632,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
         let parent_occupied = unsafe { self.as_ref().occupied() };
 
         match parent_occupied {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Empty item.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Empty item.") },
 
             1 => (true, unsafe { self.as_ref().inner.children[0] }),
 
@@ -778,17 +758,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
         let parent_occupied = unsafe { self.as_ref().occupied() };
 
         match parent_occupied {
-            0 => {
-                #[cfg(debug_assertions)]
-                {
-                    unreachable!("Internal error. Empty item.");
-                }
-
-                #[allow(unreachable_code)]
-                unsafe {
-                    unreachable_unchecked()
-                }
-            }
+            0 => unsafe { debug_unreachable!("Empty item.") },
 
             1 => (true, unsafe { self.as_ref().inner.children[0] }),
 

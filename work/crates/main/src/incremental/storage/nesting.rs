@@ -37,7 +37,7 @@
 
 use crate::{
     incremental::storage::{branch::Branch, child::ChildCount, item::Item, page::Page},
-    std::*,
+    report::debug_unreachable,
     syntax::Node,
 };
 
@@ -53,28 +53,12 @@ pub(super) unsafe trait Layer {
 unsafe impl Layer for () {
     #[inline(always)]
     fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
-        #[cfg(debug_assertions)]
-        {
-            unreachable!("Internal error. An attempt to get unit layer branching value.");
-        }
-
-        #[allow(unreachable_code)]
-        unsafe {
-            unreachable_unchecked()
-        }
+        unsafe { debug_unreachable!("An attempt to get unit layer branching value.") }
     }
 
     #[inline(always)]
     fn descriptor() -> &'static LayerDescriptor {
-        #[cfg(debug_assertions)]
-        {
-            unreachable!("Internal error. An attempt to get unit layer description.");
-        }
-
-        #[allow(unreachable_code)]
-        unsafe {
-            unreachable_unchecked()
-        }
+        unsafe { debug_unreachable!("An attempt to get unit layer description.") }
     }
 }
 
