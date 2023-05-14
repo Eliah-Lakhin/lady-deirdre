@@ -108,10 +108,8 @@ impl Id {
     ///
     /// ```
     #[inline(always)]
-    pub const fn nil() -> &'static Self {
-        const NIL: Id = Id { inner: 0 };
-
-        &NIL
+    pub const fn nil() -> Self {
+        Id { inner: 0 }
     }
 
     /// Returns `true` if the [Id] instance refers invalid data.

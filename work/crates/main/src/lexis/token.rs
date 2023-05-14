@@ -324,7 +324,7 @@ impl TokenRef {
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
-            id: *Id::nil(),
+            id: Id::nil(),
             chunk_ref: Ref::Nil,
         }
     }

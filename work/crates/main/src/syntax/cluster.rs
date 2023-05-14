@@ -176,7 +176,7 @@ impl ClusterRef {
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
-            id: *Id::nil(),
+            id: Id::nil(),
             cluster_ref: Ref::Nil,
         }
     }
