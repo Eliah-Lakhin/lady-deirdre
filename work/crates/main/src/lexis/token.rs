@@ -488,11 +488,11 @@ impl TokenRef {
     /// If this function returns `true`, all dereference function would return meaningful [Some]
     /// values, otherwise these functions return [None].
     ///
-    /// This function uses [`SourceCode::contains`](crate::lexis::SourceCode::contains)
+    /// This function uses [`SourceCode::contains`](crate::lexis::SourceCode::contains_chunk)
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, code: &impl SourceCode) -> bool {
-        self.id == code.id() && code.contains(&self.chunk_ref)
+        self.id == code.id() && code.contains_chunk(&self.chunk_ref)
     }
 
     /// Turns this weak reference into the Token string first character weak reference of the

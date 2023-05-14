@@ -165,7 +165,7 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     }
 
     #[inline(always)]
-    fn contains(&self, cluster_ref: &Ref) -> bool {
+    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
         match cluster_ref {
             Ref::Primary => true,
             _ => false,

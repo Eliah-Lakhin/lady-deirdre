@@ -195,8 +195,8 @@ where
     type Cursor<'a> = S::Cursor<'a> where Self: 'a;
 
     #[inline(always)]
-    fn contains(&self, chunk_ref: &Ref) -> bool {
-        self.code.contains(chunk_ref)
+    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
+        self.code.contains_chunk(chunk_ref)
     }
 
     #[inline(always)]
@@ -289,7 +289,7 @@ where
     }
 
     #[inline(always)]
-    fn contains(&self, cluster_ref: &Ref) -> bool {
+    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
         match cluster_ref {
             Ref::Primary => true,
             _ => false,

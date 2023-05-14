@@ -319,7 +319,7 @@ impl ClusterRef {
     /// [SyntaxTree](crate::syntax::SyntaxTree), and referred Cluster exists in this SyntaxTree
     /// instance.
     ///
-    /// This function uses [`SyntaxTree::contains`](crate::syntax::SyntaxTree::contains)
+    /// This function uses [`SyntaxTree::contains`](crate::syntax::SyntaxTree::contains_cluster)
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
@@ -327,6 +327,6 @@ impl ClusterRef {
             return false;
         }
 
-        tree.contains(&self.cluster_ref)
+        tree.contains_cluster(&self.cluster_ref)
     }
 }

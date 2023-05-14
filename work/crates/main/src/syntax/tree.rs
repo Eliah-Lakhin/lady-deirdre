@@ -109,7 +109,7 @@ pub trait SyntaxTree: Identifiable {
     /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
     /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
     /// under the hood. An API user normally don't need to call this function directly.
-    fn contains(&self, cluster_ref: &Ref) -> bool;
+    fn contains_cluster(&self, cluster_ref: &Ref) -> bool;
 
     /// Immutably dereferences a [Cluster](crate::syntax::Cluster) instance by specified low-level
     /// `cluster_ref` weak reference.

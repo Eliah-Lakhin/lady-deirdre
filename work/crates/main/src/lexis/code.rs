@@ -89,7 +89,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef) and
     /// [SiteRef](crate::lexis::SiteRef) weak references under the hood. An API user normally don't
     /// need to call this function directly.
-    fn contains(&self, chunk_ref: &Ref) -> bool;
+    fn contains_chunk(&self, chunk_ref: &Ref) -> bool;
 
     /// Immutably dereferences a [Token](crate::lexis::Token) instance by specified low-level
     /// `chunk_ref` weak reference.

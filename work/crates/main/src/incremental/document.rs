@@ -351,7 +351,7 @@ impl<N: Node> SourceCode for Document<N> {
     type Cursor<'code> = DocumentCursor<'code, N>;
 
     #[inline(always)]
-    fn contains(&self, chunk_ref: &Ref) -> bool {
+    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
         self.references.chunks().contains(chunk_ref)
     }
 
@@ -477,7 +477,7 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 
     #[inline(always)]
-    fn contains(&self, cluster_ref: &Ref) -> bool {
+    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
         match cluster_ref {
             Ref::Primary => true,
 
