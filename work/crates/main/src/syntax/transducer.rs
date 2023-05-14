@@ -51,7 +51,7 @@ use crate::{
     },
     std::*,
     syntax::{
-        buffer::BufferErrorIterator,
+        buffer::{BufferClusterIterator, BufferClusterIteratorMut, BufferErrorIterator},
         Cluster,
         ErrorRef,
         Node,
@@ -249,6 +249,10 @@ where
 
     type ErrorIterator<'a> = BufferErrorIterator<'a, Self::Node> where Self: 'a;
 
+    type ClusterIterator<'a> = BufferClusterIterator<'a, Self::Node> where Self: 'a;
+
+    type ClusterIteratorMut<'a> = BufferClusterIteratorMut<'a, Self::Node> where Self: 'a;
+
     #[inline(always)]
     fn root(&self) -> &NodeRef {
         &self.root
@@ -261,6 +265,26 @@ where
         BufferErrorIterator {
             id: self.code.id(),
             inner: (&cluster.errors).into_iter(),
+        }
+    }
+
+    #[inline(always)]
+    fn traverse(&self) -> Self::ClusterIterator<'_> {
+        let (_, cluster) = unsafe { self.cluster.as_ref().unwrap_unchecked() };
+
+        BufferClusterIterator {
+            id: self.code.id(),
+            cluster: Some(cluster),
+        }
+    }
+
+    #[inline(always)]
+    fn traverse_mut(&mut self) -> Self::ClusterIteratorMut<'_> {
+        let (_, cluster) = unsafe { self.cluster.as_mut().unwrap_unchecked() };
+
+        BufferClusterIteratorMut {
+            id: self.code.id(),
+            cluster: Some(cluster),
         }
     }
 

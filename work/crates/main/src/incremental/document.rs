@@ -43,6 +43,7 @@ use crate::{
         lexis::IncrementalLexisSession,
         storage::{ChildRefIndex, ClusterCache, References, Tree},
         syntax::IncrementalSyntaxSession,
+        traverse::{DocumentClusterIterator, DocumentClusterIteratorMut},
     },
     lexis::{
         utils::{split_left, split_right},
@@ -436,6 +437,10 @@ impl<N: Node> SyntaxTree for Document<N> {
 
     type ErrorIterator<'document> = DocumentErrorIterator<'document, Self::Node>;
 
+    type ClusterIterator<'document> = DocumentClusterIterator<'document, Self::Node>;
+
+    type ClusterIteratorMut<'document> = DocumentClusterIteratorMut<'document, Self::Node>;
+
     #[inline(always)]
     fn root(&self) -> &NodeRef {
         &self.root_node_ref
@@ -450,6 +455,24 @@ impl<N: Node> SyntaxTree for Document<N> {
             id: self.id,
             cursor,
             current,
+        }
+    }
+
+    #[inline(always)]
+    fn traverse(&self) -> Self::ClusterIterator<'_> {
+        DocumentClusterIterator {
+            id: self.id,
+            cursor: self.tree.first(),
+            _document: PhantomData,
+        }
+    }
+
+    #[inline(always)]
+    fn traverse_mut(&mut self) -> Self::ClusterIteratorMut<'_> {
+        DocumentClusterIteratorMut {
+            id: self.id,
+            cursor: self.tree.first(),
+            _document: PhantomData,
         }
     }
 
@@ -487,7 +510,7 @@ impl<N: Node> SyntaxTree for Document<N> {
             Ref::Primary => Some(&mut self.root_cluster),
 
             Ref::Repository { .. } => {
-                let chunk_ref = self.references.clusters().get(cluster_ref)?;
+                let mut chunk_ref = *self.references.clusters().get(cluster_ref)?;
 
                 let cluster_cache = unsafe { chunk_ref.cache_mut()? };
 

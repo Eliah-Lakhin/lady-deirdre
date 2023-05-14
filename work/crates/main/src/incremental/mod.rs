@@ -41,5 +41,6 @@ mod errors;
 mod lexis;
 mod storage;
 mod syntax;
+mod traverse;
 
 pub use crate::incremental::document::Document;

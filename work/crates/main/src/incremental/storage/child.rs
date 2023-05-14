@@ -292,7 +292,7 @@ impl<N: Node> ChildRefIndex<N> {
     // 3. `'a` does not outlive corresponding Page instance.
     // 4. There are no references to this ClusterCache.
     #[inline(always)]
-    pub(crate) unsafe fn cache_mut<'a>(&self) -> Option<&'a mut ClusterCache<N>> {
+    pub(crate) unsafe fn cache_mut<'a>(&mut self) -> Option<&'a mut ClusterCache<N>> {
         debug_assert!(
             !self.is_dangling(),
             "Internal error. An attempt to access dangling ChildRefIndex.",

@@ -35,27 +35,74 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("../readme.md")]
-//TODO check warnings regularly
-#![allow(warnings)]
-#![allow(unused_unsafe)]
-//TODO revert and review documentation
-// #![deny(missing_docs)]
-#![no_implicit_prelude]
-#![cfg_attr(not(feature = "std"), no_std)]
+use crate::{
+    arena::{Id, Identifiable, RepositoryIterator},
+    incremental::storage::ChildRefIndex,
+    std::*,
+    syntax::{Cluster, Node},
+    Document,
+};
 
-pub mod arena;
-mod incremental;
-pub mod lexis;
-mod report;
-mod std;
-pub mod syntax;
+pub struct DocumentClusterIterator<'document, N: Node> {
+    pub(super) id: Id,
+    pub(super) cursor: ChildRefIndex<N>,
+    pub(super) _document: PhantomData<&'document Document<N>>,
+}
 
-pub use crate::incremental::Document;
+impl<'document, N: Node> Identifiable for DocumentClusterIterator<'document, N> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
 
-extern crate self as lady_deirdre;
+impl<'document, N: Node> Iterator for DocumentClusterIterator<'document, N> {
+    type Item = &'document Cluster<N>;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-extern crate core;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.cursor.is_dangling() {
+            if let Some(cache) = unsafe { self.cursor.cache() } {
+                return Some(&cache.cluster);
+            }
+
+            unsafe { self.cursor.next() };
+        }
+
+        None
+    }
+}
+
+impl<'document, N: Node> FusedIterator for DocumentClusterIterator<'document, N> {}
+
+pub struct DocumentClusterIteratorMut<'document, N: Node> {
+    pub(super) id: Id,
+    pub(super) cursor: ChildRefIndex<N>,
+    pub(super) _document: PhantomData<&'document mut Document<N>>,
+}
+
+impl<'document, N: Node> Identifiable for DocumentClusterIteratorMut<'document, N> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl<'document, N: Node> Iterator for DocumentClusterIteratorMut<'document, N> {
+    type Item = &'document mut Cluster<N>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.cursor.is_dangling() {
+            if let Some(cache) = unsafe { self.cursor.cache_mut() } {
+                return Some(&mut cache.cluster);
+            }
+
+            unsafe { self.cursor.next() };
+        }
+
+        None
+    }
+}
+
+impl<'document, N: Node> FusedIterator for DocumentClusterIteratorMut<'document, N> {}

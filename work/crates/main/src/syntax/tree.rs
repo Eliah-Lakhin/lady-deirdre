@@ -38,7 +38,7 @@
 use crate::{
     arena::{Identifiable, Ref},
     std::*,
-    syntax::{Cluster, Node, NodeRef},
+    syntax::{Cluster, ClusterRef, Node, NodeRef},
 };
 
 /// A low-level interface to access and inspect syntax structure of the compilation unit.
@@ -81,11 +81,27 @@ pub trait SyntaxTree: Identifiable {
     where
         Self: 'tree;
 
+    type ClusterIterator<'tree>: Identifiable
+        + Iterator<Item = &'tree Cluster<Self::Node>>
+        + FusedIterator
+    where
+        Self: 'tree;
+
+    type ClusterIteratorMut<'tree>: Identifiable
+        + Iterator<Item = &'tree mut Cluster<Self::Node>>
+        + FusedIterator
+    where
+        Self: 'tree;
+
     /// Returns a [`weak reference`](crate::syntax::NodeRef) to the root Node of the syntax tree.
     fn root(&self) -> &NodeRef;
 
     /// Returns iterator over all syntax and semantic errors belong to this unit of compilation.
     fn errors(&self) -> Self::ErrorIterator<'_>;
+
+    fn traverse(&self) -> Self::ClusterIterator<'_>;
+
+    fn traverse_mut(&mut self) -> Self::ClusterIteratorMut<'_>;
 
     /// Returns `true` if the [`Node Cluster`](crate::syntax::ClusterRef) referred by specified
     /// low-level `cluster_ref` weak reference exists in this syntax tree instance.
