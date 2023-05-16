@@ -195,7 +195,7 @@ impl<N: Node> SyntaxBuffer<N> {
     pub(super) fn new<'code>(
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
     ) -> Self {
-        let id = Id::new();
+        let id = token_cursor.id();
 
         let mut session = SequentialSyntaxSession {
             id,
