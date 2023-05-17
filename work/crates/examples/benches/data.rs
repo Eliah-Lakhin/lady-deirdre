@@ -39,7 +39,7 @@ use std::ops::Range;
 
 use lady_deirdre::{
     lexis::{CodeContent, Length, Site, SiteSpan},
-    syntax::SyntaxTree,
+    syntax::{SyntaxTree, TreeContent},
     Document,
 };
 use lady_deirdre_examples::json::syntax::JsonNode;

@@ -5,7 +5,14 @@ use lady_deirdre_examples::json::syntax::JsonNode;
 fn test_cluster_span() {
     let mut doc = Document::<JsonNode>::default();
 
-    assert_eq!(0..0, doc.root().cluster().span(&doc).to_span(&doc).unwrap());
+    assert_eq!(
+        0..0,
+        doc.root_node_ref()
+            .cluster()
+            .span(&doc)
+            .to_span(&doc)
+            .unwrap()
+    );
 
     doc.write(
         ..,
@@ -14,7 +21,11 @@ fn test_cluster_span() {
 
     assert_eq!(
         0..70,
-        doc.root().cluster().span(&doc).to_span(&doc).unwrap()
+        doc.root_node_ref()
+            .cluster()
+            .span(&doc)
+            .to_span(&doc)
+            .unwrap()
     );
 
     assert_eq!(
@@ -22,7 +33,7 @@ fn test_cluster_span() {
         doc.get_cluster_span(&Ref::Primary).to_span(&doc).unwrap()
     );
 
-    let mut cluster = doc.root().cluster();
+    let mut cluster = doc.root_node_ref().cluster();
 
     cluster = cluster.next(&doc);
     assert_eq!(1..58, cluster.span(&doc).to_span(&doc).unwrap());

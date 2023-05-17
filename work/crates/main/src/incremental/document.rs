@@ -39,11 +39,9 @@ use crate::{
     arena::{Id, Identifiable, Ref},
     incremental::{
         cursor::DocumentCursor,
-        errors::DocumentErrorIterator,
         lexis::IncrementalLexisSession,
         storage::{ChildRefIndex, ClusterCache, References, Tree},
         syntax::IncrementalSyntaxSession,
-        traverse::{DocumentClusterIterator, DocumentClusterIteratorMut},
     },
     lexis::{
         utils::{split_left, split_right},
@@ -227,7 +225,7 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     syntax::{SimpleNode, SyntaxTree, NodeRef},
+///     syntax::{SimpleNode, SyntaxTree, NodeRef, TreeContent},
 ///     lexis::{CodeContent, ToSpan},
 /// };
 ///
@@ -235,7 +233,7 @@ use crate::{
 ///
 /// // Returns a weak reference to the root os the SyntaxTree.
 /// // It is OK to copy this reference and reuse the copy many times.
-/// let root_ref = *doc.root();
+/// let root_ref = *doc.root_node_ref();
 ///
 /// // A simple parens structure formatter that traverses the Syntax Tree.
 /// fn fmt(doc: &Document<SimpleNode>, node_ref: &NodeRef) -> String {
@@ -296,7 +294,7 @@ use crate::{
 ///     let new_node_ref = root_ref.cluster().link_node(&mut doc, new_node);
 ///
 ///     match root_ref.deref_mut(&mut doc).unwrap() {
-///         SimpleNode::Root { inner } => { inner.push(new_node_ref) },
+///         SimpleNode::Root { inner } => { inner.push(new_node_ref) }
 ///         _ => unreachable!()
 ///     }
 /// }
@@ -438,14 +436,8 @@ impl<N: Node> SourceCode for Document<N> {
 impl<N: Node> SyntaxTree for Document<N> {
     type Node = N;
 
-    type ErrorIterator<'document> = DocumentErrorIterator<'document, Self::Node>;
-
-    type ClusterIterator<'document> = DocumentClusterIterator<'document, Self::Node>;
-
-    type ClusterIteratorMut<'document> = DocumentClusterIteratorMut<'document, Self::Node>;
-
     #[inline(always)]
-    fn root(&self) -> &NodeRef {
+    fn root_node_ref(&self) -> &NodeRef {
         &self.root_node_ref
     }
 
@@ -481,36 +473,6 @@ impl<N: Node> SyntaxTree for Document<N> {
         }
 
         Ref::Primary
-    }
-
-    #[inline(always)]
-    fn errors(&self) -> Self::ErrorIterator<'_> {
-        let cursor = self.tree.first();
-        let current = (&self.root_cluster.errors).into_iter();
-
-        Self::ErrorIterator {
-            id: self.id,
-            cursor,
-            current,
-        }
-    }
-
-    #[inline(always)]
-    fn traverse(&self) -> Self::ClusterIterator<'_> {
-        DocumentClusterIterator {
-            id: self.id,
-            cursor: self.tree.first(),
-            _document: PhantomData,
-        }
-    }
-
-    #[inline(always)]
-    fn traverse_mut(&mut self) -> Self::ClusterIteratorMut<'_> {
-        DocumentClusterIteratorMut {
-            id: self.id,
-            cursor: self.tree.first(),
-            _document: PhantomData,
-        }
     }
 
     #[inline(always)]

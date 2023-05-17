@@ -333,7 +333,10 @@ let mut doc = Document::<CalcNode>::default();
 
 doc.write(.., "(* (+ 3, 4, 5), 10)");
 
-assert_eq!(show_tree(doc.root(), &doc), "Root(Mult(Plus(3, 4, 5), 10))");
+assert_eq!(
+    show_tree(doc.root_node_ref(), &doc),
+    "Root(Mult(Plus(3, 4, 5), 10))",
+);
 
 // Now, lets implement an interpreter of our expression language by traversing 
 // the Syntax Tree.
@@ -385,5 +388,5 @@ fn interpret(node_ref: &NodeRef, doc: &Document<CalcNode>) -> usize {
     }
 }
 
-assert_eq!(interpret(doc.root(), &doc), 120);
+assert_eq!(interpret(doc.root_node_ref(), &doc), 120);
 ```

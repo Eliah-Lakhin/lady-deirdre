@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{CodeContent, SimpleToken, ToSpan},
-    syntax::{Node, NodeRef, SyntaxError, SyntaxTree},
+    syntax::{Node, NodeRef, SyntaxError, SyntaxTree, TreeContent},
     Document,
 };
 
@@ -162,7 +162,7 @@ fn test_balance() {
                 }
             }
 
-            traverse(self, self.root())
+            traverse(self, self.root_node_ref())
         }
 
         fn debug_errors(&self) -> String {

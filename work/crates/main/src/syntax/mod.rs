@@ -39,6 +39,7 @@
 
 mod buffer;
 mod cluster;
+mod content;
 mod error;
 mod no;
 mod node;
@@ -50,6 +51,7 @@ pub(crate) use crate::syntax::session::NON_ROOT_RULE;
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
     cluster::{Cluster, ClusterRef},
+    content::TreeContent,
     error::{ErrorRef, SyntaxError},
     no::NoSyntax,
     node::{Node, NodeRef},

@@ -18,7 +18,7 @@ use crate::std::*;
 /// assert_ne!(id_a, id_b);
 ///
 /// // Id is never equals the Nil Id.
-/// assert_ne!(&id_a, Id::nil());
+/// assert_ne!(id_a, Id::nil());
 ///
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

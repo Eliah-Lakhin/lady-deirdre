@@ -92,7 +92,7 @@ use crate::{
 ///     }
 /// }
 ///
-/// assert_eq!("({}[])", format(&syntax_buffer, syntax_buffer.root()));
+/// assert_eq!("({}[])", format(&syntax_buffer, syntax_buffer.root_node_ref()));
 /// ```
 pub struct SyntaxBuffer<N: Node> {
     id: Id,
@@ -130,44 +130,14 @@ impl<N: Node> Identifiable for SyntaxBuffer<N> {
 impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     type Node = N;
 
-    type ErrorIterator<'tree> = BufferErrorIterator<'tree, Self::Node>;
-
-    type ClusterIterator<'tree> = BufferClusterIterator<'tree, Self::Node>;
-
-    type ClusterIteratorMut<'tree> = BufferClusterIteratorMut<'tree, Self::Node>;
-
     #[inline(always)]
-    fn root(&self) -> &NodeRef {
+    fn root_node_ref(&self) -> &NodeRef {
         &self.root
     }
 
     #[inline(always)]
     fn cover(&self, _span: impl ToSpan) -> Ref {
         Ref::Primary
-    }
-
-    #[inline(always)]
-    fn errors(&self) -> Self::ErrorIterator<'_> {
-        BufferErrorIterator {
-            id: self.id,
-            inner: (&self.cluster.errors).into_iter(),
-        }
-    }
-
-    #[inline(always)]
-    fn traverse(&self) -> Self::ClusterIterator<'_> {
-        BufferClusterIterator {
-            id: self.id,
-            cluster: Some(&self.cluster),
-        }
-    }
-
-    #[inline(always)]
-    fn traverse_mut(&mut self) -> Self::ClusterIteratorMut<'_> {
-        BufferClusterIteratorMut {
-            id: self.id,
-            cluster: Some(&mut self.cluster),
-        }
     }
 
     #[inline(always)]
@@ -256,72 +226,3 @@ impl<N: Node> SyntaxBuffer<N> {
         }
     }
 }
-
-pub struct BufferErrorIterator<'tree, N: Node> {
-    pub(super) id: Id,
-    pub(super) inner: RepositoryIterator<'tree, N::Error>,
-}
-
-impl<'tree, N: Node> Identifiable for BufferErrorIterator<'tree, N> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.id
-    }
-}
-
-impl<'tree, N: Node> Iterator for BufferErrorIterator<'tree, N> {
-    type Item = &'tree N::Error;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-}
-
-impl<'tree, N: Node> FusedIterator for BufferErrorIterator<'tree, N> {}
-
-pub struct BufferClusterIterator<'tree, N: Node> {
-    pub(super) id: Id,
-    pub(super) cluster: Option<&'tree Cluster<N>>,
-}
-
-impl<'tree, N: Node> Identifiable for BufferClusterIterator<'tree, N> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.id
-    }
-}
-
-impl<'tree, N: Node> Iterator for BufferClusterIterator<'tree, N> {
-    type Item = &'tree Cluster<N>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        take(&mut self.cluster)
-    }
-}
-
-impl<'tree, N: Node> FusedIterator for BufferClusterIterator<'tree, N> {}
-
-pub struct BufferClusterIteratorMut<'tree, N: Node> {
-    pub(super) id: Id,
-    pub(super) cluster: Option<&'tree mut Cluster<N>>,
-}
-
-impl<'tree, N: Node> Identifiable for BufferClusterIteratorMut<'tree, N> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.id
-    }
-}
-
-impl<'tree, N: Node> Iterator for BufferClusterIteratorMut<'tree, N> {
-    type Item = &'tree mut Cluster<N>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        take(&mut self.cluster)
-    }
-}
-
-impl<'tree, N: Node> FusedIterator for BufferClusterIteratorMut<'tree, N> {}

@@ -61,7 +61,7 @@ use crate::{
 /// let doc = Document::<NoSyntax<SimpleToken>>::from("foo bar baz");
 ///
 /// // Resolves to a single instance of NoSyntax of zero size.
-/// assert!(doc.root().deref(&doc).is_some());
+/// assert!(doc.root_node_ref().deref(&doc).is_some());
 /// assert_eq!(size_of::<NoSyntax<SimpleToken>>(), 0)
 /// ```
 #[derive(Clone, PartialEq, Eq)]

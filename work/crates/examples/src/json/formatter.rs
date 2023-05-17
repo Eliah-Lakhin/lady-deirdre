@@ -72,7 +72,7 @@ where
     S: SyntaxTree<Node = JsonNode>,
 {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.format_node(self.syntax.root()))
+        formatter.write_str(&self.format_node(self.syntax.root_node_ref()))
     }
 }
 

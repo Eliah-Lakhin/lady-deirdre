@@ -299,7 +299,7 @@ impl SyntaxError {
 ///
 /// let mut doc = Document::<SimpleNode>::from("foo bar");
 ///
-/// let new_custom_error_ref = doc.root().cluster().link_error(
+/// let new_custom_error_ref = doc.root_node_ref().cluster().link_error(
 ///     &mut doc,
 ///     SyntaxError::UnexpectedEndOfInput {
 ///         span: SiteRef::nil()..SiteRef::nil(),

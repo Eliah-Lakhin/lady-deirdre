@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{CodeContent, SourceCode, ToSpan, TokenBuffer, TokenRef},
-    syntax::{Node, NodeRef, SyntaxError, SyntaxTree},
+    syntax::{Node, NodeRef, SyntaxError, SyntaxTree, TreeContent},
     Document,
 };
 use lady_deirdre_examples::json::{
@@ -361,7 +361,7 @@ fn test_json_incremental() {
                 }
             }
 
-            traverse(self, self.root())
+            traverse(self, self.root_node_ref())
         }
 
         fn debug_errors(&self) -> String {

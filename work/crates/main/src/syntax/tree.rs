@@ -51,7 +51,7 @@ use crate::{
 /// This trait:
 ///   1. Specifies syntax grammar through the [Node](crate::syntax::SyntaxTree::Node) associative
 ///      type.
-///   2. Provides a [root](crate::syntax::SyntaxTree::root) function to obtain a weak reference to
+///   2. Provides a [root](crate::syntax::SyntaxTree::root_node_ref) function to obtain a weak reference to
 ///      the root node of the syntax tree. An API uses utilizes this function to enter into the
 ///      the syntax tree structure, and uses received reference to further inspect and traverse this
 ///      syntax structure.
@@ -74,37 +74,10 @@ pub trait SyntaxTree: Identifiable {
     /// See [Node](crate::syntax::Node) for details.
     type Node: Node;
 
-    /// Specifies a finite iterator over the source code syntax and semantic errors belong
-    /// to this unit of compilation.
-    type ErrorIterator<'tree>: Identifiable
-        + Iterator<Item = &'tree <Self::Node as Node>::Error>
-        + FusedIterator
-    where
-        Self: 'tree;
-
-    type ClusterIterator<'tree>: Identifiable
-        + Iterator<Item = &'tree Cluster<Self::Node>>
-        + FusedIterator
-    where
-        Self: 'tree;
-
-    type ClusterIteratorMut<'tree>: Identifiable
-        + Iterator<Item = &'tree mut Cluster<Self::Node>>
-        + FusedIterator
-    where
-        Self: 'tree;
-
     /// Returns a [`weak reference`](crate::syntax::NodeRef) to the root Node of the syntax tree.
-    fn root(&self) -> &NodeRef;
+    fn root_node_ref(&self) -> &NodeRef;
 
     fn cover(&self, span: impl ToSpan) -> Ref;
-
-    /// Returns iterator over all syntax and semantic errors belong to this unit of compilation.
-    fn errors(&self) -> Self::ErrorIterator<'_>;
-
-    fn traverse(&self) -> Self::ClusterIterator<'_>;
-
-    fn traverse_mut(&mut self) -> Self::ClusterIteratorMut<'_>;
 
     /// Returns `true` if the [`Node Cluster`](crate::syntax::ClusterRef) referred by specified
     /// low-level `cluster_ref` weak reference exists in this syntax tree instance.

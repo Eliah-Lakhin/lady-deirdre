@@ -126,7 +126,7 @@ impl<N: Node + Debug> Debug for Cluster<N> {
 ///
 /// let doc = Document::<SimpleNode>::from("[]{}()");
 ///
-/// let braces_node_ref = &doc.root().deref(&doc).unwrap().inner()[1];
+/// let braces_node_ref = &doc.root_node_ref().deref(&doc).unwrap().inner()[1];
 /// let braces_cluster_ref = braces_node_ref.cluster();
 /// let braces_cluster = braces_cluster_ref.deref(&doc).unwrap();
 ///

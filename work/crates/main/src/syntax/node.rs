@@ -82,7 +82,7 @@ use crate::{
 ///
 /// let doc = Document::<NumbersInParens>::from("(3, 4, 5)");
 ///
-/// let root = doc.root().deref(&doc).unwrap();
+/// let root = doc.root_node_ref().deref(&doc).unwrap();
 ///
 /// match root {
 ///     NumbersInParens::Root { numbers } => {
@@ -90,7 +90,7 @@ use crate::{
 ///             numbers.iter().map(|num| num.string(&doc).unwrap()).collect::<Vec<_>>(),
 ///             vec!["3", "4", "5"],
 ///         );
-///     },
+///     }
 /// }
 /// ```
 ///
@@ -151,7 +151,16 @@ pub trait Node: Sized + 'static {
     ///
     /// ```rust
     /// use lady_deirdre::{
-    ///     syntax::{Node, NodeRef, SyntaxSession, SyntaxRule, SyntaxError, SyntaxTree, ROOT_RULE},
+    ///     syntax::{
+    ///         Node,
+    ///         NodeRef,
+    ///         SyntaxSession,
+    ///         SyntaxRule,
+    ///         SyntaxError,
+    ///         SyntaxTree,
+    ///         TreeContent,
+    ///         ROOT_RULE,
+    /// },
     ///     lexis::{SimpleToken, TokenCursor},
     ///     Document,
     /// };
@@ -292,7 +301,7 @@ pub trait Node: Sized + 'static {
     /// ```rust
     /// use lady_deirdre::{
     ///     lexis::{SimpleToken, Token, SourceCode},
-    ///     syntax::{SimpleNode, Node, SyntaxTree},
+    ///     syntax::{SimpleNode, Node, SyntaxTree, TreeContent},
     /// };
     ///
     /// let tokens = SimpleToken::parse("(foo bar)");
