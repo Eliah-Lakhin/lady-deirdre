@@ -189,6 +189,11 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
             _ => None,
         }
     }
+
+    #[inline(always)]
+    fn remove_cluster(&mut self, _cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
+        None
+    }
 }
 
 impl<N: Node> SyntaxBuffer<N> {

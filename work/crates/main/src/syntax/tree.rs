@@ -130,4 +130,6 @@ pub trait SyntaxTree: Identifiable {
     /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
     /// under the hood. An API user normally don't need to call this function directly.
     fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>>;
+
+    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>>;
 }

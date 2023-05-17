@@ -520,6 +520,15 @@ impl<N: Node> SyntaxTree for Document<N> {
             _ => None,
         }
     }
+
+    #[inline(always)]
+    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
+        let mut chunk_ref = self.references.clusters_mut().remove(cluster_ref)?;
+
+        let cache = unsafe { chunk_ref.take_cache() };
+
+        Some(cache.cluster)
+    }
 }
 
 impl<N: Node> Default for Document<N> {

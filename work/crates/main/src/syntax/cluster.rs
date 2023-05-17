@@ -237,6 +237,15 @@ impl ClusterRef {
         tree.get_cluster_mut(&self.cluster_ref)
     }
 
+    #[inline(always)]
+    pub fn take<N: Node>(&self, tree: &mut impl SyntaxTree<Node = N>) -> Option<Cluster<N>> {
+        if self.id != tree.id() {
+            return None;
+        }
+
+        tree.remove_cluster(&self.cluster_ref)
+    }
+
     /// Adds new `node` into the weakly referred [Cluster] of specified `tree` instance.
     ///
     /// This function consumes `node` value, and adds it to the

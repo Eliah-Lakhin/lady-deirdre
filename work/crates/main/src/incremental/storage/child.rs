@@ -379,6 +379,38 @@ impl<N: Node> ChildRefIndex<N> {
     // Safety:
     // 1. `self` is not dangling.
     // 2. `self.item` is a Page reference.
+    // 3. Referred item contains a cluster cache.
+    // 4. There are no other references to this ClusterCache.
+    #[inline(always)]
+    pub(crate) unsafe fn take_cache(&self) -> ClusterCache<N> {
+        debug_assert!(
+            !self.is_dangling(),
+            "Internal error. An attempt to access dangling ChildRefIndex.",
+        );
+
+        let page = unsafe { self.item.as_page_ref().as_external_mut() };
+
+        debug_assert!(
+            self.index < page.occupied,
+            "Internal error. ChildRefIndex index out of bounds.",
+        );
+
+        match unsafe {
+            take(
+                page.clusters
+                    .get_unchecked_mut(self.index)
+                    .assume_init_mut(),
+            )
+        } {
+            Some(cache_entry) => cache_entry.cache,
+
+            None => unsafe { debug_unreachable!("An attempt to take undefined ClusterCache.") },
+        }
+    }
+
+    // Safety:
+    // 1. `self` is not dangling.
+    // 2. `self.item` is a Page reference.
     // 3. If referred item contains valid CLusterCache, there are no external reference to that instance.
     #[inline(always)]
     pub(crate) unsafe fn set_cache(

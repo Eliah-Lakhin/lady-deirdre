@@ -312,6 +312,11 @@ where
     fn get_cluster_mut(&mut self, _cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>> {
         None
     }
+
+    #[inline(always)]
+    fn remove_cluster(&mut self, _cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
+        None
+    }
 }
 
 impl<'code, N, S, R> ParseContext<'code, N, S, R>

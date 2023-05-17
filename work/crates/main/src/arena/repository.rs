@@ -347,10 +347,6 @@ impl<T> Repository<T> {
                 match entry {
                     RepositoryEntry::Occupied { revision, .. } if revision == version => (),
 
-                    RepositoryEntry::Reserved { .. } => {
-                        panic!("An attempt to remove reserved entry.")
-                    }
-
                     _ => return None,
                 }
 
