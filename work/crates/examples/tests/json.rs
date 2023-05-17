@@ -43,7 +43,11 @@ use lady_deirdre::{
     syntax::{Node, NodeRef, SyntaxError, SyntaxTree},
     Document,
 };
-use lady_deirdre_examples::json::{formatter::JsonFormatter, lexis::JsonToken, syntax::JsonNode};
+use lady_deirdre_examples::json::{
+    formatter::{JsonFormatter, ToJsonString},
+    lexis::JsonToken,
+    syntax::JsonNode,
+};
 
 #[test]
 fn test_json_success() {
@@ -52,7 +56,7 @@ fn test_json_success() {
 
     let code = TokenBuffer::<JsonToken>::from(SNIPPET);
 
-    assert_eq!(SNIPPET, code.transduce(JsonFormatter));
+    assert_eq!(SNIPPET, code.to_json_string());
 
     let tree = JsonNode::parse(code.cursor(..));
 
@@ -67,7 +71,7 @@ fn test_json_errors_1() {
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -89,7 +93,7 @@ fn test_json_errors_2() {
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -111,7 +115,7 @@ fn test_json_errors_3() {
 
     assert_eq!(
         r#"{"foo": [1, 3, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -133,7 +137,7 @@ fn test_json_errors_4() {
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, "a", "b"], "baz": {}}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -154,7 +158,7 @@ fn test_json_errors_5() {
 
     assert_eq!(
         r#"{"outer": [{"a": "xyz", "b": null}, "baz"]}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -174,7 +178,7 @@ fn test_json_errors_6() {
 
     assert_eq!(
         r#"{"outer": [{"a": ?, "b": null}, "baz"]}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -197,7 +201,7 @@ fn test_json_errors_7() {
 
     assert_eq!(
         r#"{"outer": [{"a": ["b", "baz"], "outer2": 12345}]}"#,
-        code.transduce(JsonFormatter)
+        code.to_json_string()
     );
 
     let tree = JsonNode::parse(code.cursor(..));
@@ -376,7 +380,7 @@ fn test_json_incremental() {
         document.debug_errors(),
         "[1:1]: Root format mismatch. Expected Object.",
     );
-    assert_eq!(document.transduce(JsonFormatter), r#"?"#);
+    assert_eq!(document.to_json_string(), r#"?"#);
     assert_eq!(document.debug_print(), r#"0(?)"#);
 
     unsafe { VERSION = 1 }
@@ -387,14 +391,14 @@ fn test_json_incremental() {
         document.debug_errors(),
         "[1:2]: Object format mismatch. Expected Entry or $BraceClose.",
     );
-    assert_eq!(document.transduce(JsonFormatter), r#"{}"#);
+    assert_eq!(document.to_json_string(), r#"{}"#);
     assert_eq!(document.debug_print(), r#"1(1({}))"#);
 
     unsafe { VERSION = 2 }
 
     document.write(1..1, "}");
     assert_eq!(document.substring(..), r#"{}"#);
-    assert_eq!(document.transduce(JsonFormatter), r#"{}"#);
+    assert_eq!(document.to_json_string(), r#"{}"#);
     assert_eq!(document.debug_print(), r#"2(2({}))"#);
 
     unsafe { VERSION = 3 }
@@ -405,7 +409,7 @@ fn test_json_incremental() {
         document.debug_errors(),
         "[1:7]: Entry format mismatch. Expected $Colon."
     );
-    assert_eq!(document.transduce(JsonFormatter), r#"{"foo": ?}"#);
+    assert_eq!(document.to_json_string(), r#"{"foo": ?}"#);
     assert_eq!(document.debug_print(), r#"3(3({3("foo": ?)}))"#);
 
     unsafe { VERSION = 4 }
@@ -420,7 +424,7 @@ fn test_json_incremental() {
     );
     assert_eq!(document.debug_errors(), "[1:7]: Missing $Colon in Entry.");
     assert_eq!(
-        document.transduce(JsonFormatter),
+        document.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
@@ -437,7 +441,7 @@ fn test_json_incremental() {
     );
     assert_eq!(document.debug_errors(), "");
     assert_eq!(
-        document.transduce(JsonFormatter),
+        document.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
@@ -453,7 +457,7 @@ fn test_json_incremental() {
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
-        document.transduce(JsonFormatter),
+        document.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
@@ -473,7 +477,7 @@ fn test_json_incremental() {
         "[1:32]: Object format mismatch. Expected $BraceClose or $Comma."
     );
     assert_eq!(
-        document.transduce(JsonFormatter),
+        document.to_json_string(),
         r#"{"foo": {"a": "xyz", "b": null}}"#
     );
     assert_eq!(
@@ -490,7 +494,7 @@ fn test_json_incremental() {
     );
     assert_eq!(document.debug_errors(), "");
     assert_eq!(
-        document.transduce(JsonFormatter),
+        document.to_json_string(),
         r#"{"foo": {"a": "xyz", "b": null}}"#
     );
     assert_eq!(
@@ -507,7 +511,7 @@ fn test_json_incremental() {
     );
     assert_eq!(document.debug_errors(), "");
     assert_eq!(
-        document.transduce(JsonFormatter),
+        document.to_json_string(),
         r#"{"foo": {"a": 111, "c": "xyz", "b": null}}"#
     );
     assert_eq!(

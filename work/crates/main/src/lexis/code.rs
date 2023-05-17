@@ -39,7 +39,7 @@ use crate::{
     arena::{Identifiable, Ref},
     lexis::{Length, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
     std::*,
-    syntax::{transduce, Node, Transducer},
+    syntax::Node,
 };
 
 /// A low-level interface to access and inspect lexical data of the compilation unit.
@@ -58,7 +58,6 @@ use crate::{
 ///      [TokenRef](crate::lexis::TokenRef) or [SiteRef](crate::lexis::SiteRef)).
 ///   4. Provides low-level access to the the source code Tokens through the low-level
 ///      iterator-alike [TokenCursor](crate::lexis::TokenCursor) interface.
-///   5. Provides an entry point to the [Transducers](crate::syntax::Transducer) interface.
 ///
 /// In practice an API user interacts with a small subset of this functionality directly.
 ///
@@ -220,20 +219,5 @@ pub trait SourceCode: Identifiable {
     #[inline(always)]
     fn is_empty(&self) -> bool {
         self.length() == 0
-    }
-
-    /// Runs provided `transducer` over this SourceCode content returning Transducer's result
-    /// value.
-    ///
-    /// The [Transducers Framework](crate::syntax::Transducer) in particular provides a way to
-    /// implement source code formatters.
-    #[inline(always)]
-    fn transduce<N, R, Tr>(&self, transducer: Tr) -> R
-    where
-        Self: Sized,
-        N: Node<Token = Self::Token>,
-        Tr: Transducer<N, Self, R>,
-    {
-        transduce(self, transducer)
     }
 }

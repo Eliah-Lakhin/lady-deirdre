@@ -44,9 +44,9 @@ mod no;
 mod node;
 mod session;
 mod simple;
-mod transducer;
 mod tree;
 
+pub(crate) use crate::syntax::session::NON_ROOT_RULE;
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
     cluster::{Cluster, ClusterRef},
@@ -55,7 +55,5 @@ pub use crate::syntax::{
     node::{Node, NodeRef},
     session::{SyntaxRule, SyntaxSession, ROOT_RULE},
     simple::SimpleNode,
-    transducer::{ParseContext, TransduceRef, Transducer},
     tree::SyntaxTree,
 };
-pub(crate) use crate::syntax::{session::NON_ROOT_RULE, transducer::transduce};

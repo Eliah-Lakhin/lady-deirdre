@@ -73,9 +73,4 @@ This module provides a system of high level weak references to deal with the
 syntax structure instances. This includes [NodeRef](crate::syntax::NodeRef),
 [ClusterRef](crate::syntax::ClusterRef) and [ErrorRef](crate::syntax::ErrorRef).
 See [Arena](crate::arena) module documentation to read more about the weak
-reference framework. 
-
-Finally, this module provides a mechanism of
-[Transducers](crate::syntax::Transducer) to turn the source code of a
-compilation unit into a different form. In particular, you can use Transducers
-to implement source code formatters.
+reference framework.

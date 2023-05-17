@@ -35,48 +35,74 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::fmt::{Display, Formatter};
+
 use lady_deirdre::{
-    lexis::SourceCode,
-    syntax::{ParseContext, TransduceRef, Transducer},
+    lexis::{SourceCode, TokenRef},
+    syntax::{Node, NodeRef, SyntaxTree},
 };
 
 use crate::json::{lexis::JsonToken, syntax::JsonNode};
 
-pub struct JsonFormatter;
+pub trait ToJsonString {
+    fn to_json_string(&self) -> String;
+}
 
-impl<S: SourceCode<Token = JsonToken>> Transducer<JsonNode, S, String> for JsonFormatter {
-    fn map(&mut self, context: &mut ParseContext<JsonNode, S, String>) -> String {
-        match context.node() {
-            JsonNode::Root { object } => object
-                .get(context)
-                .map(|string| string.as_str())
-                .unwrap_or("?")
-                .to_string(),
+impl<L: SourceCode<Token = JsonToken>> ToJsonString for L {
+    fn to_json_string(&self) -> String {
+        let syntax = JsonNode::parse(self.cursor(..));
+
+        let formatter = JsonFormatter {
+            lexis: self,
+            syntax: &syntax,
+        };
+
+        formatter.to_string()
+    }
+}
+
+pub struct JsonFormatter<'a, L: SourceCode<Token = JsonToken>, S: SyntaxTree<Node = JsonNode>> {
+    pub lexis: &'a L,
+    pub syntax: &'a S,
+}
+
+impl<'a, L, S> Display for JsonFormatter<'a, L, S>
+where
+    L: SourceCode<Token = JsonToken>,
+    S: SyntaxTree<Node = JsonNode>,
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.format_node(self.syntax.root()))
+    }
+}
+
+impl<'a, L, S> JsonFormatter<'a, L, S>
+where
+    L: SourceCode<Token = JsonToken>,
+    S: SyntaxTree<Node = JsonNode>,
+{
+    fn format_node(&self, node_ref: &NodeRef) -> String {
+        let node: &JsonNode = match node_ref.deref(self.syntax) {
+            None => return String::from("?"),
+            Some(node) => node,
+        };
+
+        match node {
+            JsonNode::Root { object } => self.format_node(object),
 
             JsonNode::Object { entries } => {
                 format!(
                     "{{{}}}",
                     entries
                         .into_iter()
-                        .map(|node_ref| node_ref
-                            .get(context)
-                            .map(|string| string.as_str())
-                            .unwrap_or("?")
-                            .to_string())
+                        .map(|entry| self.format_node(entry))
                         .collect::<Vec<_>>()
                         .join(", "),
                 )
             }
 
             JsonNode::Entry { key, value } => {
-                format!(
-                    "{:#}: {}",
-                    key.string(context).unwrap_or("?"),
-                    value
-                        .get(context)
-                        .map(|string| string.as_str())
-                        .unwrap_or("?"),
-                )
+                format!("{:#}: {}", self.format_token(key), self.format_node(value),)
             }
 
             JsonNode::Array { items } => {
@@ -84,19 +110,13 @@ impl<S: SourceCode<Token = JsonToken>> Transducer<JsonNode, S, String> for JsonF
                     "[{}]",
                     items
                         .into_iter()
-                        .map(|node_ref| node_ref
-                            .get(context)
-                            .map(|string| string.as_str())
-                            .unwrap_or("?")
-                            .to_string())
+                        .map(|item| self.format_node(item))
                         .collect::<Vec<_>>()
                         .join(", "),
                 )
             }
 
-            JsonNode::String { value } | JsonNode::Number { value } => {
-                value.string(context).unwrap_or("?").to_string()
-            }
+            JsonNode::String { value } | JsonNode::Number { value } => self.format_token(value),
 
             JsonNode::True => String::from("true"),
 
@@ -104,5 +124,9 @@ impl<S: SourceCode<Token = JsonToken>> Transducer<JsonNode, S, String> for JsonF
 
             JsonNode::Null => String::from("null"),
         }
+    }
+
+    fn format_token(&self, token_ref: &TokenRef) -> String {
+        token_ref.string(self.lexis).unwrap_or("?").to_string()
     }
 }
