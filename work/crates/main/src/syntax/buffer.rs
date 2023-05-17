@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref, Repository, RepositoryIterator},
-    lexis::{SiteRef, SiteRefSpan, TokenCursor},
+    lexis::{SiteRef, SiteRefSpan, ToSpan, TokenCursor},
     std::*,
     syntax::{
         session::SequentialSyntaxSession,
@@ -142,6 +142,11 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     }
 
     #[inline(always)]
+    fn cover(&self, _span: impl ToSpan) -> Ref {
+        Ref::Primary
+    }
+
+    #[inline(always)]
     fn errors(&self) -> Self::ErrorIterator<'_> {
         BufferErrorIterator {
             id: self.id,
@@ -198,6 +203,16 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
 
             _ => SiteRef::nil()..SiteRef::nil(),
         }
+    }
+
+    #[inline(always)]
+    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
+        Ref::Nil
+    }
+
+    #[inline(always)]
+    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
+        Ref::Nil
     }
 
     #[inline(always)]

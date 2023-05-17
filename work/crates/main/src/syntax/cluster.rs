@@ -248,6 +248,38 @@ impl ClusterRef {
     }
 
     #[inline(always)]
+    pub fn next(&self, tree: &impl SyntaxTree) -> Self {
+        if self.id != tree.id() {
+            return Self::nil();
+        }
+
+        match tree.get_next_cluster(&self.cluster_ref) {
+            Ref::Nil => Self::nil(),
+
+            other => ClusterRef {
+                id: self.id,
+                cluster_ref: other,
+            },
+        }
+    }
+
+    #[inline(always)]
+    pub fn previous(&self, tree: &impl SyntaxTree) -> Self {
+        if self.id != tree.id() {
+            return Self::nil();
+        }
+
+        match tree.get_previous_cluster(&self.cluster_ref) {
+            Ref::Nil => Self::nil(),
+
+            other => ClusterRef {
+                id: self.id,
+                cluster_ref: other,
+            },
+        }
+    }
+
+    #[inline(always)]
     pub fn take<N: Node>(&self, tree: &mut impl SyntaxTree<Node = N>) -> Option<Cluster<N>> {
         if self.id != tree.id() {
             return None;

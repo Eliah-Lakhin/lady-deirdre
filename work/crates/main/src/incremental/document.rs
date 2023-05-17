@@ -62,7 +62,7 @@ use crate::{
     },
     report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
-    syntax::{Cluster, NoSyntax, Node, NodeRef, SyntaxTree, NON_ROOT_RULE, ROOT_RULE},
+    syntax::{Cluster, ClusterRef, NoSyntax, Node, NodeRef, SyntaxTree, NON_ROOT_RULE, ROOT_RULE},
 };
 
 /// An incrementally managed compilation unit.
@@ -450,6 +450,40 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 
     #[inline(always)]
+    fn cover(&self, span: impl ToSpan) -> Ref {
+        let span = match span.to_span(self) {
+            None => panic!("Specified span is invalid."),
+
+            Some(span) => span,
+        };
+
+        let mut chunk_ref = match span.start == 0 && span.end == self.tree.length() {
+            true => ChildRefIndex::dangling(),
+
+            false => {
+                let mut start = span.start;
+                self.tree.lookup(&mut start)
+            }
+        };
+
+        while !chunk_ref.is_dangling() {
+            if let Some(cache) = unsafe { chunk_ref.cache() } {
+                if let Some(end) = unsafe { cache.end_site(self) } {
+                    if end >= span.end {
+                        let cluster_index = unsafe { chunk_ref.cache_index() };
+
+                        return unsafe { self.references.clusters().make_ref(cluster_index) };
+                    }
+                }
+            }
+
+            unsafe { chunk_ref.next() };
+        }
+
+        Ref::Primary
+    }
+
+    #[inline(always)]
     fn errors(&self) -> Self::ErrorIterator<'_> {
         let cursor = self.tree.first();
         let current = (&self.root_cluster.errors).into_iter();
@@ -571,6 +605,57 @@ impl<N: Node> SyntaxTree for Document<N> {
         }
 
         SiteRef::nil()..SiteRef::nil()
+    }
+
+    #[inline(always)]
+    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
+        if let Some(mut chunk_ref) = self.references.clusters().get(cluster_ref).copied() {
+            while !chunk_ref.is_dangling() {
+                unsafe { chunk_ref.back() }
+
+                if chunk_ref.is_dangling() {
+                    return Ref::Primary;
+                }
+
+                if unsafe { chunk_ref.cache() }.is_some() {
+                    let ref_index = unsafe { chunk_ref.cache_index() };
+
+                    return unsafe { self.references.clusters().make_ref(ref_index) };
+                }
+            }
+        }
+
+        Ref::Nil
+    }
+
+    #[inline(always)]
+    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
+        let mut chunk_ref = match cluster_ref {
+            Ref::Primary => self.tree.first(),
+
+            Ref::Repository { .. } => match self.references.clusters().get(cluster_ref).copied() {
+                None => return Ref::Nil,
+                Some(child_ref) => child_ref,
+            },
+
+            _ => return Ref::Nil,
+        };
+
+        while !chunk_ref.is_dangling() {
+            unsafe { chunk_ref.next() };
+
+            if chunk_ref.is_dangling() {
+                break;
+            }
+
+            if unsafe { chunk_ref.cache() }.is_some() {
+                let ref_index = unsafe { chunk_ref.cache_index() };
+
+                return unsafe { self.references.clusters().make_ref(ref_index) };
+            }
+        }
+
+        Ref::Nil
     }
 
     #[inline(always)]

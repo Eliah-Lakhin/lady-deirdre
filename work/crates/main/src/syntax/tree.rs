@@ -37,9 +37,9 @@
 
 use crate::{
     arena::{Identifiable, Ref},
-    lexis::SiteRefSpan,
+    lexis::{SiteRefSpan, ToSpan},
     std::*,
-    syntax::{Cluster, Node, NodeRef},
+    syntax::{Cluster, ClusterRef, Node, NodeRef},
 };
 
 /// A low-level interface to access and inspect syntax structure of the compilation unit.
@@ -97,6 +97,8 @@ pub trait SyntaxTree: Identifiable {
     /// Returns a [`weak reference`](crate::syntax::NodeRef) to the root Node of the syntax tree.
     fn root(&self) -> &NodeRef;
 
+    fn cover(&self, span: impl ToSpan) -> Ref;
+
     /// Returns iterator over all syntax and semantic errors belong to this unit of compilation.
     fn errors(&self) -> Self::ErrorIterator<'_>;
 
@@ -133,6 +135,10 @@ pub trait SyntaxTree: Identifiable {
     fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>>;
 
     fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan;
+
+    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref;
+
+    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref;
 
     fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>>;
 }
