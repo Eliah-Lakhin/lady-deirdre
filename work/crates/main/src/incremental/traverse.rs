@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, RepositoryIterator},
+    arena::{Id, Identifiable},
     incremental::storage::ChildRefIndex,
     std::*,
     syntax::{Cluster, Node},

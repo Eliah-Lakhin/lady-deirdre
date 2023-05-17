@@ -140,15 +140,12 @@ pub(super) unsafe fn array_copy_to<const N: usize, T: Sized>(
     debug_assert_ne!(
         from.as_mut_ptr(),
         to.as_mut_ptr(),
-        "Internal error. Array copy overlapping."
+        "Array copy overlapping."
     );
-    debug_assert!(
-        source + count <= N,
-        "Internal error. Source range exceeds capacity."
-    );
+    debug_assert!(source + count <= N, "Source range exceeds capacity.");
     debug_assert!(
         destination + count <= N,
-        "Internal error. Destination range exceeds capacity."
+        "Destination range exceeds capacity.",
     );
 
     let from = unsafe { from.as_mut_ptr().offset(source as isize) };
@@ -168,9 +165,9 @@ pub(super) unsafe fn array_shift<const N: usize, T: Sized>(
     to: ChildCount,
     count: ChildCount,
 ) {
-    debug_assert!(from + count <= N, "Internal error. Shift with overflow.");
-    debug_assert!(to + count <= N, "Internal error. Shift with overflow.");
-    debug_assert!(count > 0, "Internal error. Empty shift range.");
+    debug_assert!(from + count <= N, "Shift with overflow.");
+    debug_assert!(to + count <= N, "Shift with overflow.");
+    debug_assert!(count > 0, "Empty shift range.");
 
     let array_ptr = array.as_mut_ptr();
     let source = unsafe { array_ptr.offset(from as isize) };

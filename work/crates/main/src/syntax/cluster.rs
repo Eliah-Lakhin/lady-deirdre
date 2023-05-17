@@ -37,6 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref, Repository},
+    lexis::{SiteRef, SiteRefSpan},
     std::*,
     syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
 };
@@ -235,6 +236,15 @@ impl ClusterRef {
         }
 
         tree.get_cluster_mut(&self.cluster_ref)
+    }
+
+    #[inline(always)]
+    pub fn span(&self, tree: &impl SyntaxTree) -> SiteRefSpan {
+        if self.id != tree.id() {
+            return SiteRef::nil()..SiteRef::nil();
+        }
+
+        tree.get_cluster_span(&self.cluster_ref)
     }
 
     #[inline(always)]

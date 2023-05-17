@@ -84,7 +84,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
     ) {
         debug_assert!(
             source + count <= self.inner.occupied,
-            "Internal error. An attempt to copy non occupied data in Branch.",
+            "An attempt to copy non occupied data in Branch.",
         );
 
         unsafe {
@@ -111,16 +111,13 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
     unsafe fn inflate(&mut self, from: ChildIndex, count: ChildCount) {
         debug_assert!(
             from <= self.inner.occupied,
-            "Internal error. An attempt to inflate from out of bounds child in Branch."
+            "An attempt to inflate from out of bounds child in Branch."
         );
         debug_assert!(
             count + self.inner.occupied <= capacity(Self::BRANCHING),
-            "Internal error. An attempt to inflate with overflow in Branch."
+            "An attempt to inflate with overflow in Branch."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to inflate of empty range in Page."
-        );
+        debug_assert!(count > 0, "An attempt to inflate of empty range in Page.");
 
         if from < self.inner.occupied {
             unsafe {
@@ -148,16 +145,13 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
     unsafe fn deflate(&mut self, from: ChildIndex, count: ChildCount) -> bool {
         debug_assert!(
             from < self.inner.occupied,
-            "Internal error. An attempt to deflate from non occupied child in Branch."
+            "An attempt to deflate from non occupied child in Branch."
         );
         debug_assert!(
             from + count <= self.inner.occupied,
-            "Internal error. An attempt to deflate with overflow in Branch."
+            "An attempt to deflate with overflow in Branch."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to deflate of empty range."
-        );
+        debug_assert!(count > 0, "An attempt to deflate of empty range.");
 
         if from + count < self.inner.occupied {
             unsafe {
@@ -189,12 +183,12 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
     pub(super) fn new(occupied: ChildCount) -> BranchRef<ChildLayer, N> {
         debug_assert!(
             occupied > 0,
-            "Internal error. An attempt to create Branch with zero occupied values."
+            "An attempt to create Branch with zero occupied values."
         );
 
         debug_assert!(
             occupied <= capacity(Self::BRANCHING),
-            "Internal error. An attempt to create Branch with occupied value exceeding capacity."
+            "An attempt to create Branch with occupied value exceeding capacity."
         );
 
         let branch = Self {
@@ -232,7 +226,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
                 2 => {
                     debug_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Page),
-                        "Internal error. Incorrect height.",
+                        "Incorrect height.",
                     );
 
                     let page_ref = *unsafe { child.as_page_ref() };
@@ -245,7 +239,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
                 3 => {
                     debug_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
-                        "Internal error. Incorrect height.",
+                        "Incorrect height.",
                     );
 
                     let branch_ref = *unsafe { child.as_branch_ref::<PageLayer>() };
@@ -258,7 +252,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
                 _ => {
                     debug_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
-                        "Internal error. Incorrect height.",
+                        "Incorrect height.",
                     );
 
                     let branch_ref = *unsafe { child.as_branch_ref::<BranchLayer>() };
@@ -379,7 +373,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
 
         debug_assert!(
             !parent_ref_index.is_dangling(),
-            "Internal error. An attempt to get parent from root.",
+            "An attempt to get parent from root.",
         );
 
         unsafe { parent_ref_index.item.as_branch_mut() }
@@ -411,10 +405,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
 
         let occupied = unsafe { self.as_ref().inner.occupied };
 
-        debug_assert!(
-            from < occupied,
-            "Internal error. Split at position out of bounds.",
-        );
+        debug_assert!(from < occupied, "Split at position out of bounds.",);
 
         match from == 0 {
             false => {

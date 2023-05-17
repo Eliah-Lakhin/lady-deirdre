@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref, Repository, RepositoryIterator},
-    lexis::TokenCursor,
+    lexis::{SiteRef, SiteRefSpan, TokenCursor},
     std::*,
     syntax::{
         session::SequentialSyntaxSession,
@@ -96,6 +96,7 @@ use crate::{
 /// ```
 pub struct SyntaxBuffer<N: Node> {
     id: Id,
+    span: SiteRefSpan,
     root: NodeRef,
     cluster: Cluster<N>,
 }
@@ -191,6 +192,15 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     }
 
     #[inline(always)]
+    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
+        match cluster_ref {
+            Ref::Primary => self.span.clone(),
+
+            _ => SiteRef::nil()..SiteRef::nil(),
+        }
+    }
+
+    #[inline(always)]
     fn remove_cluster(&mut self, _cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
         None
     }
@@ -198,9 +208,11 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
 
 impl<N: Node> SyntaxBuffer<N> {
     pub(super) fn new<'code>(
-        token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
+        mut token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
     ) -> Self {
         let id = token_cursor.id();
+
+        let start = token_cursor.site_ref(0);
 
         let mut session = SequentialSyntaxSession {
             id,
@@ -213,13 +225,20 @@ impl<N: Node> SyntaxBuffer<N> {
 
         let root = session.descend(ROOT_RULE);
 
+        let end = session.token_cursor.site_ref(0);
+
         let cluster = Cluster {
             primary: unsafe { session.primary.unwrap_unchecked() },
             nodes: session.nodes,
             errors: session.errors,
         };
 
-        Self { id, root, cluster }
+        Self {
+            id,
+            span: start..end,
+            root,
+            cluster,
+        }
     }
 }
 

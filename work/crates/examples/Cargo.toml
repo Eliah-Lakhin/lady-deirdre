@@ -82,6 +82,10 @@ path = "tests/json.rs"
 name = "balance"
 path = "tests/balance.rs"
 
+[[test]]
+name = "cluster"
+path = "tests/cluster.rs"
+
 [dependencies.lady-deirdre]
 version = "1.0"
 path = "../main"

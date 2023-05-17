@@ -99,11 +99,7 @@ impl<N: Node> Tree<N> {
         let mut last_page = None;
         let mut layer_size = spread.layer_size();
 
-        debug_assert_eq!(
-            count,
-            spread.total_items(),
-            "Internal error. Partition failure.",
-        );
+        debug_assert_eq!(count, spread.total_items(), "Partition failure.");
 
         loop {
             let index = spread.advance();
@@ -117,7 +113,7 @@ impl<N: Node> Tree<N> {
                 None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
             };
 
-            debug_assert!(span > 0, "Internal error. Zero input span.");
+            debug_assert!(span > 0, "Zero input span.");
 
             let string = match strings.next() {
                 Some(string) => string,
@@ -152,7 +148,7 @@ impl<N: Node> Tree<N> {
 
                     let page = unsafe { page_ref.as_mut() };
 
-                    debug_assert!(index < page.occupied, "Internal error. Partition failure.");
+                    debug_assert!(index < page.occupied, "Partition failure.");
 
                     unsafe { *page.spans.get_unchecked_mut(index) = span };
                     unsafe { page.strings.get_unchecked_mut(index).write(string) };
@@ -224,10 +220,7 @@ impl<N: Node> Tree<N> {
 
                         let branch = unsafe { last.as_branch_mut::<PageLayer>().as_mut() };
 
-                        debug_assert!(
-                            index < branch.inner.occupied,
-                            "Internal error. Partition failure.",
-                        );
+                        debug_assert!(index < branch.inner.occupied, "Partition failure.");
 
                         let child_span = unsafe { child_ref.calculate_length() };
 
@@ -306,10 +299,7 @@ impl<N: Node> Tree<N> {
 
                         let branch = unsafe { last.as_branch_mut::<BranchLayer>().as_mut() };
 
-                        debug_assert!(
-                            index < branch.inner.occupied,
-                            "Internal error. Partition failure.",
-                        );
+                        debug_assert!(index < branch.inner.occupied, "Partition failure.");
 
                         let child_span = unsafe { child_ref.calculate_length() };
 
@@ -373,7 +363,7 @@ impl<N: Node> Tree<N> {
 
         let last_page = unsafe { self.pages.last.as_ref() };
 
-        debug_assert!(last_page.occupied > 0, "Internal error. Empty page.");
+        debug_assert!(last_page.occupied > 0, "Empty page.");
 
         ChildRefIndex {
             item: unsafe { self.pages.last.into_variant() },
@@ -388,10 +378,7 @@ impl<N: Node> Tree<N> {
             return ChildRefIndex::dangling();
         }
 
-        debug_assert!(
-            self.height > 0,
-            "Internal error. An attempt to search in empty Tree.",
-        );
+        debug_assert!(self.height > 0, "An attempt to search in empty Tree.");
 
         let mut item = self.root;
         let mut depth = self.height;
@@ -403,10 +390,7 @@ impl<N: Node> Tree<N> {
             let mut index = 0;
 
             loop {
-                debug_assert!(
-                    index < branch.inner.occupied,
-                    "Internal error. Branch span inconsistency.",
-                );
+                debug_assert!(index < branch.inner.occupied, "Branch span inconsistency.");
 
                 let span = unsafe { *branch.inner.spans.get_unchecked(index) };
 
@@ -425,10 +409,7 @@ impl<N: Node> Tree<N> {
         let mut index = 0;
 
         loop {
-            debug_assert!(
-                index < page.occupied,
-                "Internal error. Page span inconsistency.",
-            );
+            debug_assert!(index < page.occupied, "Page span inconsistency.");
 
             let span = unsafe { *page.spans.get_unchecked(index) };
 
@@ -452,7 +433,7 @@ impl<N: Node> Tree<N> {
             return self.length;
         }
 
-        debug_assert!(self.height > 0, "Internal error. Empty tree.");
+        debug_assert!(self.height > 0, "Empty tree.");
 
         let page = unsafe { chunk_ref.item.as_page_ref().as_ref() };
 
@@ -460,10 +441,7 @@ impl<N: Node> Tree<N> {
         let mut index = chunk_ref.index;
 
         while index > 0 {
-            debug_assert!(
-                index < page.occupied,
-                "Internal error. ChildRefIndex index out of bounds.",
-            );
+            debug_assert!(index < page.occupied, "ChildRefIndex index out of bounds.");
 
             index -= 1;
 
@@ -476,10 +454,7 @@ impl<N: Node> Tree<N> {
         while depth > 1 {
             depth -= 1;
 
-            debug_assert!(
-                !branch_ref.is_dangling(),
-                "Internal error. Dangling parent ref.",
-            );
+            debug_assert!(!branch_ref.is_dangling(), "Dangling parent ref.");
 
             let branch = unsafe { branch_ref.item.as_branch_ref::<()>().as_ref() };
 
@@ -488,7 +463,7 @@ impl<N: Node> Tree<N> {
             while index > 0 {
                 debug_assert!(
                     index < branch.inner.occupied,
-                    "Internal error. ChildRefIndex index out of bounds.",
+                    "ChildRefIndex index out of bounds.",
                 );
 
                 index -= 1;
@@ -513,14 +488,14 @@ impl<N: Node> Tree<N> {
     ) -> bool {
         debug_assert!(
             !chunk_ref.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { chunk_ref.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             chunk_ref.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         if page.occupied - chunk_ref.index < remove {
@@ -558,11 +533,11 @@ impl<N: Node> Tree<N> {
         mut strings: impl Iterator<Item = String>,
         mut tokens: impl Iterator<Item = N::Token>,
     ) -> (ChildRefIndex<N>, Length) {
-        debug_assert!(self.height > 0, "Internal error. Empty tree.");
+        debug_assert!(self.height > 0, "Empty tree.");
 
         debug_assert!(
             !chunk_ref.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page_ref = unsafe { chunk_ref.item.as_page_mut() };
@@ -573,10 +548,7 @@ impl<N: Node> Tree<N> {
 
             let removed_count = unsafe { tree.free(references) };
 
-            debug_assert_eq!(
-                remove, removed_count,
-                "Internal error. Token count inconsistency.",
-            );
+            debug_assert_eq!(remove, removed_count, "Token count inconsistency.");
 
             return (ChildRefIndex::dangling(), 0);
         }
@@ -624,10 +596,7 @@ impl<N: Node> Tree<N> {
 
             let span = unsafe { branch.inner.spans.get_unchecked_mut(parent.index) };
 
-            debug_assert!(
-                *span + span_inc > span_dec,
-                "Internal error. Span inconsistency.",
-            );
+            debug_assert!(*span + span_inc > span_dec, "Span inconsistency.");
 
             *span += span_inc;
             *span -= span_dec;
@@ -635,10 +604,7 @@ impl<N: Node> Tree<N> {
             parent = &mut branch.inner.parent;
         }
 
-        debug_assert!(
-            self.length + span_inc > span_dec,
-            "Internal error. Length inconsistency.",
-        );
+        debug_assert!(self.length + span_inc > span_dec, "Length inconsistency.");
 
         self.length += span_inc;
         self.length -= span_dec;
@@ -669,10 +635,7 @@ impl<N: Node> Tree<N> {
             return Self::default();
         }
 
-        debug_assert!(
-            self.height > 0,
-            "Internal error. An attempt to split empty Tree.",
-        );
+        debug_assert!(self.height > 0, "An attempt to split empty Tree.");
 
         if self.height == 1 {
             return match chunk_ref.index == 0 {
@@ -862,7 +825,7 @@ impl<N: Node> Tree<N> {
     // 1. `self.height >= 2`.
     // 2. All references belong to `references` instance.
     unsafe fn fix_leftmost_balance(&mut self, references: &mut References<N>) -> bool {
-        debug_assert!(self.height >= 2, "Internal error. Incorrect height.");
+        debug_assert!(self.height >= 2, "Incorrect height.");
 
         let mut depth = 1;
         let mut leftmost_variant = self.root;
@@ -892,7 +855,7 @@ impl<N: Node> Tree<N> {
             balanced = balanced && is_balanced;
         }
 
-        debug_assert_eq!(depth, self.height - 1, "Internal error. Depth mismatch.");
+        debug_assert_eq!(depth, self.height - 1, "Depth mismatch.");
 
         self.pages.first = {
             let leftmost_ref = unsafe { leftmost_variant.as_branch_mut::<PageLayer>() };
@@ -918,7 +881,7 @@ impl<N: Node> Tree<N> {
     // 2. All references belong to `references` instance.
     #[inline]
     unsafe fn fix_rightmost_balance(&mut self, references: &mut References<N>) -> bool {
-        debug_assert!(self.height >= 2, "Internal error. Incorrect height.");
+        debug_assert!(self.height >= 2, "Incorrect height.");
 
         let mut depth = 1;
         let mut rightmost_variant = self.root;
@@ -948,7 +911,7 @@ impl<N: Node> Tree<N> {
             balanced = balanced && is_balanced;
         }
 
-        debug_assert_eq!(depth, self.height - 1, "Internal error. Depth mismatch.");
+        debug_assert_eq!(depth, self.height - 1, "Depth mismatch.");
 
         self.pages.last = {
             let rightmost_ref = unsafe { rightmost_variant.as_branch_mut::<PageLayer>() };

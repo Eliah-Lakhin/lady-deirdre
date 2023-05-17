@@ -39,7 +39,6 @@ use crate::{
     arena::{Identifiable, Ref},
     lexis::{Length, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
     std::*,
-    syntax::Node,
 };
 
 /// A low-level interface to access and inspect lexical data of the compilation unit.

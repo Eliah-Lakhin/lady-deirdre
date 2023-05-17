@@ -86,7 +86,7 @@ impl<N: Node> Item for Page<N> {
     ) {
         debug_assert!(
             source + count <= self.occupied,
-            "Internal error. An attempt to copy non occupied data in Page.",
+            "An attempt to copy non occupied data in Page.",
         );
 
         unsafe { array_copy_to(&mut self.spans, &mut to.spans, source, destination, count) };
@@ -120,16 +120,13 @@ impl<N: Node> Item for Page<N> {
     unsafe fn inflate(&mut self, from: ChildIndex, count: ChildCount) {
         debug_assert!(
             from <= self.occupied,
-            "Internal error. An attempt to inflate from out of bounds child in Page."
+            "An attempt to inflate from out of bounds child in Page."
         );
         debug_assert!(
             count + self.occupied <= capacity(Self::BRANCHING),
-            "Internal error. An attempt to inflate with overflow in Page."
+            "An attempt to inflate with overflow in Page."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to inflate of empty range in Page."
-        );
+        debug_assert!(count > 0, "An attempt to inflate of empty range in Page.");
 
         if from < self.occupied {
             unsafe { array_shift(&mut self.spans, from, from + count, self.occupied - from) };
@@ -146,16 +143,13 @@ impl<N: Node> Item for Page<N> {
     unsafe fn deflate(&mut self, from: ChildIndex, count: ChildCount) -> bool {
         debug_assert!(
             from < self.occupied,
-            "Internal error. An attempt to deflate from non occupied child in Page."
+            "An attempt to deflate from non occupied child in Page."
         );
         debug_assert!(
             from + count <= self.occupied,
-            "Internal error. An attempt to deflate with overflow in Page."
+            "An attempt to deflate with overflow in Page."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to deflate of empty range."
-        );
+        debug_assert!(count > 0, "An attempt to deflate of empty range.");
 
         if from + count < self.occupied {
             unsafe {
@@ -211,12 +205,12 @@ impl<N: Node> Page<N> {
     pub(super) fn new(occupied: ChildCount) -> PageRef<N> {
         debug_assert!(
             occupied > 0,
-            "Internal error. An attempt to create Page with zero occupied values."
+            "An attempt to create Page with zero occupied values."
         );
 
         debug_assert!(
             occupied <= capacity(Self::BRANCHING),
-            "Internal error. An attempt to create Page with occupied value exceeding capacity."
+            "An attempt to create Page with occupied value exceeding capacity."
         );
 
         let page = Self {
@@ -348,7 +342,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
         debug_assert!(
             !parent_ref_index.is_dangling(),
-            "Internal error. An attempt to get parent from root.",
+            "An attempt to get parent from root.",
         );
 
         unsafe { parent_ref_index.item.as_branch_mut() }
@@ -366,7 +360,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
         debug_assert!(
             from + count <= page.occupied,
-            "Internal error. An attempt to update references in non occupied data in Page.",
+            "An attempt to update references in non occupied data in Page.",
         );
 
         let mut length = 0;
@@ -408,10 +402,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
         let occupied = unsafe { self.as_ref().occupied };
 
-        debug_assert!(
-            from < occupied,
-            "Internal error. Split at position out of bounds.",
-        );
+        debug_assert!(from < occupied, "Split at position out of bounds.",);
 
         match from == 0 {
             true => {
@@ -519,16 +510,13 @@ impl<N: Node> PageRef<N> {
 
         debug_assert!(
             from < page.occupied,
-            "Internal error. An attempt to rewrite from non occupied child in Page."
+            "An attempt to rewrite from non occupied child in Page."
         );
         debug_assert!(
             from + count <= page.occupied,
-            "Internal error. An attempt to rewrite with overflow in Page."
+            "An attempt to rewrite with overflow in Page."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to rewrite of empty range."
-        );
+        debug_assert!(count > 0, "An attempt to rewrite of empty range.");
 
         let mut dec = 0;
         let mut inc = 0;
@@ -538,7 +526,7 @@ impl<N: Node> PageRef<N> {
         for index in from..(from + count) {
             debug_assert!(
                 index < capacity(Page::<N>::BRANCHING),
-                "Internal error. Chunk index is out of bounds.",
+                "Chunk index is out of bounds.",
             );
 
             let new_span = match spans.next() {
@@ -546,7 +534,7 @@ impl<N: Node> PageRef<N> {
                 None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
             };
 
-            debug_assert!(new_span > 0, "Internal error. Zero input span.");
+            debug_assert!(new_span > 0, "Zero input span.");
 
             let new_string = match strings.next() {
                 Some(string) => string,
@@ -599,16 +587,13 @@ impl<N: Node> PageRef<N> {
 
         debug_assert!(
             from < page.occupied,
-            "Internal error. An attempt to remove from non occupied child in Page."
+            "An attempt to remove from non occupied child in Page."
         );
         debug_assert!(
             from + count <= page.occupied,
-            "Internal error. An attempt to remove with overflow in Page."
+            "An attempt to remove with overflow in Page."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to remove of empty range."
-        );
+        debug_assert!(count > 0, "An attempt to remove of empty range.");
 
         let mut length = 0;
 
@@ -721,16 +706,13 @@ impl<N: Node> PageRef<N> {
 
         debug_assert!(
             from <= page.occupied,
-            "Internal error. An attempt to insert from non occupied child in Page."
+            "An attempt to insert from non occupied child in Page."
         );
         debug_assert!(
             from + count <= capacity(Page::<N>::BRANCHING),
-            "Internal error. An attempt to insert with overflow in Page."
+            "An attempt to insert with overflow in Page."
         );
-        debug_assert!(
-            count > 0,
-            "Internal error. An attempt to insert of empty range."
-        );
+        debug_assert!(count > 0, "An attempt to insert of empty range.");
 
         unsafe {
             page.inflate(from, count);
@@ -741,7 +723,7 @@ impl<N: Node> PageRef<N> {
         for index in from..(from + count) {
             debug_assert!(
                 index < capacity(Page::<N>::BRANCHING),
-                "Internal error. Chunk index is out of bounds.",
+                "Chunk index is out of bounds.",
             );
 
             let new_span = match spans.next() {
@@ -750,7 +732,7 @@ impl<N: Node> PageRef<N> {
                 None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
             };
 
-            debug_assert!(new_span > 0, "Internal error. Zero input span.");
+            debug_assert!(new_span > 0, "Zero input span.");
 
             let new_string = match strings.next() {
                 Some(string) => string,

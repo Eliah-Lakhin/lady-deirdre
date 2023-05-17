@@ -106,7 +106,7 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn continuous_to(&self, tail: &Self) -> Option<TokenCount> {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let head_page_ref = unsafe { self.item.as_page_ref() };
@@ -114,7 +114,7 @@ impl<N: Node> ChildRefIndex<N> {
 
         debug_assert!(
             self.index < head_page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match tail.is_dangling() {
@@ -125,7 +125,7 @@ impl<N: Node> ChildRefIndex<N> {
                     true => {
                         debug_assert!(
                             tail.index < head_page.occupied,
-                            "Internal error. ChildRefIndex index out of bounds.",
+                            "ChildRefIndex index out of bounds.",
                         );
 
                         match self.index <= tail.index {
@@ -173,19 +173,19 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn span<'a>(&self) -> &'a Length {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         let span = unsafe { page.spans.get_unchecked(self.index) };
 
-        debug_assert!(*span > 0, "Internal error. Zero span in Page.");
+        debug_assert!(*span > 0, "Zero span in Page.");
 
         span
     }
@@ -199,19 +199,19 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn string<'a>(&self) -> &'a str {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         let string = unsafe { page.strings.get_unchecked(self.index).assume_init_ref() };
 
-        debug_assert!(!string.is_empty(), "Internal error. Empty string in Page.");
+        debug_assert!(!string.is_empty(), "Empty string in Page.");
 
         string
     }
@@ -225,14 +225,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn token<'a>(&self) -> &'a <N as Node>::Token {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         unsafe { page.tokens.get_unchecked(self.index).assume_init_ref() }
@@ -247,14 +247,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn token_mut<'a>(&self) -> &'a mut <N as Node>::Token {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         unsafe { page.tokens.get_unchecked_mut(self.index).assume_init_mut() }
@@ -269,14 +269,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn cache<'a>(&self) -> Option<&'a ClusterCache<N>> {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match unsafe { page.clusters.get_unchecked(self.index).assume_init_ref() } {
@@ -295,14 +295,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn cache_mut<'a>(&mut self) -> Option<&'a mut ClusterCache<N>> {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match unsafe {
@@ -325,14 +325,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn cache_index(&self) -> RefIndex {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match unsafe { page.clusters.get_unchecked(self.index).assume_init_ref() } {
@@ -353,14 +353,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn remove_cache(&self) -> RefIndex {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match unsafe {
@@ -385,14 +385,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn take_cache(&self) -> ClusterCache<N> {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match unsafe {
@@ -420,14 +420,14 @@ impl<N: Node> ChildRefIndex<N> {
     ) -> Option<RefIndex> {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         let previous = replace(
@@ -453,14 +453,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn update_cache(&self, cache: ClusterCache<N>) {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         match unsafe {
@@ -483,14 +483,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn chunk_ref_index(&self) -> RefIndex {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         unsafe { *page.chunks.get_unchecked(self.index) }
@@ -503,14 +503,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn is_first(&self) -> bool {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         self.index == 0 && page.previous.is_none()
@@ -524,14 +524,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn is_last(&self) -> bool {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         self.index + 1 == page.occupied && page.next.is_none()
@@ -544,14 +544,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn next(&mut self) {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         if self.index + 1 < page.occupied {
@@ -567,7 +567,7 @@ impl<N: Node> ChildRefIndex<N> {
             Some(next_ref) => {
                 debug_assert!(
                     unsafe { next_ref.as_ref().occupied } >= Page::<N>::BRANCHING,
-                    "Internal error. Incorrect Page balance."
+                    "Incorrect Page balance."
                 );
 
                 self.item = unsafe { next_ref.into_variant() };
@@ -583,14 +583,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn back(&mut self) {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "Internal error. ChildRefIndex index out of bounds.",
+            "ChildRefIndex index out of bounds.",
         );
 
         if self.index > 0 {
@@ -608,7 +608,7 @@ impl<N: Node> ChildRefIndex<N> {
 
                 debug_assert!(
                     previous_occupied >= Page::<N>::BRANCHING,
-                    "Internal error. Incorrect Page balance."
+                    "Incorrect Page balance."
                 );
 
                 self.item = unsafe { previous_ref.into_variant() };
@@ -624,14 +624,14 @@ impl<N: Node> ChildRefIndex<N> {
     pub(super) unsafe fn branch_span(&self) -> Length {
         debug_assert!(
             !self.is_dangling(),
-            "Internal error. An attempt to get span from dangling ChildRefIndex.",
+            "An attempt to get span from dangling ChildRefIndex.",
         );
 
         let branch = unsafe { self.item.as_branch_ref::<()>().as_ref() };
 
         debug_assert!(
             self.index < branch.inner.occupied,
-            "Internal error. ChildRefIndex index is out of bounds.",
+            "ChildRefIndex index is out of bounds.",
         );
 
         unsafe { *branch.inner.spans.get_unchecked(self.index) }

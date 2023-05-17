@@ -49,12 +49,15 @@ use crate::{
         utils::{split_left, split_right},
         Length,
         Site,
+        SiteRef,
         SiteRefInner,
+        SiteRefSpan,
         SiteSpan,
         SourceCode,
         ToSpan,
         TokenBuffer,
         TokenCount,
+        TokenRef,
         CHUNK_SIZE,
     },
     report::{debug_assert, debug_assert_eq, debug_unreachable},
@@ -521,9 +524,58 @@ impl<N: Node> SyntaxTree for Document<N> {
         }
     }
 
+    #[inline]
+    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
+        match cluster_ref {
+            Ref::Primary => {
+                let first_chunk = self.tree.first();
+
+                let end = self.end_site_ref();
+
+                let start = match first_chunk.is_dangling() {
+                    true => end,
+
+                    false => {
+                        let ref_index = unsafe { first_chunk.chunk_ref_index() };
+
+                        TokenRef {
+                            id: self.id,
+                            chunk_ref: unsafe { self.references.chunks().make_ref(ref_index) },
+                        }
+                        .site_ref()
+                    }
+                };
+
+                return start..self.end_site_ref();
+            }
+
+            Ref::Repository { .. } => {
+                if let Some(child_ref) = self.references.clusters().get(cluster_ref) {
+                    if let Some(cluster_cache) = unsafe { child_ref.cache() } {
+                        let start = {
+                            let ref_index = unsafe { child_ref.chunk_ref_index() };
+
+                            TokenRef {
+                                id: self.id,
+                                chunk_ref: unsafe { self.references.chunks().make_ref(ref_index) },
+                            }
+                            .site_ref()
+                        };
+
+                        return start..cluster_cache.parsed_end;
+                    }
+                }
+            }
+
+            _ => (),
+        }
+
+        SiteRef::nil()..SiteRef::nil()
+    }
+
     #[inline(always)]
     fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
-        let mut chunk_ref = self.references.clusters_mut().remove(cluster_ref)?;
+        let chunk_ref = self.references.clusters_mut().remove(cluster_ref)?;
 
         let cache = unsafe { chunk_ref.take_cache() };
 

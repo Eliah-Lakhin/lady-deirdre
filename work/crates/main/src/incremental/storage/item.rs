@@ -319,7 +319,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         debug_assert!(
             left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING),
-            "Internal error. Merge failure.",
+            "Merge failure.",
         );
 
         unsafe { left_ref.as_mut().inflate(left_occupied, right_occupied) };
@@ -356,7 +356,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         debug_assert!(
             left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING),
-            "Internal error. Merge failure.",
+            "Merge failure.",
         );
 
         unsafe { right_ref.as_mut().inflate(0, left_occupied) };
@@ -396,24 +396,24 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         debug_assert!(
             left_occupied + right_occupied > capacity(<Self::Item as Item>::BRANCHING),
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         debug_assert!(
             left_occupied < <Self::Item as Item>::BRANCHING,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         debug_assert!(
             right_occupied >= <Self::Item as Item>::BRANCHING,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         let transfer_count = <Self::Item as Item>::BRANCHING - left_occupied;
 
         debug_assert!(
             right_occupied - <Self::Item as Item>::BRANCHING >= transfer_count,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         unsafe { left_ref.as_mut().inflate(left_occupied, transfer_count) };
@@ -426,10 +426,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         let is_right_balanced = unsafe { right_ref.as_mut().deflate(0, transfer_count) };
 
-        debug_assert!(
-            is_right_balanced,
-            "Internal error. Balance-to-left failure.",
-        );
+        debug_assert!(is_right_balanced, "Balance-to-left failure.");
 
         let difference =
             unsafe { left_ref.update_children(references, left_occupied, transfer_count) };
@@ -460,29 +457,29 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         debug_assert!(
             left_occupied + right_occupied > capacity(<Self::Item as Item>::BRANCHING),
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         debug_assert!(
             left_occupied >= <Self::Item as Item>::BRANCHING,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         debug_assert!(
             right_occupied < <Self::Item as Item>::BRANCHING,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         let transfer_count = <Self::Item as Item>::BRANCHING - right_occupied;
 
         debug_assert!(
             left_occupied >= <Self::Item as Item>::BRANCHING,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         debug_assert!(
             left_occupied - <Self::Item as Item>::BRANCHING >= transfer_count,
-            "Internal error. Balance failure.",
+            "Balance failure.",
         );
 
         unsafe { right_ref.as_mut().inflate(0, transfer_count) };
@@ -502,10 +499,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
                 .deflate(left_occupied - transfer_count, transfer_count)
         };
 
-        debug_assert!(
-            is_left_balanced,
-            "Internal error. Balance-to-right failure.",
-        );
+        debug_assert!(is_left_balanced, "Balance-to-right failure.");
 
         let difference = unsafe { right_ref.update_children(references, 0, transfer_count) };
 

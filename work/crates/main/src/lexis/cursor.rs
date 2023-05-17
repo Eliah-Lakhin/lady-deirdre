@@ -236,8 +236,8 @@ pub trait TokenCursor<'code>: Identifiable {
     /// returns a weak reference to the current TokenCursor inner site.
     ///
     /// Note, that in contrast to [TokenCursor::site](crate::lexis::TokenCursor::site) function this
-    /// function always returns meaningful valid SiteRef even if there are no tokens in from of the
-    /// inner site, and if there are no tokens covered by this TokenCursor.
+    /// function always returns meaningful valid SiteRef even if there are no tokens in front of the
+    /// inner site, or if there are no tokens covered by this TokenCursor.
     ///
     /// This function does not advance TokenCursor inner site, but it could track an overall
     /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
