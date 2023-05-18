@@ -37,10 +37,10 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    compiler::MutableUnit,
+    compiler::{CompilationUnit, MutableUnit},
     lexis::{Length, Site, SiteRefSpan, SourceCode, ToSpan, Token, TokenBuffer, TokenCount},
     std::*,
-    syntax::{Cluster, Node, NodeRef, SyntaxBuffer, SyntaxTree},
+    syntax::{Cluster, ClusterRef, Node, NodeRef, SyntaxBuffer, SyntaxTree},
 };
 
 pub struct ImmutableUnit<N: Node> {
@@ -121,7 +121,7 @@ impl<N: Node> SyntaxTree for ImmutableUnit<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> Ref {
+    fn cover(&self, span: impl ToSpan) -> ClusterRef {
         self.syntax.cover(span)
     }
 
@@ -178,16 +178,21 @@ impl<T: Token> TokenBuffer<T> {
     }
 }
 
-impl<N: Node> ImmutableUnit<N> {
+impl<N: Node> CompilationUnit<N> for ImmutableUnit<N> {
     #[inline(always)]
-    pub fn into_mutable_unit(self) -> MutableUnit<N> {
-        self.lexis.into_mutable_unit()
+    fn is_mutable(&self) -> bool {
+        false
     }
 
     #[inline(always)]
-    pub fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
+    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
         self.lexis.reset_id();
 
         self.lexis
+    }
+
+    #[inline(always)]
+    fn into_immutable_unit(self) -> ImmutableUnit<N> {
+        self
     }
 }

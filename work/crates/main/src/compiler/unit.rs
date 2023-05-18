@@ -35,13 +35,48 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-pub(super) mod document;
-mod immutable;
-mod mutable;
-mod unit;
-
-pub use crate::compiler::{
-    immutable::ImmutableUnit,
-    mutable::unit::MutableUnit,
-    unit::CompilationUnit,
+use crate::{
+    compiler::{ImmutableUnit, MutableUnit},
+    lexis::{SourceCode, TokenBuffer},
+    std::*,
+    syntax::{Node, SyntaxTree},
+    Document,
 };
+
+pub trait CompilationUnit<N: Node>: SourceCode<Token = N::Token> + SyntaxTree<Node = N> {
+    fn is_mutable(&self) -> bool;
+
+    #[inline(always)]
+    fn is_immutable(&self) -> bool {
+        !self.is_mutable()
+    }
+
+    fn into_token_buffer(self) -> TokenBuffer<N::Token>;
+
+    #[inline(always)]
+    fn into_document(self) -> Document<N>
+    where
+        Self: Sized,
+    {
+        match self.is_mutable() {
+            true => Document::Mutable(self.into_mutable_unit()),
+            false => Document::Immutable(self.into_immutable_unit()),
+        }
+    }
+
+    #[inline(always)]
+    fn into_mutable_unit(self) -> MutableUnit<N>
+    where
+        Self: Sized,
+    {
+        self.into_token_buffer().into_mutable_unit()
+    }
+
+    #[inline(always)]
+    fn into_immutable_unit(self) -> ImmutableUnit<N>
+    where
+        Self: Sized,
+    {
+        self.into_token_buffer().into_immutable_unit()
+    }
+}

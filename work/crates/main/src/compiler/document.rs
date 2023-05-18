@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    compiler::{ImmutableUnit, MutableUnit},
+    compiler::{CompilationUnit, ImmutableUnit, MutableUnit},
     lexis::{
         Length,
         Site,
@@ -52,7 +52,7 @@ use crate::{
         TokenRef,
     },
     std::*,
-    syntax::{Cluster, Node, SyntaxTree},
+    syntax::{Cluster, ClusterRef, Node, SyntaxTree},
 };
 
 #[derive(Debug)]
@@ -184,7 +184,7 @@ impl<N: Node> SyntaxTree for Document<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> Ref {
+    fn cover(&self, span: impl ToSpan) -> ClusterRef {
         match self {
             Self::Mutable(unit) => unit.cover(span),
             Self::Immutable(unit) => unit.cover(span),
@@ -248,6 +248,45 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 }
 
+impl<N: Node> CompilationUnit<N> for Document<N> {
+    #[inline(always)]
+    fn is_mutable(&self) -> bool {
+        match self {
+            Self::Mutable(..) => true,
+            Self::Immutable(..) => false,
+        }
+    }
+
+    #[inline(always)]
+    fn into_token_buffer(self) -> TokenBuffer<N::Token> {
+        match self {
+            Self::Mutable(unit) => unit.into_token_buffer(),
+            Self::Immutable(unit) => unit.into_token_buffer(),
+        }
+    }
+
+    #[inline(always)]
+    fn into_document(self) -> Document<N> {
+        self
+    }
+
+    #[inline(always)]
+    fn into_mutable_unit(self) -> MutableUnit<N> {
+        match self {
+            Self::Mutable(unit) => unit,
+            Self::Immutable(unit) => unit.into_mutable_unit(),
+        }
+    }
+
+    #[inline(always)]
+    fn into_immutable_unit(self) -> ImmutableUnit<N> {
+        match self {
+            Self::Mutable(unit) => unit.into_immutable_unit(),
+            Self::Immutable(unit) => unit,
+        }
+    }
+}
+
 impl<N: Node> Document<N> {
     #[inline(always)]
     pub fn is_mutable(&self) -> bool {
@@ -296,14 +335,6 @@ impl<N: Node> Document<N> {
         match self {
             Self::Mutable(unit) => Self::Immutable(unit.into_immutable_unit()),
             Self::Immutable(..) => self,
-        }
-    }
-
-    #[inline(always)]
-    pub fn into_token_buffer(self) -> TokenBuffer<N::Token> {
-        match self {
-            Self::Mutable(unit) => unit.into_token_buffer(),
-            Self::Immutable(unit) => unit.into_token_buffer(),
         }
     }
 }

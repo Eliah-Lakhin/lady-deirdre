@@ -42,6 +42,7 @@ use crate::{
     syntax::{
         session::SequentialSyntaxSession,
         Cluster,
+        ClusterRef,
         Node,
         NodeRef,
         SyntaxSession,
@@ -130,8 +131,11 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, _span: impl ToSpan) -> Ref {
-        Ref::Primary
+    fn cover(&self, _span: impl ToSpan) -> ClusterRef {
+        ClusterRef {
+            id: self.id,
+            cluster_ref: Ref::Primary,
+        }
     }
 
     #[inline(always)]

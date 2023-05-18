@@ -44,6 +44,7 @@ use crate::{
             storage::{ChildRefIndex, ClusterCache, References, Tree},
             syntax::MutableSyntaxSession,
         },
+        CompilationUnit,
         ImmutableUnit,
     },
     lexis::{
@@ -440,7 +441,7 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> Ref {
+    fn cover(&self, span: impl ToSpan) -> ClusterRef {
         let span = match span.to_span(self) {
             None => panic!("Specified span is invalid."),
 
@@ -452,7 +453,14 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
 
             false => {
                 let mut start = span.start;
-                self.tree.lookup(&mut start)
+
+                let mut chunk_ref = self.tree.lookup(&mut start);
+
+                if start == 0 && !chunk_ref.is_dangling() {
+                    unsafe { chunk_ref.back() }
+                }
+
+                chunk_ref
             }
         };
 
@@ -462,15 +470,23 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
                     if end >= span.end {
                         let cluster_index = unsafe { chunk_ref.cache_index() };
 
-                        return unsafe { self.references.clusters().make_ref(cluster_index) };
+                        return ClusterRef {
+                            id: self.id,
+                            cluster_ref: unsafe {
+                                self.references.clusters().make_ref(cluster_index)
+                            },
+                        };
                     }
                 }
             }
 
-            unsafe { chunk_ref.next() };
+            unsafe { chunk_ref.back() };
         }
 
-        Ref::Primary
+        ClusterRef {
+            id: self.id,
+            cluster_ref: Ref::Primary,
+        }
     }
 
     #[inline(always)]
@@ -662,6 +678,38 @@ where
     }
 }
 
+impl<N: Node> CompilationUnit<N> for MutableUnit<N> {
+    #[inline(always)]
+    fn is_mutable(&self) -> bool {
+        true
+    }
+
+    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
+        let mut buffer = TokenBuffer::with_capacity(self.token_count);
+
+        buffer.set_length(self.length());
+
+        let mut chunk_ref = self.tree.first();
+
+        while !chunk_ref.is_dangling() {
+            unsafe {
+                chunk_ref.take_lexis(&mut buffer.spans, &mut buffer.strings, &mut buffer.tokens)
+            };
+
+            unsafe { chunk_ref.next() }
+        }
+
+        let _ = self;
+
+        buffer
+    }
+
+    #[inline(always)]
+    fn into_mutable_unit(self) -> MutableUnit<N> {
+        self
+    }
+}
+
 impl<N: Node> MutableUnit<N> {
     /// Replaces a spanned substring of the source code with provided `text` string, and re-parses
     /// Document's lexical and syntax structure relatively to these changes.
@@ -728,31 +776,6 @@ impl<N: Node> MutableUnit<N> {
         }
 
         self.update_syntax(cursor);
-    }
-
-    pub fn into_token_buffer(self) -> TokenBuffer<N::Token> {
-        let mut buffer = TokenBuffer::with_capacity(self.token_count);
-
-        buffer.set_length(self.length());
-
-        let mut chunk_ref = self.tree.first();
-
-        while !chunk_ref.is_dangling() {
-            unsafe {
-                chunk_ref.take_lexis(&mut buffer.spans, &mut buffer.strings, &mut buffer.tokens)
-            };
-
-            unsafe { chunk_ref.next() }
-        }
-
-        let _ = self;
-
-        buffer
-    }
-
-    #[inline(always)]
-    pub fn into_immutable_unit(self) -> ImmutableUnit<N> {
-        self.into_token_buffer().into_immutable_unit()
     }
 
     #[inline(always)]

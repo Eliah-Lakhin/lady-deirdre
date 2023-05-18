@@ -45,7 +45,7 @@ use std::{
 };
 
 use criterion::black_box;
-use lady_deirdre::{lexis::SiteSpan, syntax::Node, Document};
+use lady_deirdre::{compiler::MutableUnit, lexis::SiteSpan, syntax::Node};
 
 use crate::BenchDataLayer;
 
@@ -108,7 +108,7 @@ impl<Syntax: Node> FrameworkCase for SelfCase<Syntax> {
     #[inline(never)]
     fn bench_load(&self, text: &str) -> Duration {
         let start = Instant::now();
-        let result = Document::<Syntax>::from(text);
+        let result = MutableUnit::<Syntax>::from(text);
         let time = start.elapsed();
 
         black_box(result);
@@ -118,7 +118,7 @@ impl<Syntax: Node> FrameworkCase for SelfCase<Syntax> {
 
     #[inline(never)]
     fn bench_single_edit<'a>(&self, text: &'a str, span: SiteSpan, edit: &'a str) -> Duration {
-        let mut result = Document::<Syntax>::from(text);
+        let mut result = MutableUnit::<Syntax>::from(text);
 
         let start = Instant::now();
         result.write(span, edit);
@@ -135,7 +135,7 @@ impl<Syntax: Node> FrameworkCase for SelfCase<Syntax> {
         text: &'a str,
         edits: Vec<(SiteSpan, &'a str)>,
     ) -> Duration {
-        let mut result = Document::<Syntax>::from(text);
+        let mut result = MutableUnit::<Syntax>::from(text);
 
         let mut total = Duration::ZERO;
 

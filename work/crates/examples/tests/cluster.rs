@@ -1,13 +1,13 @@
 use lady_deirdre::{
     arena::Ref,
-    lexis::ToSpan,
+    lexis::{CodeContent, ToSpan},
     syntax::{SyntaxTree, TreeContent},
     Document,
 };
 use lady_deirdre_examples::json::syntax::JsonNode;
 
 #[test]
-fn test_cluster_span() {
+fn test_clusters_traverse() {
     let mut doc = Document::<JsonNode>::default();
 
     assert_eq!(
@@ -127,4 +127,56 @@ fn test_cluster_span() {
     assert_eq!(0..70, cluster.span(&doc).to_span(&doc).unwrap());
 
     assert!(!cluster.previous(&doc).is_valid_ref(&doc));
+}
+
+#[test]
+fn test_clusters_cover() {
+    let doc = Document::<JsonNode>::from(
+        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+    );
+
+    assert_eq!(
+        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+        doc.substring(doc.cover(..).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+        doc.substring(doc.cover(0..0).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+        doc.substring(doc.cover(1..1).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        doc.substring(doc.cover(2..2).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        doc.substring(doc.cover(3..3).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        doc.substring(doc.cover(8..8).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        doc.substring(doc.cover(9..9).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        doc.substring(doc.cover(15..15).span(&doc).to_span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#"true"#,
+        doc.substring(doc.cover(16..16).span(&doc).to_span(&doc).unwrap())
+    );
 }
