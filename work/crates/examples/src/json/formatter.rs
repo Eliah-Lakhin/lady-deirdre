@@ -39,7 +39,7 @@ use std::fmt::{Display, Formatter};
 
 use lady_deirdre::{
     lexis::{SourceCode, TokenRef},
-    syntax::{Node, NodeRef, SyntaxTree},
+    syntax::{Node, NodeRef, SyntaxTree, TreeContent},
 };
 
 use crate::json::{lexis::JsonToken, syntax::JsonNode};
@@ -72,7 +72,7 @@ where
     S: SyntaxTree<Node = JsonNode>,
 {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.format_node(self.syntax.root_node_ref()))
+        formatter.write_str(&self.format_node(&self.syntax.root_node_ref()))
     }
 }
 

@@ -45,7 +45,7 @@ mod references;
 mod tree;
 mod utils;
 
-pub(crate) use crate::incremental::storage::{
+pub(crate) use crate::compiler::mutable::storage::{
     cache::ClusterCache,
     child::ChildRefIndex,
     references::References,
@@ -56,11 +56,11 @@ pub(crate) use crate::incremental::storage::{
 mod tests {
     #[cfg(not(debug_assertions))]
     use crate::{
-        incremental::storage::{branch::Branch, item::Item, page::Page},
+        compiler::mutable::storage::{branch::Branch, item::Item, page::Page},
         lexis::{Length, Site},
     };
     use crate::{
-        incremental::storage::{
+        compiler::mutable::storage::{
             child::ChildIndex,
             item::{ItemRef, ItemRefVariant},
             nesting::{BranchLayer, Height, PageLayer},
@@ -74,14 +74,12 @@ mod tests {
 
     #[test]
     fn test_bulk_load_1() {
-        let mut references = References::<TestNode>::default();
-
-        let mut tree = Tree::default();
+        let mut tree = Tree::<TestNode>::default();
 
         assert_eq!(TreeDisplay(&tree).to_string(), r#"height: 0, length: 0"#,);
 
         unsafe {
-            tree.free(&mut references);
+            tree.free();
         }
     }
 
@@ -99,7 +97,7 @@ mod tests {
         );
 
         unsafe {
-            tree.free(&mut references);
+            tree.free();
         }
     }
 
@@ -119,7 +117,7 @@ mod tests {
         );
 
         unsafe {
-            tree.free(&mut references);
+            tree.free();
         }
     }
 
@@ -202,7 +200,7 @@ mod tests {
         );
 
         unsafe {
-            tree.free(&mut references);
+            tree.free();
         }
     }
 
@@ -357,7 +355,7 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
@@ -392,7 +390,7 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
@@ -427,7 +425,7 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
@@ -457,7 +455,7 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
@@ -487,7 +485,7 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
@@ -522,7 +520,7 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
@@ -557,15 +555,13 @@ mod tests {
         );
 
         unsafe {
-            left.free(&mut references);
+            left.free();
         }
     }
 
     #[cfg(not(debug_assertions))]
     #[test]
     fn test_tree_release() {
-        let mut references = References::<TestNode>::default();
-
         let empty = Tree::<TestNode>::default();
 
         assert!(empty.lookup(&mut 0).is_dangling());
@@ -573,6 +569,8 @@ mod tests {
 
         for high in 0..4 {
             for low in 1..20 {
+                let mut references = References::<TestNode>::default();
+
                 let child_count = high * 1000 + low;
                 let mut tree = gen(&mut references, 1..=child_count);
 
@@ -613,7 +611,7 @@ mod tests {
                     assert_eq!(tree.length(), length);
                 }
 
-                let _ = unsafe { tree.free(&mut references) };
+                let _ = unsafe { tree.free() };
             }
         }
     }

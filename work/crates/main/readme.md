@@ -242,7 +242,7 @@ assert_eq!(
 // enum type with LL(1) grammar rules directly on the enum variants.
 
 use lady_deirdre::{
-    syntax::{Node, SyntaxError, NodeRef, SyntaxTree},
+    syntax::{Node, SyntaxError, NodeRef, SyntaxTree, TreeContent},
     lexis::TokenRef,
 };
 
@@ -334,7 +334,7 @@ let mut doc = Document::<CalcNode>::default();
 doc.write(.., "(* (+ 3, 4, 5), 10)");
 
 assert_eq!(
-    show_tree(doc.root_node_ref(), &doc),
+    show_tree(&doc.root_node_ref(), &doc),
     "Root(Mult(Plus(3, 4, 5), 10))",
 );
 
@@ -388,5 +388,5 @@ fn interpret(node_ref: &NodeRef, doc: &Document<CalcNode>) -> usize {
     }
 }
 
-assert_eq!(interpret(doc.root_node_ref(), &doc), 120);
+assert_eq!(interpret(&doc.root_node_ref(), &doc), 120);
 ```

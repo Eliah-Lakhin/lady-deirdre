@@ -35,10 +35,8 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod cursor;
-mod document;
-mod lexis;
-mod storage;
-mod syntax;
+pub(super) mod document;
+mod immutable;
+mod mutable;
 
-pub use crate::incremental::document::Document;
+pub use crate::compiler::{immutable::ImmutableUnit, mutable::unit::MutableUnit};

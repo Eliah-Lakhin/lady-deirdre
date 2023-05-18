@@ -37,29 +37,29 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    incremental::{storage::ChildRefIndex, Document},
+    compiler::{mutable::storage::ChildRefIndex, MutableUnit},
     lexis::{Length, Site, SiteRef, SiteSpan, TokenCount, TokenCursor, TokenRef},
     report::debug_assert,
     std::*,
     syntax::Node,
 };
 
-pub struct DocumentCursor<'document, N: Node> {
-    document: &'document Document<N>,
+pub struct MutableCursor<'unit, N: Node> {
+    unit: &'unit MutableUnit<N>,
     next_chunk_ref: ChildRefIndex<N>,
     end_chunk_ref: ChildRefIndex<N>,
     peek_chunk_ref: ChildRefIndex<N>,
     peek_distance: TokenCount,
 }
 
-impl<'document, N: Node> Identifiable for DocumentCursor<'document, N> {
+impl<'unit, N: Node> Identifiable for MutableCursor<'unit, N> {
     #[inline(always)]
     fn id(&self) -> Id {
-        self.document.id()
+        self.unit.id()
     }
 }
 
-impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N> {
+impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     type Token = N::Token;
 
     #[inline(always)]
@@ -84,7 +84,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<&'document Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Option<&'unit Self::Token> {
         if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
             return None;
         }
@@ -106,7 +106,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
             return None;
         }
 
-        Some(unsafe { self.document.tree().site_of(&self.peek_chunk_ref) })
+        Some(unsafe { self.unit.tree().site_of(&self.peek_chunk_ref) })
     }
 
     #[inline(always)]
@@ -123,7 +123,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
     }
 
     #[inline(always)]
-    fn string(&mut self, distance: TokenCount) -> Option<&'document str> {
+    fn string(&mut self, distance: TokenCount) -> Option<&'unit str> {
         if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
             return None;
         }
@@ -147,10 +147,10 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
 
         let ref_index = unsafe { self.peek_chunk_ref.chunk_ref_index() };
 
-        let chunk_ref = unsafe { self.document.references.chunks().make_ref(ref_index) };
+        let chunk_ref = unsafe { self.unit.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: self.document.id(),
+            id: self.unit.id(),
             chunk_ref,
         }
     }
@@ -167,10 +167,10 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
 
         let ref_index = unsafe { self.peek_chunk_ref.chunk_ref_index() };
 
-        let chunk_ref = unsafe { self.document.references.chunks().make_ref(ref_index) };
+        let chunk_ref = unsafe { self.unit.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: self.document.id(),
+            id: self.unit.id(),
             chunk_ref,
         }
         .site_ref()
@@ -179,28 +179,28 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
         if self.end_chunk_ref.is_dangling() {
-            return SiteRef::new_code_end(self.document.id());
+            return SiteRef::new_code_end(self.unit.id());
         }
 
         let ref_index = unsafe { self.end_chunk_ref.chunk_ref_index() };
 
-        let chunk_ref = unsafe { self.document.references.chunks().make_ref(ref_index) };
+        let chunk_ref = unsafe { self.unit.references.chunks().make_ref(ref_index) };
 
         TokenRef {
-            id: self.document.id(),
+            id: self.unit.id(),
             chunk_ref,
         }
         .site_ref()
     }
 }
 
-impl<'document, N: Node> DocumentCursor<'document, N> {
-    pub(super) fn new(document: &'document Document<N>, mut span: SiteSpan) -> Self {
-        let mut next_chunk_ref = document.tree().lookup(&mut span.start);
-        let mut end_chunk_ref = document.tree().lookup(&mut span.end);
+impl<'unit, N: Node> MutableCursor<'unit, N> {
+    pub(super) fn new(unit: &'unit MutableUnit<N>, mut span: SiteSpan) -> Self {
+        let mut next_chunk_ref = unit.tree().lookup(&mut span.start);
+        let mut end_chunk_ref = unit.tree().lookup(&mut span.end);
 
         if next_chunk_ref.is_dangling() {
-            next_chunk_ref = document.tree().last();
+            next_chunk_ref = unit.tree().last();
         } else if span.start == 0 && unsafe { !next_chunk_ref.is_first() } {
             unsafe { next_chunk_ref.back() };
         }
@@ -210,7 +210,7 @@ impl<'document, N: Node> DocumentCursor<'document, N> {
         }
 
         Self {
-            document,
+            unit,
             next_chunk_ref,
             end_chunk_ref,
             peek_chunk_ref: next_chunk_ref,

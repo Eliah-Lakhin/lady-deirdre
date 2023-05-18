@@ -36,8 +36,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::RefIndex,
-    incremental::storage::{
+    arena::{RefIndex, Sequence},
+    compiler::mutable::storage::{
         cache::{CacheEntry, ClusterCache},
         item::{Item, ItemRef, ItemRefVariant},
         page::Page,
@@ -615,6 +615,34 @@ impl<N: Node> ChildRefIndex<N> {
                 self.index = previous_occupied - 1;
             }
         }
+    }
+
+    // Safety:
+    // 1. `self` is not dangling.
+    // 2. `self.item` is a Page reference.
+    // 3. Referred Page will not be used used anymore, and the entire Tree
+    //    will be dropped without other types of access.
+    // 4. There are no other references to this Page data.
+    #[inline(always)]
+    pub(crate) unsafe fn take_lexis(
+        &mut self,
+        spans: &mut Sequence<Length>,
+        strings: &mut Sequence<String>,
+        tokens: &mut Sequence<N::Token>,
+    ) {
+        debug_assert!(
+            !self.is_dangling(),
+            "An attempt to access dangling ChildRefIndex.",
+        );
+
+        let page = unsafe { self.item.as_page_ref().as_external_mut() };
+
+        debug_assert!(
+            self.index < page.occupied,
+            "ChildRefIndex index out of bounds.",
+        );
+
+        page.take_lexis(spans, strings, tokens)
     }
 
     // Safety:

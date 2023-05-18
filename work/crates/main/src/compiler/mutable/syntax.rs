@@ -37,17 +37,17 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref, Repository},
-    incremental::storage::{ChildRefIndex, ClusterCache, References, Tree},
+    compiler::mutable::storage::{ChildRefIndex, ClusterCache, References, Tree},
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
     report::{debug_assert, debug_assert_eq},
     std::*,
     syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, SyntaxRule, SyntaxSession, ROOT_RULE},
 };
 
-pub struct IncrementalSyntaxSession<'document, N: Node> {
+pub struct MutableSyntaxSession<'unit, N: Node> {
     id: Id,
-    tree: &'document mut Tree<N>,
-    references: &'document mut References<N>,
+    tree: &'unit mut Tree<N>,
+    references: &'unit mut References<N>,
     pending: Pending<N>,
     next_chunk_ref: ChildRefIndex<N>,
     next_site: Site,
@@ -56,14 +56,14 @@ pub struct IncrementalSyntaxSession<'document, N: Node> {
     peek_site: Site,
 }
 
-impl<'document, N: Node> Identifiable for IncrementalSyntaxSession<'document, N> {
+impl<'unit, N: Node> Identifiable for MutableSyntaxSession<'unit, N> {
     #[inline(always)]
     fn id(&self) -> Id {
         self.id
     }
 }
 
-impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'document, N> {
+impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     type Token = N::Token;
 
     #[inline(always)]
@@ -93,7 +93,7 @@ impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'do
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<&'document Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Option<&'unit Self::Token> {
         if unsafe { self.next_chunk_ref.is_dangling() } {
             return None;
         }
@@ -150,7 +150,7 @@ impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'do
     }
 
     #[inline(always)]
-    fn string(&mut self, distance: TokenCount) -> Option<&'document str> {
+    fn string(&mut self, distance: TokenCount) -> Option<&'unit str> {
         if self.next_chunk_ref.is_dangling() {
             return None;
         }
@@ -227,7 +227,7 @@ impl<'document, N: Node> TokenCursor<'document> for IncrementalSyntaxSession<'do
     }
 }
 
-impl<'document, N: Node> SyntaxSession<'document> for IncrementalSyntaxSession<'document, N> {
+impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     type Node = N;
 
     fn descend(&mut self, rule: SyntaxRule) -> NodeRef {
@@ -357,14 +357,14 @@ impl<'document, N: Node> SyntaxSession<'document> for IncrementalSyntaxSession<'
     }
 }
 
-impl<'document, N: Node> IncrementalSyntaxSession<'document, N> {
+impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
     // Safety:
     // 1. `head` belongs to the `tree` instance.
     // 2. All references of the `tree` belong to `references` instance.
     pub(super) unsafe fn run(
         id: Id,
-        tree: &'document mut Tree<N>,
-        references: &'document mut References<N>,
+        tree: &'unit mut Tree<N>,
+        references: &'unit mut References<N>,
         rule: SyntaxRule,
         start: Site,
         head: ChildRefIndex<N>,

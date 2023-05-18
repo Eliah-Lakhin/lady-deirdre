@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    incremental::storage::ChildRefIndex,
+    compiler::mutable::storage::ChildRefIndex,
     lexis::{
         utils::{get_lexis_character, NULL},
         ByteIndex,
@@ -51,7 +51,7 @@ use crate::{
     syntax::Node,
 };
 
-pub(super) struct IncrementalLexisSession<'source, N: Node> {
+pub(super) struct MutableLexisSession<'source, N: Node> {
     input: Input<'source>,
     product: Product<N>,
     next_cursor: Cursor<N>,
@@ -62,7 +62,7 @@ pub(super) struct IncrementalLexisSession<'source, N: Node> {
     submission_string: String,
 }
 
-impl<'source, N: Node> LexisSession for IncrementalLexisSession<'source, N> {
+impl<'source, N: Node> LexisSession for MutableLexisSession<'source, N> {
     #[inline(always)]
     fn advance(&mut self) {
         self.next_cursor.advance(self.input);
@@ -101,7 +101,7 @@ impl<'source, N: Node> LexisSession for IncrementalLexisSession<'source, N> {
     }
 }
 
-impl<'source, N: Node> IncrementalLexisSession<'source, N> {
+impl<'source, N: Node> MutableLexisSession<'source, N> {
     //Safety:
     // 1. `tail` is a Page reference(possibly dangling).
     // 2. `tail`'s Tree is immutable during `'source` lifetime.

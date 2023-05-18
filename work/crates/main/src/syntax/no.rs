@@ -51,7 +51,7 @@ use crate::{
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     syntax::{NoSyntax, SyntaxTree},
+///     syntax::{NoSyntax, SyntaxTree, TreeContent},
 ///     lexis::SimpleToken,
 ///     Document,
 /// };

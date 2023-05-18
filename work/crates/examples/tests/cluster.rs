@@ -1,4 +1,9 @@
-use lady_deirdre::{arena::Ref, lexis::ToSpan, syntax::SyntaxTree, Document};
+use lady_deirdre::{
+    arena::Ref,
+    lexis::ToSpan,
+    syntax::{SyntaxTree, TreeContent},
+    Document,
+};
 use lady_deirdre_examples::json::syntax::JsonNode;
 
 #[test]

@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    incremental::storage::{
+    compiler::mutable::storage::{
         child::{ChildCount, ChildIndex},
         item::Item,
     },

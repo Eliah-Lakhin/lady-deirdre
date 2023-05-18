@@ -53,7 +53,6 @@ use crate::{
     report::debug_unreachable,
     std::*,
     syntax::Node,
-    Document,
 };
 
 /// A growable buffer of the source code lexical data.
@@ -358,27 +357,14 @@ impl<T: Token> TokenBuffer<T> {
         self.strings.reserve(additional);
     }
 
-    /// Turns this buffer into incremental [Document](crate::Document) instance.
-    ///
-    /// Generic parameter `N` of type [Node](crate::syntax::Node) specifies source code syntax
-    /// grammar. Node's [Token](crate::syntax::Node::Token) associative type must be compatible with
-    /// the TokenBuffer Token type. In other words, Document's syntax structure must be compatible
-    /// with the TokenBuffer's lexical structure.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{Document, lexis::{TokenBuffer, SimpleToken}, syntax::SimpleNode};
-    ///
-    /// let buf = TokenBuffer::<SimpleToken>::from("foo [bar]");
-    ///
-    /// // SimpleNode syntax uses SimpleToken's lexis.
-    /// let _doc = buf.into_document::<SimpleNode>();
-    /// ```
     #[inline(always)]
-    pub fn into_document<N>(self) -> Document<N>
-    where
-        N: Node<Token = T>,
-    {
-        Document::from_buffer(self)
+    pub(crate) fn reset_id(&mut self) {
+        self.id = Id::new();
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_length(&mut self, length: Length) {
+        self.length = length;
     }
 
     #[inline]

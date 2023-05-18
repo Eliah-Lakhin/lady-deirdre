@@ -37,11 +37,14 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    incremental::{
-        cursor::DocumentCursor,
-        lexis::IncrementalLexisSession,
-        storage::{ChildRefIndex, ClusterCache, References, Tree},
-        syntax::IncrementalSyntaxSession,
+    compiler::{
+        mutable::{
+            cursor::MutableCursor,
+            lexis::MutableLexisSession,
+            storage::{ChildRefIndex, ClusterCache, References, Tree},
+            syntax::MutableSyntaxSession,
+        },
+        ImmutableUnit,
     },
     lexis::{
         utils::{split_left, split_right},
@@ -53,6 +56,7 @@ use crate::{
         SiteSpan,
         SourceCode,
         ToSpan,
+        Token,
         TokenBuffer,
         TokenCount,
         TokenRef,
@@ -233,7 +237,7 @@ use crate::{
 ///
 /// // Returns a weak reference to the root os the SyntaxTree.
 /// // It is OK to copy this reference and reuse the copy many times.
-/// let root_ref = *doc.root_node_ref();
+/// let root_ref = doc.root_node_ref();
 ///
 /// // A simple parens structure formatter that traverses the Syntax Tree.
 /// fn fmt(doc: &Document<SimpleNode>, node_ref: &NodeRef) -> String {
@@ -302,10 +306,9 @@ use crate::{
 /// assert_eq!(doc.substring(..), "[x} [y] (z)]foo ([bar] {baz})");
 /// assert_eq!(fmt(&doc, &root_ref).as_str(), "[[], ()], ([], {}), {}");
 /// ```
-pub struct Document<N: Node> {
+pub struct MutableUnit<N: Node> {
     id: Id,
     root_cluster: Cluster<N>,
-    root_node_ref: NodeRef,
     tree: Tree<N>,
     token_count: TokenCount,
     pub(super) references: References<N>,
@@ -313,43 +316,43 @@ pub struct Document<N: Node> {
 
 // Safety: Tree instance stores data on the heap, and the References instance
 //         refers Tree's heap objects only.
-unsafe impl<N: Node> Send for Document<N> {}
+unsafe impl<N: Node + Send> Send for MutableUnit<N> {}
 
 // Safety:
 //   1. Tree and References data mutations can only happen through
 //      the &mut Document exclusive interface that invalidates all other
 //      references to the inner data of the Document's Tree.
 //   2. All "weak" references are safe indexes into the Document's inner data.
-unsafe impl<N: Node> Sync for Document<N> {}
+unsafe impl<N: Node + Sync> Sync for MutableUnit<N> {}
 
-impl<N: Node> Drop for Document<N> {
+impl<N: Node> Drop for MutableUnit<N> {
     fn drop(&mut self) {
-        let _ = unsafe { self.tree.free(&mut self.references) };
+        unsafe { self.tree.free() };
     }
 }
 
-impl<N: Node> Debug for Document<N> {
+impl<N: Node> Debug for MutableUnit<N> {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter
-            .debug_struct("Document")
+            .debug_struct("MutableUnit")
             .field("id", &self.id)
             .field("length", &self.tree.length())
             .finish_non_exhaustive()
     }
 }
 
-impl<N: Node> Identifiable for Document<N> {
+impl<N: Node> Identifiable for MutableUnit<N> {
     #[inline(always)]
     fn id(&self) -> Id {
         self.id
     }
 }
 
-impl<N: Node> SourceCode for Document<N> {
+impl<N: Node> SourceCode for MutableUnit<N> {
     type Token = N::Token;
 
-    type Cursor<'code> = DocumentCursor<'code, N>;
+    type Cursor<'code> = MutableCursor<'code, N>;
 
     #[inline(always)]
     fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
@@ -433,13 +436,8 @@ impl<N: Node> SourceCode for Document<N> {
     }
 }
 
-impl<N: Node> SyntaxTree for Document<N> {
+impl<N: Node> SyntaxTree for MutableUnit<N> {
     type Node = N;
-
-    #[inline(always)]
-    fn root_node_ref(&self) -> &NodeRef {
-        &self.root_node_ref
-    }
 
     #[inline(always)]
     fn cover(&self, span: impl ToSpan) -> Ref {
@@ -630,7 +628,7 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 }
 
-impl<N: Node> Default for Document<N> {
+impl<N: Node> Default for MutableUnit<N> {
     #[inline(always)]
     fn default() -> Self {
         let id = Id::new();
@@ -639,16 +637,9 @@ impl<N: Node> Default for Document<N> {
 
         let root_cluster = Self::initial_parse(id, &mut tree, &mut references);
 
-        let root_node_ref = NodeRef {
-            id,
-            cluster_ref: Ref::Primary,
-            node_ref: Ref::Primary,
-        };
-
         Self {
             id,
             root_cluster,
-            root_node_ref,
             tree,
             token_count: 0,
             references,
@@ -656,7 +647,7 @@ impl<N: Node> Default for Document<N> {
     }
 }
 
-impl<N, S> From<S> for Document<N>
+impl<N, S> From<S> for MutableUnit<N>
 where
     N: Node,
     S: Borrow<str>,
@@ -667,43 +658,11 @@ where
 
         buffer.append(string.borrow());
 
-        Self::from_buffer(buffer)
+        buffer.into_mutable_unit()
     }
 }
 
-impl<N: Node> Document<N> {
-    #[inline]
-    pub(crate) fn from_buffer(buffer: TokenBuffer<N::Token>) -> Self {
-        let id = Id::new();
-
-        let token_count = buffer.token_count();
-        let spans = buffer.spans.into_vec().into_iter();
-        let strings = buffer.strings.into_vec().into_iter();
-        let tokens = buffer.tokens.into_vec().into_iter();
-
-        let mut references = References::with_capacity(token_count);
-
-        let mut tree =
-            unsafe { Tree::from_chunks(&mut references, token_count, spans, strings, tokens) };
-
-        let root_cluster = Self::initial_parse(id, &mut tree, &mut references);
-
-        let root_node_ref = NodeRef {
-            id,
-            cluster_ref: Ref::Primary,
-            node_ref: Ref::Primary,
-        };
-
-        Self {
-            id,
-            root_cluster,
-            root_node_ref,
-            tree,
-            token_count,
-            references,
-        }
-    }
-
+impl<N: Node> MutableUnit<N> {
     /// Replaces a spanned substring of the source code with provided `text` string, and re-parses
     /// Document's lexical and syntax structure relatively to these changes.
     ///
@@ -769,6 +728,31 @@ impl<N: Node> Document<N> {
         }
 
         self.update_syntax(cursor);
+    }
+
+    pub fn into_token_buffer(self) -> TokenBuffer<N::Token> {
+        let mut buffer = TokenBuffer::with_capacity(self.token_count);
+
+        buffer.set_length(self.length());
+
+        let mut chunk_ref = self.tree.first();
+
+        while !chunk_ref.is_dangling() {
+            unsafe {
+                chunk_ref.take_lexis(&mut buffer.spans, &mut buffer.strings, &mut buffer.tokens)
+            };
+
+            unsafe { chunk_ref.next() }
+        }
+
+        let _ = self;
+
+        buffer
+    }
+
+    #[inline(always)]
+    pub fn into_immutable_unit(self) -> ImmutableUnit<N> {
+        self.into_token_buffer().into_immutable_unit()
     }
 
     #[inline(always)]
@@ -857,7 +841,7 @@ impl<N: Node> Document<N> {
         }
 
         let mut product =
-            unsafe { IncrementalLexisSession::run(text.len() / CHUNK_SIZE + 2, &input, tail) };
+            unsafe { MutableLexisSession::run(text.len() / CHUNK_SIZE + 2, &input, tail) };
 
         span.end += product.tail_length;
 
@@ -1042,7 +1026,8 @@ impl<N: Node> Document<N> {
 
             insert_span = replacement.length();
 
-            remove_count = unsafe { replace(&mut middle, replacement).free(&mut self.references) };
+            remove_count =
+                unsafe { replace(&mut middle, replacement).free_as_subtree(&mut self.references) };
         };
 
         unsafe { self.tree.join(&mut self.references, middle) };
@@ -1172,7 +1157,7 @@ impl<N: Node> Document<N> {
                     };
 
                     let (cluster_cache, parsed_end_site, _lookahead) = unsafe {
-                        IncrementalSyntaxSession::run(
+                        MutableSyntaxSession::run(
                             self.id,
                             &mut self.tree,
                             &mut self.references,
@@ -1197,7 +1182,7 @@ impl<N: Node> Document<N> {
                     let head = self.tree.first();
 
                     let (cluster_cache, mut parsed_end_site, _lookahead) = unsafe {
-                        IncrementalSyntaxSession::run(
+                        MutableSyntaxSession::run(
                             self.id,
                             &mut self.tree,
                             &mut self.references,
@@ -1235,18 +1220,63 @@ impl<N: Node> Document<N> {
     // Safety:
     // 1. All references of the `tree` belong to `references` instance.
     #[inline(always)]
-    fn initial_parse<'document>(
+    fn initial_parse<'unit>(
         id: Id,
-        tree: &'document mut Tree<N>,
-        references: &'document mut References<N>,
+        tree: &'unit mut Tree<N>,
+        references: &'unit mut References<N>,
     ) -> Cluster<N> {
         let head = tree.first();
 
         let (cluster_cache, _parsed_end_site, _lookahead) = unsafe {
-            IncrementalSyntaxSession::run(id, tree, references, ROOT_RULE, 0, head, Ref::Primary)
+            MutableSyntaxSession::run(id, tree, references, ROOT_RULE, 0, head, Ref::Primary)
         };
 
         cluster_cache.cluster
+    }
+}
+
+impl<T: Token> TokenBuffer<T> {
+    /// Turns this buffer into incremental [Document](crate::Document) instance.
+    ///
+    /// Generic parameter `N` of type [Node](crate::syntax::Node) specifies source code syntax
+    /// grammar. Node's [Token](crate::syntax::Node::Token) associative type must be compatible with
+    /// the TokenBuffer Token type. In other words, Document's syntax structure must be compatible
+    /// with the TokenBuffer's lexical structure.
+    ///
+    /// ```rust
+    /// use lady_deirdre::{Document, lexis::{TokenBuffer, SimpleToken}, syntax::SimpleNode};
+    ///
+    /// let buf = TokenBuffer::<SimpleToken>::from("foo [bar]");
+    ///
+    /// // SimpleNode syntax uses SimpleToken's lexis.
+    /// let _doc = buf.into_document::<SimpleNode>();
+    /// ```
+    #[inline(always)]
+    pub fn into_mutable_unit<N>(self) -> MutableUnit<N>
+    where
+        N: Node<Token = T>,
+    {
+        let id = Id::new();
+
+        let token_count = self.token_count();
+        let spans = self.spans.into_vec().into_iter();
+        let strings = self.strings.into_vec().into_iter();
+        let tokens = self.tokens.into_vec().into_iter();
+
+        let mut references = References::with_capacity(token_count);
+
+        let mut tree =
+            unsafe { Tree::from_chunks(&mut references, token_count, spans, strings, tokens) };
+
+        let root_cluster = MutableUnit::initial_parse(id, &mut tree, &mut references);
+
+        MutableUnit {
+            id,
+            root_cluster,
+            tree,
+            token_count,
+            references,
+        }
     }
 }
 
@@ -1290,15 +1320,15 @@ impl<N: Node> ClusterCache<N> {
     // Safety:
     // 1. ClusterCache belongs to specified `document` instance.
     #[inline(always)]
-    unsafe fn end_site(&self, document: &Document<N>) -> Option<Site> {
+    unsafe fn end_site(&self, unit: &MutableUnit<N>) -> Option<Site> {
         match self.parsed_end.inner() {
             SiteRefInner::ChunkStart(token_ref) => {
-                let chunk_ref = document.references.chunks().get(&token_ref.chunk_ref)?;
+                let chunk_ref = unit.references.chunks().get(&token_ref.chunk_ref)?;
 
-                Some(unsafe { document.tree.site_of(chunk_ref) })
+                Some(unsafe { unit.tree.site_of(chunk_ref) })
             }
 
-            SiteRefInner::CodeEnd(_) => Some(document.tree.length()),
+            SiteRefInner::CodeEnd(_) => Some(unit.tree.length()),
         }
     }
 }

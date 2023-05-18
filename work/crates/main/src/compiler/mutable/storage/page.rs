@@ -36,8 +36,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::RefIndex,
-    incremental::storage::{
+    arena::{RefIndex, Sequence},
+    compiler::mutable::storage::{
         branch::BranchRef,
         cache::CacheEntry,
         child::{ChildCount, ChildIndex, ChildRefIndex},
@@ -230,9 +230,37 @@ impl<N: Node> Page<N> {
         PageRef { pointer }
     }
 
+    pub(super) fn take_lexis(
+        &mut self,
+        spans: &mut Sequence<Length>,
+        strings: &mut Sequence<String>,
+        tokens: &mut Sequence<N::Token>,
+    ) {
+        for index in 0..self.occupied {
+            spans.push({
+                let span = *unsafe { self.spans.get_unchecked(index) };
+                span
+            });
+
+            strings.push({
+                let string = unsafe { self.strings.get_unchecked(index) };
+                unsafe { string.assume_init_read() }
+            });
+
+            tokens.push({
+                let token = unsafe { self.tokens.get_unchecked(index) };
+                unsafe { token.assume_init_read() }
+            });
+
+            let _ = take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
+        }
+
+        self.occupied = 0;
+    }
+
     // Safety:
     // 1. All references belong to `references` instance.
-    pub(super) unsafe fn free(mut self, references: &mut References<N>) -> ChildCount {
+    pub(super) unsafe fn free_subtree(mut self, references: &mut References<N>) -> ChildCount {
         for index in 0..self.occupied {
             let string = unsafe { self.strings.get_unchecked_mut(index) };
 
@@ -255,6 +283,20 @@ impl<N: Node> Page<N> {
         }
 
         self.occupied
+    }
+
+    pub(super) unsafe fn free(mut self) {
+        for index in 0..self.occupied {
+            let string = unsafe { self.strings.get_unchecked_mut(index) };
+
+            unsafe { string.assume_init_drop() };
+
+            let token = unsafe { self.tokens.get_unchecked_mut(index) };
+
+            unsafe { token.assume_init_drop() };
+
+            let _ = take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
+        }
     }
 }
 

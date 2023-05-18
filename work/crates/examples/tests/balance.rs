@@ -162,7 +162,7 @@ fn test_balance() {
                 }
             }
 
-            traverse(self, self.root_node_ref())
+            traverse(self, &self.root_node_ref())
         }
 
         fn debug_errors(&self) -> String {

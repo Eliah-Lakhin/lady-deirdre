@@ -35,7 +35,12 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{arena::Repository, incremental::storage::child::ChildRefIndex, std::*, syntax::Node};
+use crate::{
+    arena::Repository,
+    compiler::mutable::storage::child::ChildRefIndex,
+    std::*,
+    syntax::Node,
+};
 
 pub(crate) struct References<N: Node> {
     pub(super) chunks: Repository<ChildRefIndex<N>>,

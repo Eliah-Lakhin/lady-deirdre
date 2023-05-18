@@ -36,9 +36,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, RepositoryIterator},
+    arena::{Id, Identifiable, Ref, RepositoryIterator},
     std::*,
-    syntax::{ClusterRef, Node, SyntaxTree},
+    syntax::{ClusterRef, Node, NodeRef, SyntaxTree},
 };
 
 pub trait TreeContent: SyntaxTree {
@@ -52,6 +52,8 @@ pub trait TreeContent: SyntaxTree {
     where
         Self: 'tree;
 
+    fn root_node_ref(&self) -> NodeRef;
+
     fn root_cluster_ref(&self) -> ClusterRef;
 
     fn nodes(&self) -> Self::NodeIterator<'_>;
@@ -64,10 +66,19 @@ impl<T: SyntaxTree> TreeContent for T {
     type ErrorIterator<'tree> = ErrorIterator<'tree, T> where Self: 'tree;
 
     #[inline(always)]
+    fn root_node_ref(&self) -> NodeRef {
+        NodeRef {
+            id: self.id(),
+            cluster_ref: Ref::Primary,
+            node_ref: Ref::Primary,
+        }
+    }
+
+    #[inline(always)]
     fn root_cluster_ref(&self) -> ClusterRef {
         ClusterRef {
             id: self.id(),
-            cluster_ref: self.cover(..),
+            cluster_ref: Ref::Primary,
         }
     }
 

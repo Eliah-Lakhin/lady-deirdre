@@ -35,27 +35,66 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("../readme.md")]
-//TODO check warnings regularly
-#![allow(warnings)]
-#![allow(unused_unsafe)]
-//TODO revert and review documentation
-// #![deny(missing_docs)]
-#![no_implicit_prelude]
-#![cfg_attr(not(feature = "std"), no_std)]
+use crate::{
+    compiler::mutable::storage::{branch::Branch, child::ChildCount, item::Item, page::Page},
+    report::debug_unreachable,
+    syntax::Node,
+};
 
-pub mod arena;
-pub mod compiler;
-pub mod lexis;
-mod report;
-mod std;
-pub mod syntax;
+pub(super) type Height = usize;
 
-pub use compiler::document::Document;
-extern crate self as lady_deirdre;
+// Safety: `Layer` is implemented for zero-sized and 'static types only.
+pub(super) unsafe trait Layer {
+    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount;
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-#[cfg(not(feature = "std"))]
-extern crate core;
-extern crate core;
+    fn descriptor() -> &'static LayerDescriptor;
+}
+
+unsafe impl Layer for () {
+    #[inline(always)]
+    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
+        unsafe { debug_unreachable!("An attempt to get unit layer branching value.") }
+    }
+
+    #[inline(always)]
+    fn descriptor() -> &'static LayerDescriptor {
+        unsafe { debug_unreachable!("An attempt to get unit layer description.") }
+    }
+}
+
+pub(super) struct BranchLayer;
+
+unsafe impl Layer for BranchLayer {
+    #[inline(always)]
+    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
+        Branch::<ChildLayer, N>::BRANCHING
+    }
+
+    #[inline(always)]
+    fn descriptor() -> &'static LayerDescriptor {
+        static BRANCH: LayerDescriptor = LayerDescriptor::Branch;
+
+        &BRANCH
+    }
+}
+
+pub(super) struct PageLayer;
+
+unsafe impl Layer for PageLayer {
+    #[inline(always)]
+    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
+        Page::<N>::BRANCHING
+    }
+
+    #[inline(always)]
+    fn descriptor() -> &'static LayerDescriptor {
+        static PAGE: LayerDescriptor = LayerDescriptor::Page;
+
+        &PAGE
+    }
+}
+
+pub(super) enum LayerDescriptor {
+    Branch,
+    Page,
+}

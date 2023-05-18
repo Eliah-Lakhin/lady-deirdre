@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    incremental::storage::{
+    compiler::mutable::storage::{
         child::{ChildCount, ChildIndex, ChildRefIndex},
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::{BranchLayer, Height, Layer, LayerDescriptor, PageLayer},
@@ -210,7 +210,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
     // 1. All references belong to `references` instance.
     // 2. `height >= 2`.
     // 3. `height` fits to `ChildLayer`.
-    pub(crate) unsafe fn free(
+    pub(crate) unsafe fn free_subtree(
         mut self,
         height: Height,
         references: &mut References<N>,
@@ -233,7 +233,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let page = unsafe { page_ref.into_owned() };
 
-                    child_count += unsafe { page.free(references) };
+                    child_count += unsafe { page.free_subtree(references) };
                 }
 
                 3 => {
@@ -246,7 +246,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let branch = unsafe { branch_ref.into_owned() };
 
-                    child_count += unsafe { branch.free(height - 1, references) }
+                    child_count += unsafe { branch.free_subtree(height - 1, references) }
                 }
 
                 _ => {
@@ -259,12 +259,64 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let branch = unsafe { branch_ref.into_owned() };
 
-                    child_count += unsafe { branch.free(height - 1, references) }
+                    child_count += unsafe { branch.free_subtree(height - 1, references) }
                 }
             }
         }
 
         child_count
+    }
+
+    // Safety:
+    // 1. `height >= 2`.
+    // 2. `height` fits to `ChildLayer`.
+    pub(crate) unsafe fn free(mut self, height: Height) {
+        for index in 0..self.inner.occupied {
+            let child = unsafe { self.inner.children.get_unchecked_mut(index) };
+
+            match height {
+                0 | 1 => unsafe { debug_unreachable!("Incorrect height.") },
+
+                2 => {
+                    debug_assert!(
+                        matches!(ChildLayer::descriptor(), LayerDescriptor::Page),
+                        "Incorrect height.",
+                    );
+
+                    let page_ref = *unsafe { child.as_page_ref() };
+
+                    let page = unsafe { page_ref.into_owned() };
+
+                    unsafe { page.free() };
+                }
+
+                3 => {
+                    debug_assert!(
+                        matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
+                        "Incorrect height.",
+                    );
+
+                    let branch_ref = *unsafe { child.as_branch_ref::<PageLayer>() };
+
+                    let branch = unsafe { branch_ref.into_owned() };
+
+                    unsafe { branch.free(height - 1) }
+                }
+
+                _ => {
+                    debug_assert!(
+                        matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
+                        "Incorrect height.",
+                    );
+
+                    let branch_ref = *unsafe { child.as_branch_ref::<BranchLayer>() };
+
+                    let branch = unsafe { branch_ref.into_owned() };
+
+                    unsafe { branch.free(height - 1) }
+                }
+            }
+        }
     }
 
     // Safety:

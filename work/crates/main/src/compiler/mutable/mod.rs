@@ -35,66 +35,10 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    incremental::storage::{branch::Branch, child::ChildCount, item::Item, page::Page},
-    report::debug_unreachable,
-    syntax::Node,
-};
+//todo Review all mentions of "Document" term inside this module's Rustdoc.
 
-pub(super) type Height = usize;
-
-// Safety: `Layer` is implemented for zero-sized and 'static types only.
-pub(super) unsafe trait Layer {
-    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount;
-
-    fn descriptor() -> &'static LayerDescriptor;
-}
-
-unsafe impl Layer for () {
-    #[inline(always)]
-    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
-        unsafe { debug_unreachable!("An attempt to get unit layer branching value.") }
-    }
-
-    #[inline(always)]
-    fn descriptor() -> &'static LayerDescriptor {
-        unsafe { debug_unreachable!("An attempt to get unit layer description.") }
-    }
-}
-
-pub(super) struct BranchLayer;
-
-unsafe impl Layer for BranchLayer {
-    #[inline(always)]
-    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
-        Branch::<ChildLayer, N>::BRANCHING
-    }
-
-    #[inline(always)]
-    fn descriptor() -> &'static LayerDescriptor {
-        static BRANCH: LayerDescriptor = LayerDescriptor::Branch;
-
-        &BRANCH
-    }
-}
-
-pub(super) struct PageLayer;
-
-unsafe impl Layer for PageLayer {
-    #[inline(always)]
-    fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
-        Page::<N>::BRANCHING
-    }
-
-    #[inline(always)]
-    fn descriptor() -> &'static LayerDescriptor {
-        static PAGE: LayerDescriptor = LayerDescriptor::Page;
-
-        &PAGE
-    }
-}
-
-pub(super) enum LayerDescriptor {
-    Branch,
-    Page,
-}
+mod cursor;
+mod lexis;
+mod storage;
+mod syntax;
+pub(super) mod unit;

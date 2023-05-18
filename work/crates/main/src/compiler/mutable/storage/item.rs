@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    incremental::storage::{
+    compiler::mutable::storage::{
         branch::{Branch, BranchRef},
         child::{ChildCount, ChildIndex, ChildRefIndex},
         nesting::{BranchLayer, Layer, LayerDescriptor},

@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    incremental::storage::{
+    compiler::mutable::storage::{
         branch::Branch,
         child::{ChildIndex, ChildRefIndex},
         item::{Item, ItemRef, ItemRefVariant, Split},
@@ -72,7 +72,7 @@ impl<N: Node> Default for Tree<N> {
 
 impl<N: Node> Drop for Tree<N> {
     fn drop(&mut self) {
-        debug_assert_eq!(self.height, 0, "Document memory leak.");
+        debug_assert_eq!(self.height, 0, "MutableUnit memory leak.");
     }
 }
 
@@ -546,7 +546,7 @@ impl<N: Node> Tree<N> {
         if self.height == 1 && insert == 0 && remove == occupied {
             let mut tree = replace(self, Self::default());
 
-            let removed_count = unsafe { tree.free(references) };
+            let removed_count = unsafe { tree.free_as_subtree(references) };
 
             debug_assert_eq!(remove, removed_count, "Token count inconsistency.");
 
@@ -793,7 +793,7 @@ impl<N: Node> Tree<N> {
 
     //Safety:
     // 1. All references belong to `references` instance.
-    pub(crate) unsafe fn free(&mut self, references: &mut References<N>) -> TokenCount {
+    pub(crate) unsafe fn free_as_subtree(&mut self, references: &mut References<N>) -> TokenCount {
         if self.height == 0 {
             return 0;
         }
@@ -801,24 +801,50 @@ impl<N: Node> Tree<N> {
         let root = &mut self.root;
 
         let token_count = match self.height {
-            1 => unsafe { root.as_page_ref().into_owned().free(references) },
+            1 => unsafe { root.as_page_ref().into_owned().free_subtree(references) },
 
             2 => unsafe {
                 root.as_branch_ref::<PageLayer>()
                     .into_owned()
-                    .free(self.height, references)
+                    .free_subtree(self.height, references)
             },
 
             _ => unsafe {
                 root.as_branch_ref::<BranchLayer>()
                     .into_owned()
-                    .free(self.height, references)
+                    .free_subtree(self.height, references)
             },
         };
 
         self.height = 0;
 
         token_count
+    }
+
+    pub(crate) unsafe fn free(&mut self) {
+        if self.height == 0 {
+            return;
+        }
+
+        let root = &mut self.root;
+
+        match self.height {
+            1 => unsafe { root.as_page_ref().into_owned().free() },
+
+            2 => unsafe {
+                root.as_branch_ref::<PageLayer>()
+                    .into_owned()
+                    .free(self.height)
+            },
+
+            _ => unsafe {
+                root.as_branch_ref::<BranchLayer>()
+                    .into_owned()
+                    .free(self.height)
+            },
+        };
+
+        self.height = 0;
     }
 
     //Safety:

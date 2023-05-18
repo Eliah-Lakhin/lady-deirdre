@@ -68,7 +68,7 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     lexis::{TokenBuffer, SimpleToken, SourceCode, Token},
-///     syntax::{SyntaxBuffer, SimpleNode, SyntaxTree, NodeRef, Node},
+///     syntax::{SyntaxBuffer, SimpleNode, SyntaxTree, NodeRef, Node, TreeContent},
 /// };
 ///
 /// let token_buffer = SimpleToken::parse("foo({bar}[baz])");
@@ -92,12 +92,11 @@ use crate::{
 ///     }
 /// }
 ///
-/// assert_eq!("({}[])", format(&syntax_buffer, syntax_buffer.root_node_ref()));
+/// assert_eq!("({}[])", format(&syntax_buffer, &syntax_buffer.root_node_ref()));
 /// ```
 pub struct SyntaxBuffer<N: Node> {
     id: Id,
     span: SiteRefSpan,
-    root: NodeRef,
     cluster: Cluster<N>,
 }
 
@@ -129,11 +128,6 @@ impl<N: Node> Identifiable for SyntaxBuffer<N> {
 
 impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     type Node = N;
-
-    #[inline(always)]
-    fn root_node_ref(&self) -> &NodeRef {
-        &self.root
-    }
 
     #[inline(always)]
     fn cover(&self, _span: impl ToSpan) -> Ref {
@@ -176,12 +170,12 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
+    fn get_previous_cluster(&self, _cluster_ref: &Ref) -> Ref {
         Ref::Nil
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
+    fn get_next_cluster(&self, _cluster_ref: &Ref) -> Ref {
         Ref::Nil
     }
 
@@ -192,11 +186,10 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
 }
 
 impl<N: Node> SyntaxBuffer<N> {
-    pub(super) fn new<'code>(
+    pub(crate) fn new<'code>(
+        id: Id,
         mut token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
     ) -> Self {
-        let id = token_cursor.id();
-
         let start = token_cursor.site_ref(0);
 
         let mut session = SequentialSyntaxSession {
@@ -208,7 +201,7 @@ impl<N: Node> SyntaxBuffer<N> {
             _code_lifetime: Default::default(),
         };
 
-        let root = session.descend(ROOT_RULE);
+        let _ = session.descend(ROOT_RULE);
 
         let end = session.token_cursor.site_ref(0);
 
@@ -221,7 +214,6 @@ impl<N: Node> SyntaxBuffer<N> {
         Self {
             id,
             span: start..end,
-            root,
             cluster,
         }
     }

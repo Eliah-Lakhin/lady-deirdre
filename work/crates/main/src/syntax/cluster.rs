@@ -122,7 +122,10 @@ impl<N: Node + Debug> Debug for Cluster<N> {
 /// [Copy](::std::marker::Copy) safe weak reference into the source code syntax structure.
 ///
 /// ```rust
-/// use lady_deirdre::{Document, syntax::{SimpleNode, SyntaxTree, NodeRef, Cluster}};
+/// use lady_deirdre::{
+///     Document,
+///     syntax::{SimpleNode, SyntaxTree, NodeRef, Cluster, TreeContent}
+/// };
 ///
 /// let doc = Document::<SimpleNode>::from("[]{}()");
 ///

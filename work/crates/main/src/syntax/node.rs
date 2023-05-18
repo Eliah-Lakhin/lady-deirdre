@@ -63,7 +63,7 @@ use crate::{
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     syntax::{Node, SyntaxError, SyntaxTree},
+///     syntax::{Node, SyntaxError, SyntaxTree, TreeContent},
 ///     lexis::{SimpleToken, TokenRef},
 ///     Document,
 /// };
@@ -316,7 +316,7 @@ pub trait Node: Sized + 'static {
     /// ```
     #[inline(always)]
     fn parse<'code>(cursor: impl TokenCursor<'code, Token = Self::Token>) -> SyntaxBuffer<Self> {
-        SyntaxBuffer::new(cursor)
+        SyntaxBuffer::new(Id::new(), cursor)
     }
 }
 

@@ -293,7 +293,7 @@ impl SyntaxError {
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     syntax::{SimpleNode, SyntaxTree, SyntaxError},
+///     syntax::{SimpleNode, SyntaxTree, SyntaxError, TreeContent},
 ///     lexis::SiteRef,
 /// };
 ///

@@ -74,9 +74,6 @@ pub trait SyntaxTree: Identifiable {
     /// See [Node](crate::syntax::Node) for details.
     type Node: Node;
 
-    /// Returns a [`weak reference`](crate::syntax::NodeRef) to the root Node of the syntax tree.
-    fn root_node_ref(&self) -> &NodeRef;
-
     fn cover(&self, span: impl ToSpan) -> Ref;
 
     /// Returns `true` if the [`Node Cluster`](crate::syntax::ClusterRef) referred by specified
