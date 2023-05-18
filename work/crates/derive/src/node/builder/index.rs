@@ -35,62 +35,33 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("../readme.md")]
-//TODO check warnings regularly
-#![allow(warnings)]
+use proc_macro2::Span;
+use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitInt, Result};
 
-#[macro_use]
-extern crate quote;
-
-#[macro_use]
-extern crate syn;
-
-extern crate core;
-extern crate proc_macro;
-
-mod node;
-mod token;
-mod utils;
-
-const BENCHMARK: bool = false;
-
-#[doc = include_str!("./token/readme.md")]
-#[proc_macro_derive(Token, attributes(define, rule, precedence, constructor, mismatch))]
-pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    // panic!(
-    //     "{}",
-    //     proc_macro::TokenStream::from(parse_macro_input!(input as token::Token))
-    // );
-
-    parse_macro_input!(input as token::Token).into()
-
-    // (quote! {}).into()
+pub(in crate::node) struct RuleIndex {
+    pub(in crate::node) span: Span,
+    pub(in crate::node) index: usize,
 }
 
-#[doc = include_str!("./node/readme.md")]
-#[proc_macro_derive(
-    Node,
-    attributes(
-        token,
-        error,
-        skip,
-        define,
-        rule,
-        root,
-        comment,
-        synchronization,
-        index,
-        constructor,
-        default,
-    )
-)]
-pub fn node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    // panic!(
-    //     "{}",
-    //     proc_macro::TokenStream::from(parse_macro_input!(input as node::Node))
-    // );
+impl Spanned for RuleIndex {
+    #[inline(always)]
+    fn span(&self) -> Span {
+        self.span
+    }
+}
 
-    parse_macro_input!(input as node::Node).into()
+impl<'a> TryFrom<&'a Attribute> for RuleIndex {
+    type Error = Error;
 
-    // (quote! {}).into()
+    fn try_from(attribute: &'a Attribute) -> Result<Self> {
+        let span = attribute.span();
+
+        attribute.parse_args_with(|input: ParseStream| {
+            let index = input.parse::<LitInt>()?;
+
+            let index = index.base10_parse::<usize>()?;
+
+            Ok(Self { span, index })
+        })
+    }
 }

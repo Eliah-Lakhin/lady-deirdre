@@ -41,7 +41,13 @@ use syn::{spanned::Spanned, AttrStyle, Error, Result, Variant};
 use crate::{
     node::{
         automata::{synchronization::Synchronization, variables::VariableMap, NodeAutomata},
-        builder::{constructor::Constructor, kind::VariantKind, rule::Rule, Builder},
+        builder::{
+            constructor::Constructor,
+            index::RuleIndex,
+            kind::VariantKind,
+            rule::Rule,
+            Builder,
+        },
         regex::{prefix::Leftmost, Regex},
     },
     utils::{debug_panic, PredictableCollection, Set},
@@ -50,6 +56,7 @@ use crate::{
 pub(in crate::node) struct NodeVariant {
     name: Ident,
     kind: VariantKind,
+    index: Option<RuleIndex>,
     rule: Option<Rule>,
     synchronization: Option<Span>,
     constructor: Option<Constructor>,
@@ -72,6 +79,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
 
         let mut kind = Unspecified(variant.span());
         let mut rule = None;
+        let mut index = None;
         let mut synchronization = None;
         let mut constructor = None;
 
@@ -125,6 +133,14 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
                     }
 
                     constructor = Some(Constructor::try_from(attribute)?);
+                }
+
+                "index" => {
+                    if index.is_some() {
+                        return Err(Error::new(attribute.span(), "Duplicate Index attribute."));
+                    }
+
+                    index = Some(RuleIndex::try_from(attribute)?)
                 }
 
                 _ => (),
@@ -201,9 +217,48 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
             (_, None) => Some(Constructor::try_from(variant)?),
         };
 
+        let index = match (&kind, index) {
+            (Unspecified(..), Some(index)) => {
+                return Err(Error::new(
+                    index.span(),
+                    "Rule index override is not applicable to non-parsable rules.\n\
+                    Associate this variant with rule type.",
+                ));
+            }
+
+            (Unspecified(..), None) => None,
+
+            (Root(..), Some(index)) => {
+                if index.index > 0 {
+                    return Err(Error::new(index.span(), "Root rule index must be zero."));
+                }
+
+                Some(index)
+            }
+
+            (Root(span), None) => Some(RuleIndex {
+                span: *span,
+                index: 0,
+            }),
+
+            (_, Some(index)) => {
+                if index.index == 0 {
+                    return Err(Error::new(
+                        index.span(),
+                        "Zero rule index is not applicable to non-root rules.",
+                    ));
+                }
+
+                Some(index)
+            }
+
+            (_, None) => None,
+        };
+
         Ok(Self {
             name,
             kind,
+            index,
             rule,
             synchronization,
             constructor,
@@ -220,6 +275,25 @@ impl NodeVariant {
     #[inline(always)]
     pub(in crate::node) fn kind(&self) -> &VariantKind {
         &self.kind
+    }
+
+    #[inline(always)]
+    pub(in crate::node) fn index(&self) -> Option<&RuleIndex> {
+        self.index.as_ref()
+    }
+
+    #[inline(always)]
+    pub(in crate::node) fn set_index(&mut self, index: usize) -> bool {
+        if self.index.is_some() {
+            return false;
+        }
+
+        self.index = Some(RuleIndex {
+            span: self.kind.span(),
+            index,
+        });
+
+        true
     }
 
     #[inline(always)]

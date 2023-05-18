@@ -70,6 +70,7 @@ use crate::{
 };
 
 pub(in crate::node) mod constructor;
+pub(in crate::node) mod index;
 pub(in crate::node) mod kind;
 pub(in crate::node) mod rule;
 pub(in crate::node) mod variant;
@@ -167,6 +168,7 @@ impl<'a> TryFrom<&'a DeriveInput> for Builder {
         builder.check_token_type()?;
         builder.check_root()?;
         builder.check_references()?;
+        builder.build_indices()?;
         builder.build_leftmost()?;
         builder.build_skip()?;
         builder.build_automata()?;
@@ -449,6 +451,50 @@ impl Builder {
                     parsable variant except the root rule or a comment rule must be referred \
                     directly or indirectly from the root.",
                 ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn build_indices(&mut self) -> Result<()> {
+        let mut index_map = Map::empty();
+        let mut in_use = Set::empty();
+
+        for (_, variant) in &self.variant_map {
+            if let VariantKind::Unspecified(..) = variant.kind() {
+                continue;
+            }
+
+            if let Some(index) = variant.index() {
+                if let Some(previous) = index_map.insert(index.index, variant.name()) {
+                    return Err(Error::new(
+                        index.span(),
+                        format!(
+                            "Rule \"{previous}\" has the same index.\nRule indices \
+                            must be unique."
+                        ),
+                    ));
+                }
+
+                let _ = in_use.insert(index.index);
+            }
+        }
+
+        let mut next = 1;
+
+        for (_, variant) in &mut self.variant_map {
+            if let VariantKind::Unspecified(..) = variant.kind() {
+                continue;
+            }
+
+            while in_use.contains(&next) {
+                next += 1;
+            }
+
+            if variant.set_index(next) {
+                let _ = in_use.insert(next);
+                next += 1;
             }
         }
 

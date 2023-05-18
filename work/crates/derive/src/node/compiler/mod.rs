@@ -87,24 +87,21 @@ impl<'a> Compiler<'a> {
         let variants_count = builder.variants_count();
 
         let kind_map = {
-            let mut kind = 0;
-
             builder
                 .into_iter()
                 .filter_map(|name| {
                     let variant = builder.variant(name);
 
-                    match variant.kind() {
-                        VariantKind::Unspecified(..) => None,
-
-                        VariantKind::Root(..) => Some((name, 0)),
-
-                        VariantKind::Comment(..) | VariantKind::Sentence(..) => {
-                            kind += 1;
-
-                            Some((name, kind))
-                        }
+                    if let VariantKind::Unspecified(..) = variant.kind() {
+                        return None;
                     }
+
+                    let index = variant
+                        .index()
+                        .expect("Internal error. Missing parsable rule index.")
+                        .index;
+
+                    Some((name, index))
                 })
                 .collect()
         };
