@@ -89,7 +89,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     ///
     /// By the [`Algorithm Specification`](crate::syntax::Node::new) the `Node::new` function should
     /// avoid of calling of this function with the [ROOT_RULE](crate::syntax::ROOT_RULE) value.
-    fn descend(&mut self, rule: SyntaxRule) -> NodeRef;
+    fn descend(&mut self, rule: RuleIndex) -> NodeRef;
 
     fn node(&mut self, node: Self::Node) -> NodeRef;
 
@@ -97,7 +97,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     ///
     /// If the Syntax Parser encounters grammatically incorrect input sequence, it should recover
     /// this error and register all syntax errors objects of the currently parsed
-    /// [SyntaxRule](crate::syntax::SyntaxRule) using this function.
+    /// [RuleIndex](crate::syntax::RuleIndex) using this function.
     ///
     /// The function returns a [`weak reference`](crate::syntax::ErrorRef) into registered error.
     fn error(&mut self, error: <Self::Node as Node>::Error) -> ErrorRef;
@@ -108,14 +108,14 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
 /// The exact values of this type are uniquely specified by the particular
 /// [`syntax parsing algorithm`](crate::syntax::Node::new) except the [ROOT_RULE] that is always
 /// specifies grammar's an entry rule.
-pub type SyntaxRule = &'static usize;
+pub type RuleIndex = usize;
 
 /// A syntax grammar entry rule.
 ///
 /// See [`syntax parser algorithm specification`](crate::syntax::Node::new) for details.
-pub static ROOT_RULE: SyntaxRule = &0;
+pub static ROOT_RULE: RuleIndex = 0;
 
-pub(crate) static NON_ROOT_RULE: SyntaxRule = &1;
+pub(crate) static NON_ROOT_RULE: RuleIndex = 1;
 
 pub(super) struct SequentialSyntaxSession<
     'code,
@@ -196,7 +196,7 @@ where
 {
     type Node = N;
 
-    fn descend(&mut self, rule: SyntaxRule) -> NodeRef {
+    fn descend(&mut self, rule: RuleIndex) -> NodeRef {
         let node = N::new(rule, self);
 
         let node_ref = match rule == ROOT_RULE {

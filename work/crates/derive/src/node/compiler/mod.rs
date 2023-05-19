@@ -160,7 +160,7 @@ impl<'a> Compiler<'a> {
 
                 #[inline(always)]
                 fn new<#code_lifetime>(
-                    rule: #core::syntax::SyntaxRule,
+                    rule: #core::syntax::RuleIndex,
                     session: &mut impl #core::syntax::SyntaxSession<#code_lifetime, Node = Self>,
                 ) -> Self
                 {

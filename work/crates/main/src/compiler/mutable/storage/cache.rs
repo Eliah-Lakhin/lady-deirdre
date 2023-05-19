@@ -38,12 +38,12 @@
 use crate::{
     arena::RefIndex,
     lexis::{Length, SiteRef},
-    syntax::{Cluster, Node, SyntaxRule},
+    syntax::{Cluster, Node, RuleIndex},
 };
 
 pub(crate) struct ClusterCache<N: Node> {
     pub(crate) cluster: Cluster<N>,
-    pub(crate) rule: SyntaxRule,
+    pub(crate) rule: RuleIndex,
     pub(crate) parsed_end: SiteRef,
     pub(crate) lookahead: Length,
     pub(crate) successful: bool,

@@ -55,7 +55,7 @@ pub use crate::syntax::{
     error::{ErrorRef, SyntaxError},
     no::NoSyntax,
     node::{Node, NodeRef},
-    session::{SyntaxRule, SyntaxSession, ROOT_RULE},
+    session::{RuleIndex, SyntaxSession, ROOT_RULE},
     simple::SimpleNode,
     tree::SyntaxTree,
 };

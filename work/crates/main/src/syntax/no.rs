@@ -38,7 +38,7 @@
 use crate::{
     lexis::Token,
     std::*,
-    syntax::{Node, SyntaxError, SyntaxRule, SyntaxSession},
+    syntax::{Node, RuleIndex, SyntaxError, SyntaxSession},
 };
 
 /// A special marker that forcefully skips syntax parsing stage.
@@ -82,10 +82,7 @@ impl<T: Token> Node for NoSyntax<T> {
     type Error = SyntaxError;
 
     #[inline(always)]
-    fn new<'code>(
-        _rule: SyntaxRule,
-        _session: &mut impl SyntaxSession<'code, Node = Self>,
-    ) -> Self {
+    fn new<'code>(_rule: RuleIndex, _session: &mut impl SyntaxSession<'code, Node = Self>) -> Self {
         Self::nil()
     }
 }

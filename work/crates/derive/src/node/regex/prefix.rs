@@ -134,7 +134,7 @@ impl<'a> TryFrom<&'a Attribute> for Leftmost {
         let span = attribute.span();
 
         attribute.parse_args_with(|input: ParseStream| {
-            let set = Punctuated::<TokenOrNode, Token![|]>::parse_terminated(input)?;
+            let set = Punctuated::<TokenOrNode, Token![|]>::parse_separated_nonempty(input)?;
 
             if set.is_empty() || !input.is_empty() {
                 return Err(

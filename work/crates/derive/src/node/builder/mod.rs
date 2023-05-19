@@ -414,7 +414,7 @@ impl Builder {
             .iter()
             .filter(|(_, variant)| match variant.kind() {
                 VariantKind::Root(..) | VariantKind::Comment(..) => true,
-                _ => false,
+                _ => variant.index().filter(|index| index.explicit).is_some(),
             })
             .map(|(name, _)| name.clone())
             .collect::<Vec<_>>();
@@ -444,9 +444,7 @@ impl Builder {
                 VariantKind::Sentence(span) => span,
             };
 
-            let explicit_index = variant.index().filter(|index| index.explicit).is_some();
-
-            if !explicit_index && !visited.contains(variant.name()) {
+            if !visited.contains(variant.name()) {
                 return Err(Error::new(
                     *span,
                     "Variant's rule is not referred by any other rule.\nEvery \

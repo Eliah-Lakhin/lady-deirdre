@@ -41,7 +41,7 @@ use crate::{
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
     report::{debug_assert, debug_assert_eq},
     std::*,
-    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, SyntaxRule, SyntaxSession, ROOT_RULE},
+    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, RuleIndex, SyntaxSession, ROOT_RULE},
 };
 
 pub struct MutableSyntaxSession<'unit, N: Node> {
@@ -230,7 +230,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     type Node = N;
 
-    fn descend(&mut self, rule: SyntaxRule) -> NodeRef {
+    fn descend(&mut self, rule: RuleIndex) -> NodeRef {
         if self.pending.leftmost {
             let node = N::new(rule, self);
 
@@ -374,7 +374,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         id: Id,
         tree: &'unit mut Tree<N>,
         references: &'unit mut References<N>,
-        rule: SyntaxRule,
+        rule: RuleIndex,
         start: Site,
         head: ChildRefIndex<N>,
         cluster_ref: Ref,

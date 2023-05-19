@@ -269,7 +269,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
                     "If you specify a leftmost set explicitly, you must also \
                     specify rule's Parser function that would override default parser.\n\
                     Use #[parser(<function>)] attribute to refer \
-                    \"fn Self::<function>(session: &mut SyntaxSession) -> Self\"\
+                    \"fn Self::function<'a>(session: &mut SyntaxSession<'a, Node = Self>) -> Self \"\
                     parser function.",
                 ));
             }

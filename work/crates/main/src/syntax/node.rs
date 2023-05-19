@@ -43,7 +43,7 @@ use crate::{
     arena::{Id, Identifiable, Ref},
     lexis::{Token, TokenCursor},
     std::*,
-    syntax::{ClusterRef, SyntaxBuffer, SyntaxError, SyntaxRule, SyntaxSession, SyntaxTree},
+    syntax::{ClusterRef, RuleIndex, SyntaxBuffer, SyntaxError, SyntaxSession, SyntaxTree},
 };
 
 /// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
@@ -131,7 +131,7 @@ pub trait Node: Sized + 'static {
     ///     as needed to exactly match parsed `rule`.
     ///   - To descend into a parsing subrule the Algorithm calls `session`'s
     ///     [`descend`](crate::syntax::SyntaxSession::descend) function that consumes subrule's
-    ///     [kind](crate::syntax::SyntaxRule) and returns a [`weak reference`](NodeRef) into the
+    ///     [kind](crate::syntax::RuleIndex) and returns a [`weak reference`](NodeRef) into the
     ///     rule's parsed Node.
     ///   - The Algorithm never calls [`descend`](crate::syntax::SyntaxSession::descend) function
     ///     with [ROOT_RULE](crate::syntax::ROOT_RULE). The Root Rule is not a recursive rule
@@ -155,7 +155,7 @@ pub trait Node: Sized + 'static {
     ///         Node,
     ///         NodeRef,
     ///         SyntaxSession,
-    ///         SyntaxRule,
+    ///         RuleIndex,
     ///         SyntaxError,
     ///         SyntaxTree,
     ///         TreeContent,
@@ -172,15 +172,15 @@ pub trait Node: Sized + 'static {
     ///    Other,
     /// };
     ///  
-    /// const PARENS_RULE: SyntaxRule = &1;
-    /// const OTHER_RULE: SyntaxRule = &2;
+    /// const PARENS_RULE: RuleIndex = 1;
+    /// const OTHER_RULE: RuleIndex = 2;
     ///
     /// impl Node for Parens {
     ///     type Token = SimpleToken;
     ///     type Error = SyntaxError;
     ///
     ///     fn new<'code>(
-    ///         rule: SyntaxRule,
+    ///         rule: RuleIndex,
     ///         session: &mut impl SyntaxSession<'code, Node = Self>,
     ///     ) -> Self {
     ///         // Rule dispatcher that delegates parsing control flow to specialized parse
@@ -281,7 +281,7 @@ pub trait Node: Sized + 'static {
     ///                 Some(_) => {
     ///                     // The next token is not a parenthesis token. Consuming it.
     ///                     session.advance();
-    ///                 },
+    ///                 }
     ///             }
     ///         }
     ///
@@ -294,7 +294,7 @@ pub trait Node: Sized + 'static {
     /// // The input text has been parsed without errors.
     /// assert_eq!(doc.errors().count(), 0);
     /// ```
-    fn new<'code>(rule: SyntaxRule, session: &mut impl SyntaxSession<'code, Node = Self>) -> Self;
+    fn new<'code>(rule: RuleIndex, session: &mut impl SyntaxSession<'code, Node = Self>) -> Self;
 
     /// A helper function to immediately parse a subsequent of tokens in non-incremental way.
     ///

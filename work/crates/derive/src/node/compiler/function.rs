@@ -341,7 +341,7 @@ impl<'a, 'b> Function<'a, 'b> {
                     let secondary = self.compiler.builder().variant(name).is_secondary();
 
                     let call = match secondary {
-                        false => quote!(#core::syntax::SyntaxSession::descend(session, &#kind)),
+                        false => quote!(#core::syntax::SyntaxSession::descend(session, #kind)),
 
                         true => {
                             let function = self.compiler.function_of(name);
@@ -517,7 +517,7 @@ impl<'a, 'b> Function<'a, 'b> {
                     let secondary = self.compiler.builder().variant(name).is_secondary();
 
                     let call = match secondary {
-                        false => quote!(#core::syntax::SyntaxSession::descend(session, &#kind)),
+                        false => quote!(#core::syntax::SyntaxSession::descend(session, #kind)),
 
                         true => {
                             let function = self.compiler.function_of(name);

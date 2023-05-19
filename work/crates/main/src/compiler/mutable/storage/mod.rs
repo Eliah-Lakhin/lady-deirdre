@@ -69,7 +69,7 @@ mod tests {
         },
         lexis::{LexisSession, Token},
         std::*,
-        syntax::{Node, SyntaxError, SyntaxRule, SyntaxSession},
+        syntax::{Node, RuleIndex, SyntaxError, SyntaxSession},
     };
 
     #[test]
@@ -833,7 +833,7 @@ mod tests {
         type Error = SyntaxError;
 
         fn new<'code>(
-            _rule: SyntaxRule,
+            _rule: RuleIndex,
             _session: &mut impl SyntaxSession<'code, Node = Self>,
         ) -> Self {
             unimplemented!()
