@@ -36,6 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::Ident;
+use syn::spanned::Spanned;
 
 use crate::node::{
     builder::kind::VariantKind,
@@ -53,11 +54,16 @@ impl<'a, 'b> Function<'a, 'b> {
 
         let kind = compiler.kind_of(variant_name);
         let function_name = compiler.function_of(variant_name);
+        let span = function_name.span();
+        let node_type = compiler.node_type();
 
         compiler.add_case(
             kind,
-            quote! {
-                #kind => #function_name(session)
+            quote_spanned! {span=>
+                #kind => {
+                    let node: #node_type = #function_name(session);
+                    node
+                }
             },
         );
     }

@@ -453,7 +453,7 @@ impl Builder {
                     parsable variant without explicit index except the root rule or a \
                     comment rule must be referred directly or indirectly from the root.\n\
                     If this is intended (e.g. if you want to descend into this rule \
-                    manually) mark this variant with #[index(<number>)] \
+                    manually) annotate this variant with #[index(<number>)] \
                     index override attribute.\nLater on one will be able to descend \
                     into this rule using that index number.",
                 ));
@@ -590,6 +590,10 @@ impl Builder {
                 VariantKind::Root(..) | VariantKind::Sentence(..) => false,
                 VariantKind::Comment(..) => true,
             };
+
+            if variant.parser().is_some() {
+                continue;
+            }
 
             variant.automata().check_conflicts(self, allow_skips)?;
         }

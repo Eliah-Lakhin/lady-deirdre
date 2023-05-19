@@ -82,6 +82,8 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         index,
         constructor,
         secondary,
+        leftmost,
+        parser,
         default,
     )
 )]

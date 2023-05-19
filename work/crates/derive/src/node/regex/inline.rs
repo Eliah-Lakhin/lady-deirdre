@@ -43,7 +43,13 @@ use syn::{Error, Result};
 use crate::{
     node::{
         builder::Builder,
-        regex::{operand::RegexOperand, operator::RegexOperator, span::SetSpan, Regex},
+        regex::{
+            operand::RegexOperand,
+            operator::RegexOperator,
+            prefix::Leftmost,
+            span::SetSpan,
+            Regex,
+        },
     },
     utils::debug_panic,
 };
@@ -154,4 +160,20 @@ pub(in crate::node) trait Inline {
     fn inline(&mut self, builder: &Builder) -> Result<()>;
 
     fn capture(&mut self, target: &Ident) -> Result<()>;
+}
+
+impl Leftmost {
+    pub(in crate::node) fn check_inlines(&self, builder: &Builder) -> Result<()> {
+        for node in self.nodes() {
+            if builder.get_inline(node).is_some() {
+                return Err(Error::new(
+                    node.span(),
+                    "Inline expressions cannot appear in the leftmost \
+                    set.\nThe leftmost set must refer parsable rules and tokens only.",
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }

@@ -162,33 +162,7 @@ impl Rule {
 
         let mut leftmost = self.regex.leftmost();
 
-        for node in leftmost.nodes().clone() {
-            {
-                let variant = match builder.get_variant(&node) {
-                    Some(variant) => variant,
-
-                    None => {
-                        return Err(Error::new(
-                            node.span(),
-                            format!(
-                                "Reference \"{}\" in the leftmost position leads to a left \
-                                recursion. Left recursion is forbidden.",
-                                node,
-                            ),
-                        ));
-                    }
-                };
-
-                if let Some(resolution) = variant.get_leftmost() {
-                    leftmost.append(resolution.clone());
-                    continue;
-                }
-            }
-
-            builder.modify(&node, |builder, variant| variant.build_leftmost(builder))?;
-
-            leftmost.append(builder.variant(&node).leftmost().clone());
-        }
+        leftmost.resolve(builder)?;
 
         self.leftmost = Some(leftmost);
 

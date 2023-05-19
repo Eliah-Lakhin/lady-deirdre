@@ -38,6 +38,7 @@
 use std::{collections::VecDeque, ops::RangeFrom};
 
 use proc_macro2::{Ident, TokenStream};
+use syn::spanned::Spanned;
 
 use crate::{
     node::{
@@ -341,12 +342,16 @@ impl<'a, 'b> Function<'a, 'b> {
 
                     let call = match secondary {
                         false => quote!(#core::syntax::SyntaxSession::descend(session, &#kind)),
+
                         true => {
                             let function = self.compiler.function_of(name);
-                            quote! {{
-                                let node = #function(session);
+                            let span = function.span();
+                            let node_type = self.compiler.node_type();
+
+                            quote_spanned!(span=> {
+                                let node: #node_type = #function(session);
                                 #core::syntax::SyntaxSession::node(session, node)
-                            }}
+                            })
                         }
                     };
 
@@ -513,12 +518,16 @@ impl<'a, 'b> Function<'a, 'b> {
 
                     let call = match secondary {
                         false => quote!(#core::syntax::SyntaxSession::descend(session, &#kind)),
+
                         true => {
                             let function = self.compiler.function_of(name);
-                            quote! {{
-                                let node = #function(session);
+                            let span = function.span();
+                            let node_type = self.compiler.node_type();
+
+                            quote_spanned!(span=> {
+                                let node: #node_type = #function(session);
                                 #core::syntax::SyntaxSession::node(session, node)
-                            }}
+                            })
                         }
                     };
 

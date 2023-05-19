@@ -90,7 +90,7 @@ impl CheckConflicts for NodeAutomata {
 
                         Terminal::Node { name, .. } => {
                             message.push_str(&format!(
-                                "rule {:?} that contains the same token matching in its leftmost \
+                                "rule {:?} that contains the same token match in its leftmost \
                                 position.",
                                 name.to_string(),
                             ));

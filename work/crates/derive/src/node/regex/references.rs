@@ -41,7 +41,7 @@ use syn::{Error, Result};
 use crate::{
     node::{
         builder::{kind::VariantKind, Builder},
-        regex::{operand::RegexOperand, Regex},
+        regex::{operand::RegexOperand, prefix::Leftmost, Regex},
     },
     utils::{debug_panic, PredictableCollection, Set, SetImpl},
 };
@@ -86,7 +86,9 @@ impl CheckReferences for Regex {
                 };
 
                 match (context, reference.kind()) {
-                    (Unspecified(..), _) => debug_panic!("Unspecified variant with rule."),
+                    (Unspecified(..), _) => {
+                        debug_panic!("Unspecified variant with rule or parser.")
+                    }
 
                     (Comment(..), _) => {
                         return Err(Error::new(
@@ -127,7 +129,7 @@ impl CheckReferences for Regex {
                             format!(
                                 "Reference \"{}\" points to an enum variant without associated \
                                 parsing rule.\nAssociate that variant with parsing rule using \
-                                #[rule(..)] attribute.",
+                                #[rule(...)] or #[parser(...)] attribute.",
                                 name,
                             ),
                         ));
@@ -150,6 +152,82 @@ impl CheckReferences for Regex {
                 Ok(left.merge(right))
             }
         }
+    }
+}
+
+impl CheckReferences for Leftmost {
+    fn check_references(&self, context: &VariantKind, builder: &Builder) -> Result<Set<Ident>> {
+        use VariantKind::*;
+
+        for name in self.nodes() {
+            let reference = match builder.get_variant(name) {
+                Some(variant) => variant,
+
+                _ => {
+                    return Err(Error::new(
+                        name.span(),
+                        format!(
+                            "Unresolved reference \"{}\".\nTry to introduce an enum variant \
+                            with this name.",
+                            name,
+                        ),
+                    ));
+                }
+            };
+
+            match (context, reference.kind()) {
+                (Unspecified(..), _) => debug_panic!("Unspecified variant with rule or parser."),
+
+                (Comment(..), _) => {
+                    return Err(Error::new(
+                        name.span(),
+                        format!(
+                            "Reference \"{}\" points to a rule from the comment context. \
+                            Comments cannot refer other rules.",
+                            name,
+                        ),
+                    ));
+                }
+
+                (_, Root(..)) => {
+                    return Err(Error::new(
+                        name.span(),
+                        format!(
+                            "Reference \"{}\" points to the root rule. Root rule cannot be \
+                            referred.",
+                            name,
+                        ),
+                    ));
+                }
+
+                (_, Comment(..)) => {
+                    return Err(Error::new(
+                        name.span(),
+                        format!(
+                            "Reference \"{}\" points to a comment rule. Comment rule cannot be \
+                            referred.",
+                            name,
+                        ),
+                    ));
+                }
+
+                (_, Unspecified(..)) => {
+                    return Err(Error::new(
+                        name.span(),
+                        format!(
+                            "Reference \"{}\" points to an enum variant without associated \
+                            parsing rule.\nAssociate that variant with parsing rule using \
+                            #[rule(...)] or #[parser(...)] attribute.",
+                            name,
+                        ),
+                    ));
+                }
+
+                _ => (),
+            }
+        }
+
+        Ok(self.nodes().clone())
     }
 }
 

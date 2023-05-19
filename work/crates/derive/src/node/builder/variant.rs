@@ -48,7 +48,7 @@ use crate::{
             rule::Rule,
             Builder,
         },
-        regex::{prefix::Leftmost, Regex},
+        regex::{prefix::Leftmost, references::CheckReferences, Regex},
     },
     utils::{debug_panic, PredictableCollection, Set},
 };
@@ -58,6 +58,7 @@ pub(in crate::node) struct NodeVariant {
     kind: VariantKind,
     index: Option<RuleIndex>,
     rule: Option<Rule>,
+    parser: Option<(Ident, bool, Leftmost)>,
     synchronization: Option<Span>,
     constructor: Option<Constructor>,
     secondary: bool,
@@ -84,6 +85,8 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
         let mut synchronization = None;
         let mut constructor = None;
         let mut secondary = None;
+        let mut leftmost = None;
+        let mut parser = None;
 
         for attribute in &variant.attrs {
             match attribute.style {
@@ -156,36 +159,124 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
                     secondary = Some(attribute.span());
                 }
 
+                "leftmost" => {
+                    if leftmost.is_some() {
+                        return Err(Error::new(
+                            attribute.span(),
+                            "Duplicate Leftmost specification attribute.",
+                        ));
+                    }
+
+                    leftmost = Some(Leftmost::try_from(attribute)?);
+                }
+
+                "parser" => {
+                    if parser.is_some() {
+                        return Err(Error::new(attribute.span(), "Duplicate Parser attribute."));
+                    }
+
+                    parser = Some(attribute.parse_args::<Ident>()?);
+                }
+
                 _ => (),
             }
         }
 
         let kind = match (kind, &rule) {
-            (Unspecified(..), Some(rule)) => Sentence(rule.span()),
+            (Unspecified(..), Some(rule)) => {
+                if parser.is_some() {
+                    return Err(Error::new(
+                        rule.span(),
+                        "Rule sentence conflicts with #[parser(...)] \
+                        parser function specification.\nThe rule sentence creates \
+                        parser function implicitly.",
+                    ));
+                }
 
-            (kind @ Root(..), Some(..)) => kind,
+                Sentence(rule.span())
+            }
+
+            (kind @ Root(..), Some(rule)) => {
+                if parser.is_some() {
+                    return Err(Error::new(
+                        rule.span(),
+                        "Rule sentence conflicts with #[parser(...)] \
+                        parser function specification.\nThe rule sentence creates \
+                        parser function implicitly.",
+                    ));
+                }
+
+                kind
+            }
 
             (Root(span), None) => {
-                return Err(Error::new(
-                    span,
-                    "Root annotation is not applicable to non-parsable rules.\n\
-                    Associate this variant with #[rule(...)] attribute.",
-                ));
+                if parser.is_none() {
+                    return Err(Error::new(
+                        span,
+                        "Root annotation is not applicable to non-parsable rules.\n\
+                        Associate this variant with #[rule(...)] or #[parser(...)] attribute.",
+                    ));
+                }
+
+                Root(span)
             }
 
-            (kind @ Comment(..), Some(..)) => kind,
+            (kind @ Comment(..), Some(rule)) => {
+                if parser.is_some() {
+                    return Err(Error::new(
+                        rule.span(),
+                        "Rule sentence conflicts with #[parser(...)] \
+                        parser function specification.\nThe rule sentence creates \
+                        parser function implicitly.",
+                    ));
+                }
+
+                kind
+            }
 
             (Comment(span), None) => {
+                if parser.is_none() {
+                    return Err(Error::new(
+                        span,
+                        "Comment annotation is not applicable to non-parsable rules.\n\
+                        Associate this variant with #[rule(...)] or #[parser(...)] attribute.",
+                    ));
+                }
+
+                Comment(span)
+            }
+
+            (kind @ Unspecified(..), None) => match &parser {
+                Some(name) => Sentence(name.span()),
+                None => kind,
+            },
+
+            (Sentence(..), _) => debug_panic!("Variant kind set to Sentence."),
+        };
+
+        let parser = match (parser, leftmost) {
+            (Some(name), None) => {
                 return Err(Error::new(
-                    span,
-                    "Comment annotation is not applicable to non-parsable rules.\n\
-                    Associate this variant with #[rule(...)] attribute.",
+                    name.span(),
+                    "If you specify a Parser function, you must also \
+                    specify rule's leftmost set using #[leftmost(...)] attribute.",
                 ));
             }
 
-            (kind @ Unspecified(..), None) => kind,
+            (None, Some(leftmost)) => {
+                return Err(Error::new(
+                    leftmost.span(),
+                    "If you specify a leftmost set explicitly, you must also \
+                    specify rule's Parser function that would override default parser.\n\
+                    Use #[parser(<function>)] attribute to refer \
+                    \"fn Self::<function>(session: &mut SyntaxSession) -> Self\"\
+                    parser function.",
+                ));
+            }
 
-            (Sentence(..), _) => debug_panic!("Variant kind set to Sentence."),
+            (Some(name), Some(leftmost)) => Some((name, false, leftmost)),
+
+            (None, None) => None,
         };
 
         match (&kind, &synchronization) {
@@ -211,6 +302,16 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
                 ));
             }
 
+            (_, Some(span)) => {
+                if parser.is_some() {
+                    return Err(Error::new(
+                        *span,
+                        "Synchronization annotation is not applicable \
+                        to the rules with explicit parser function.",
+                    ));
+                }
+            }
+
             _ => (),
         }
 
@@ -225,9 +326,23 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
 
             (Unspecified(..), None) => None,
 
-            (_, Some(constructor)) => Some(constructor),
+            (_, Some(constructor)) => {
+                if parser.is_some() {
+                    return Err(Error::new(
+                        constructor.span(),
+                        "Explicit constructor is not applicable \
+                        to the rules with explicit parser function.\nExplicit \
+                        parse functions suppose to construct Node variants manually.",
+                    ));
+                }
 
-            (_, None) => Some(Constructor::try_from(variant)?),
+                Some(constructor)
+            }
+
+            (_, None) => match parser.is_some() {
+                true => None,
+                false => Some(Constructor::try_from(variant)?),
+            },
         };
 
         let index = match (&kind, index) {
@@ -297,6 +412,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
             kind,
             index,
             rule,
+            parser,
             synchronization,
             constructor,
             secondary,
@@ -336,7 +452,19 @@ impl NodeVariant {
     }
 
     #[inline(always)]
+    pub(in crate::node) fn parser(&self) -> Option<&Ident> {
+        self.parser.as_ref().map(|(name, _, _)| name)
+    }
+
+    #[inline(always)]
     pub(in crate::node) fn get_leftmost(&self) -> Option<&Leftmost> {
+        if let Some((_, built, leftmost)) = &self.parser {
+            return match built {
+                true => Some(leftmost),
+                false => None,
+            };
+        }
+
         self.rule
             .as_ref()
             .expect("Internal error. Missing variant rule.")
@@ -392,6 +520,10 @@ impl NodeVariant {
 
     #[inline(always)]
     pub(in crate::node) fn inline(&mut self, builder: &Builder) -> Result<()> {
+        if let Some((_, _, leftmost)) = &self.parser {
+            return leftmost.check_inlines(builder);
+        }
+
         match &mut self.rule {
             None => Ok(()),
 
@@ -401,6 +533,10 @@ impl NodeVariant {
 
     #[inline(always)]
     pub(in crate::node) fn check_references(&self, builder: &Builder) -> Result<Set<Ident>> {
+        if let Some((_, _, leftmost)) = &self.parser {
+            return leftmost.check_references(&self.kind, builder);
+        }
+
         match &self.rule {
             None => Ok(Set::empty()),
 
@@ -410,6 +546,18 @@ impl NodeVariant {
 
     #[inline(always)]
     pub(in crate::node) fn build_leftmost(&mut self, builder: &mut Builder) -> Result<()> {
+        if let Some((_, built, leftmost)) = &mut self.parser {
+            if *built {
+                return Ok(());
+            }
+
+            leftmost.resolve(builder)?;
+
+            *built = true;
+
+            return Ok(());
+        }
+
         let rule = match &mut self.rule {
             None => return Ok(()),
 
@@ -420,6 +568,10 @@ impl NodeVariant {
     }
 
     pub(in crate::node) fn inject_skip(&mut self, injection: &Regex) {
+        if self.parser.is_some() {
+            return;
+        }
+
         match self.kind {
             VariantKind::Unspecified(..) | VariantKind::Comment(..) => (),
 

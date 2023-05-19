@@ -45,6 +45,7 @@ pub(in crate::node) mod transitions;
 pub(in crate::node) mod variables;
 
 use proc_macro2::{Ident, TokenStream};
+use quote::ToTokens;
 
 use crate::{
     node::{
@@ -118,7 +119,10 @@ impl<'a> Compiler<'a> {
 
         for variant_name in builder {
             Function::compile_case(&mut compiler, variant_name);
-            Function::compile_variant_function(&mut compiler, variant_name);
+
+            if !builder.variant(variant_name).parser().is_some() {
+                Function::compile_variant_function(&mut compiler, variant_name);
+            }
         }
 
         let skip = Function::compile_skip_function(&mut compiler);
@@ -219,7 +223,22 @@ impl<'a> Compiler<'a> {
     }
 
     #[inline(always)]
-    pub(in crate::node) fn function_of(&self, variant_name: &Ident) -> Ident {
-        Ident::new(&format!("parse_{}", variant_name), variant_name.span())
+    pub(in crate::node) fn function_of(&self, variant_name: &Ident) -> TokenStream {
+        let variant = self.builder.variant(variant_name);
+
+        match variant.parser() {
+            Some(ident) => {
+                let span = ident.span();
+                let this = &self.node_type;
+
+                quote_spanned!(span=> #this::#ident)
+            }
+
+            None => {
+                let span = variant_name.span();
+
+                format_ident!("parse_{}", variant_name, span = span).into_token_stream()
+            }
+        }
     }
 }

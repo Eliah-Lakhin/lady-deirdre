@@ -37,18 +37,48 @@
 
 use std::fmt::{Display, Formatter};
 
-use proc_macro2::Ident;
+use proc_macro2::{Ident, Span};
+use syn::{
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    spanned::Spanned,
+    Attribute,
+    Error,
+    Result,
+};
 
 use crate::{
-    node::regex::{operand::RegexOperand, operator::RegexOperator, Regex},
+    node::{
+        builder::Builder,
+        regex::{operand::RegexOperand, operator::RegexOperator, Regex},
+    },
     utils::{debug_panic, PredictableCollection, Set, SetImpl},
 };
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(in crate::node) struct Leftmost {
+    span: Span,
     optional: bool,
     tokens: Set<Ident>,
     nodes: Set<Ident>,
+}
+
+impl Default for Leftmost {
+    #[inline(always)]
+    fn default() -> Self {
+        Self {
+            span: Span::call_site(),
+            optional: false,
+            tokens: Set::empty(),
+            nodes: Set::empty(),
+        }
+    }
+}
+
+impl Spanned for Leftmost {
+    fn span(&self) -> Span {
+        self.span
+    }
 }
 
 impl Display for Leftmost {
@@ -74,6 +104,76 @@ impl Display for Leftmost {
     }
 }
 
+impl<'a> TryFrom<&'a Attribute> for Leftmost {
+    type Error = Error;
+
+    fn try_from(attribute: &'a Attribute) -> Result<Self> {
+        enum TokenOrNode {
+            Token(Ident),
+            Node(Ident),
+        }
+
+        impl Parse for TokenOrNode {
+            fn parse(input: ParseStream) -> Result<Self> {
+                let lookahead = input.lookahead1();
+
+                if input.peek(Token![$]) {
+                    let _ = input.parse::<Token![$]>()?;
+
+                    return Ok(Self::Token(input.parse::<Ident>()?));
+                }
+
+                if lookahead.peek(syn::Ident) {
+                    return Ok(Self::Node(input.parse::<Ident>()?));
+                }
+
+                return Err(lookahead.error());
+            }
+        }
+
+        let span = attribute.span();
+
+        attribute.parse_args_with(|input: ParseStream| {
+            let set = Punctuated::<TokenOrNode, Token![|]>::parse_terminated(input)?;
+
+            if set.is_empty() || !input.is_empty() {
+                return Err(
+                    input.error("Expected $<Token> or <Node> sequence separated with pipe ('|').")
+                );
+            }
+
+            let mut leftmost = Self {
+                span,
+                optional: false,
+                tokens: Set::empty(),
+                nodes: Set::empty(),
+            };
+
+            for entry in set {
+                match entry {
+                    TokenOrNode::Token(ident) => {
+                        if leftmost.tokens.contains(&ident) {
+                            return Err(Error::new(ident.span(), "Duplicate token."));
+                        }
+
+                        let _ = leftmost.tokens.insert(ident);
+                    }
+
+                    TokenOrNode::Node(ident) => {
+                        if leftmost.nodes.contains(&ident) {
+                            return Err(Error::new(ident.span(), "Duplicate node."));
+                        }
+
+                        let _ = leftmost.nodes.insert(ident);
+                    }
+                }
+            }
+
+            Ok(leftmost)
+        })
+    }
+}
+
 impl Leftmost {
     pub(in crate::node) fn append(&mut self, other: Self) {
         self.tokens.append(other.tokens);
@@ -91,8 +191,42 @@ impl Leftmost {
     }
 
     #[inline(always)]
+    pub(in crate::node) fn resolve(&mut self, builder: &mut Builder) -> Result<()> {
+        for node in self.nodes.clone() {
+            {
+                let variant = match builder.get_variant(&node) {
+                    Some(variant) => variant,
+
+                    None => {
+                        return Err(Error::new(
+                            node.span(),
+                            format!(
+                                "Reference \"{}\" in the leftmost position leads to a left \
+                                recursion. Left recursion is forbidden.",
+                                node,
+                            ),
+                        ));
+                    }
+                };
+
+                if let Some(resolution) = variant.get_leftmost() {
+                    self.append(resolution.clone());
+                    continue;
+                }
+            }
+
+            builder.modify(&node, |builder, variant| variant.build_leftmost(builder))?;
+
+            self.append(builder.variant(&node).leftmost().clone());
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
     fn new_token(token: Ident) -> Self {
         Self {
+            span: token.span(),
             optional: false,
             tokens: Set::new([token]),
             nodes: Set::empty(),
@@ -102,6 +236,7 @@ impl Leftmost {
     #[inline(always)]
     fn new_node(node: Ident) -> Self {
         Self {
+            span: node.span(),
             optional: false,
             tokens: Set::empty(),
             nodes: Set::new([node]),
