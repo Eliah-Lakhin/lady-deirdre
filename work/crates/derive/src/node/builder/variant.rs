@@ -252,6 +252,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
             (Root(span), None) => Some(RuleIndex {
                 span: *span,
                 index: 0,
+                explicit: false,
             }),
 
             (_, Some(index)) => {
@@ -328,6 +329,7 @@ impl NodeVariant {
         self.index = Some(RuleIndex {
             span: self.kind.span(),
             index,
+            explicit: false,
         });
 
         true

@@ -41,6 +41,7 @@ use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitInt, Result
 pub(in crate::node) struct RuleIndex {
     pub(in crate::node) span: Span,
     pub(in crate::node) index: usize,
+    pub(in crate::node) explicit: bool,
 }
 
 impl Spanned for RuleIndex {
@@ -61,7 +62,11 @@ impl<'a> TryFrom<&'a Attribute> for RuleIndex {
 
             let index = index.base10_parse::<usize>()?;
 
-            Ok(Self { span, index })
+            Ok(Self {
+                span,
+                index,
+                explicit: true,
+            })
         })
     }
 }

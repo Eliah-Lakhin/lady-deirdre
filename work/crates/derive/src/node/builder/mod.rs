@@ -444,12 +444,18 @@ impl Builder {
                 VariantKind::Sentence(span) => span,
             };
 
-            if !visited.contains(variant.name()) {
+            let explicit_index = variant.index().filter(|index| index.explicit).is_some();
+
+            if !explicit_index && !visited.contains(variant.name()) {
                 return Err(Error::new(
                     *span,
                     "Variant's rule is not referred by any other rule.\nEvery \
-                    parsable variant except the root rule or a comment rule must be referred \
-                    directly or indirectly from the root.",
+                    parsable variant without explicit index except the root rule or a \
+                    comment rule must be referred directly or indirectly from the root.\n\
+                    If this is intended (e.g. if you want to descend into this rule \
+                    manually) mark this variant with #[index(<number>)] \
+                    index override attribute.\nLater on one will be able to descend \
+                    into this rule using that index number.",
                 ));
             }
         }
