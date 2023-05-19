@@ -57,6 +57,7 @@ pub enum JsonNode {
     Object { entries: Vec<NodeRef> },
 
     #[rule(key: $String & $Colon & value: ANY)]
+    #[secondary]
     Entry { key: TokenRef, value: NodeRef },
 
     #[rule($BracketOpen & (items: ANY)*{$Comma} & $BracketClose)]
@@ -64,17 +65,22 @@ pub enum JsonNode {
     Array { items: Vec<NodeRef> },
 
     #[rule(value: $String)]
+    #[secondary]
     String { value: TokenRef },
 
     #[rule(value: $Number)]
+    #[secondary]
     Number { value: TokenRef },
 
     #[rule($True)]
+    #[secondary]
     True,
 
     #[rule($False)]
+    #[secondary]
     False,
 
     #[rule($Null)]
+    #[secondary]
     Null,
 }

@@ -346,6 +346,15 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
+    fn node(&mut self, node: Self::Node) -> NodeRef {
+        NodeRef {
+            id: self.id,
+            cluster_ref: self.pending.cluster_ref,
+            node_ref: self.pending.nodes.insert(node),
+        }
+    }
+
+    #[inline(always)]
     fn error(&mut self, error: <Self::Node as Node>::Error) -> ErrorRef {
         self.pending.successful = false;
 

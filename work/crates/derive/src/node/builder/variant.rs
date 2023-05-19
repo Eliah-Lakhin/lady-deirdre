@@ -60,6 +60,7 @@ pub(in crate::node) struct NodeVariant {
     rule: Option<Rule>,
     synchronization: Option<Span>,
     constructor: Option<Constructor>,
+    secondary: bool,
 }
 
 impl Spanned for NodeVariant {
@@ -82,6 +83,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
         let mut index = None;
         let mut synchronization = None;
         let mut constructor = None;
+        let mut secondary = None;
 
         for attribute in &variant.attrs {
             match attribute.style {
@@ -140,7 +142,18 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
                         return Err(Error::new(attribute.span(), "Duplicate Index attribute."));
                     }
 
-                    index = Some(RuleIndex::try_from(attribute)?)
+                    index = Some(RuleIndex::try_from(attribute)?);
+                }
+
+                "secondary" => {
+                    if secondary.is_some() {
+                        return Err(Error::new(
+                            attribute.span(),
+                            "Duplicate Secondary marker attribute.",
+                        ));
+                    }
+
+                    secondary = Some(attribute.span());
                 }
 
                 _ => (),
@@ -255,6 +268,29 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
             (_, None) => None,
         };
 
+        let secondary = match (&kind, secondary) {
+            (Unspecified(..), Some(span)) => {
+                return Err(Error::new(
+                    span,
+                    "Secondary markers not applicable to non-parsable rules.\n\
+                    Associate this variant with rule type.",
+                ));
+            }
+
+            (Unspecified(..), None) => false,
+
+            (Root(..), Some(span)) => {
+                return Err(Error::new(
+                    span,
+                    "Secondary marker is not applicable to the Root rule.",
+                ));
+            }
+
+            (Root(..), None) => false,
+
+            (_, marker) => marker.is_some(),
+        };
+
         Ok(Self {
             name,
             kind,
@@ -262,6 +298,7 @@ impl<'a> TryFrom<&'a Variant> for NodeVariant {
             rule,
             synchronization,
             constructor,
+            secondary,
         })
     }
 }
@@ -344,6 +381,11 @@ impl NodeVariant {
             .as_ref()
             .expect("Internal error. Missing variant rule.")
             .automata()
+    }
+
+    #[inline(always)]
+    pub(in crate::node) fn is_secondary(&self) -> bool {
+        self.secondary
     }
 
     #[inline(always)]

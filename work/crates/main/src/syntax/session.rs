@@ -91,6 +91,8 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// avoid of calling of this function with the [ROOT_RULE](crate::syntax::ROOT_RULE) value.
     fn descend(&mut self, rule: SyntaxRule) -> NodeRef;
 
+    fn node(&mut self, node: Self::Node) -> NodeRef;
+
     /// Registers a syntax parse error.
     ///
     /// If the Syntax Parser encounters grammatically incorrect input sequence, it should recover
@@ -211,6 +213,15 @@ where
             id: self.id,
             cluster_ref: Ref::Primary,
             node_ref,
+        }
+    }
+
+    #[inline(always)]
+    fn node(&mut self, node: Self::Node) -> NodeRef {
+        NodeRef {
+            id: self.id,
+            cluster_ref: Ref::Primary,
+            node_ref: self.nodes.insert(node),
         }
     }
 

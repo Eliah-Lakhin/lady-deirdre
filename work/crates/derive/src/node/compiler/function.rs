@@ -337,20 +337,22 @@ impl<'a, 'b> Function<'a, 'b> {
 
                 Terminal::Node { name, capture } => {
                     let kind = self.compiler.kind_of(name);
+                    let secondary = self.compiler.builder().variant(name).is_secondary();
+
+                    let call = match secondary {
+                        false => quote!(#core::syntax::SyntaxSession::descend(session, &#kind)),
+                        true => {
+                            let function = self.compiler.function_of(name);
+                            quote! {{
+                                let node = #function(session);
+                                #core::syntax::SyntaxSession::node(session, node)
+                            }}
+                        }
+                    };
 
                     let descend = match capture {
-                        None => {
-                            quote! {
-                                let _ = #core::syntax::SyntaxSession::descend(session, &#kind);
-                            }
-                        }
-
-                        Some(name) => self.variables.get(name).write(
-                            self.compiler.facade(),
-                            quote! {
-                                #core::syntax::SyntaxSession::descend(session, &#kind)
-                            },
-                        ),
+                        None => quote!(let _ = #call;),
+                        Some(name) => self.variables.get(name).write(self.compiler.facade(), call),
                     };
 
                     let leftmost = self.compiler.builder().variant(name).leftmost();
@@ -507,20 +509,22 @@ impl<'a, 'b> Function<'a, 'b> {
 
                 Terminal::Node { name, capture } => {
                     let kind = self.compiler.kind_of(name);
+                    let secondary = self.compiler.builder().variant(name).is_secondary();
+
+                    let call = match secondary {
+                        false => quote!(#core::syntax::SyntaxSession::descend(session, &#kind)),
+                        true => {
+                            let function = self.compiler.function_of(name);
+                            quote! {{
+                                let node = #function(session);
+                                #core::syntax::SyntaxSession::node(session, node)
+                            }}
+                        }
+                    };
 
                     match capture {
-                        None => {
-                            quote! {
-                                let _ = #core::syntax::SyntaxSession::descend(session, &#kind);
-                            }
-                        }
-
-                        Some(name) => self.variables.get(name).write(
-                            self.compiler.facade(),
-                            quote! {
-                                #core::syntax::SyntaxSession::descend(session, &#kind)
-                            },
-                        ),
+                        None => quote!(let _ = #call;),
+                        Some(name) => self.variables.get(name).write(self.compiler.facade(), call),
                     }
                 }
             };
