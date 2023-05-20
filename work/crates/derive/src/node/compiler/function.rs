@@ -50,7 +50,7 @@ use crate::{
             transitions::{TransitionsVector, TransitionsVectorImpl},
             Compiler,
         },
-        regex::terminal::Terminal,
+        regex::{operand::TokenLit, terminal::Terminal},
     },
     utils::{debug_panic, Map, PredictableCollection, Set, SetImpl, State},
 };
@@ -422,7 +422,7 @@ impl<'a, 'b> Function<'a, 'b> {
                 Terminal::Null => debug_panic!("Automata with null transition."),
 
                 Terminal::Token { name, .. } => {
-                    let token = name.to_string();
+                    let token = name.string();
 
                     quote! {
                         let _ = #core::syntax::SyntaxSession::error(
@@ -797,7 +797,7 @@ impl<'a, 'b> Function<'a, 'b> {
         &self,
         delimiters: &PanicDelimiters,
         error: &TokenStream,
-        expected: &Ident,
+        expected: &TokenLit,
     ) -> TokenStream {
         let core = self.compiler.facade().core_crate();
         let option = self.compiler.facade().option();

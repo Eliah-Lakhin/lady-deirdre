@@ -107,7 +107,7 @@ impl<'a> TransitionsVectorImpl<'a> for TransitionsVector<'a> {
             match through {
                 Terminal::Null => debug_panic!("Automata with null transition."),
 
-                Terminal::Token { name, .. } => tokens.push(name.to_string()),
+                Terminal::Token { name, .. } => tokens.push(name.string()),
 
                 Terminal::Node { name, .. } => nodes.push(name.to_string()),
             }

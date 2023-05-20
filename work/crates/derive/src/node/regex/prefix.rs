@@ -50,7 +50,11 @@ use syn::{
 use crate::{
     node::{
         builder::Builder,
-        regex::{operand::RegexOperand, operator::RegexOperator, Regex},
+        regex::{
+            operand::{RegexOperand, TokenLit},
+            operator::RegexOperator,
+            Regex,
+        },
     },
     utils::{debug_panic, PredictableCollection, Set, SetImpl},
 };
@@ -59,7 +63,7 @@ use crate::{
 pub(in crate::node) struct Leftmost {
     span: Span,
     optional: bool,
-    tokens: Set<Ident>,
+    tokens: Set<TokenLit>,
     nodes: Set<Ident>,
 }
 
@@ -89,7 +93,7 @@ impl Display for Leftmost {
         tokens.sort();
 
         for name in &tokens {
-            writeln!(formatter, "    ${}", name)?;
+            writeln!(formatter, "    {}", name)?;
         }
 
         let mut nodes = self.nodes.iter().cloned().collect::<Vec<_>>();
@@ -109,7 +113,7 @@ impl<'a> TryFrom<&'a Attribute> for Leftmost {
 
     fn try_from(attribute: &'a Attribute) -> Result<Self> {
         enum TokenOrNode {
-            Token(Ident),
+            Token(TokenLit),
             Node(Ident),
         }
 
@@ -118,9 +122,7 @@ impl<'a> TryFrom<&'a Attribute> for Leftmost {
                 let lookahead = input.lookahead1();
 
                 if input.peek(Token![$]) {
-                    let _ = input.parse::<Token![$]>()?;
-
-                    return Ok(Self::Token(input.parse::<Ident>()?));
+                    return Ok(Self::Token(input.parse::<TokenLit>()?));
                 }
 
                 if lookahead.peek(syn::Ident) {
@@ -181,7 +183,7 @@ impl Leftmost {
     }
 
     #[inline(always)]
-    pub(in crate::node) fn tokens(&self) -> &Set<Ident> {
+    pub(in crate::node) fn tokens(&self) -> &Set<TokenLit> {
         &self.tokens
     }
 
@@ -224,7 +226,7 @@ impl Leftmost {
     }
 
     #[inline(always)]
-    fn new_token(token: Ident) -> Self {
+    fn new_token(token: TokenLit) -> Self {
         Self {
             span: token.span(),
             optional: false,
@@ -248,6 +250,8 @@ impl RegexPrefix for Regex {
     fn leftmost(&self) -> Leftmost {
         match self {
             Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
+
+            Self::Operand(RegexOperand::Exclusion { .. }) => debug_panic!("Unresolved exclusion."),
 
             Self::Operand(RegexOperand::Debug { inner, .. }) => inner.leftmost(),
 

@@ -88,6 +88,8 @@ impl Inline for Regex {
 
             Self::Operand(RegexOperand::Rule { .. }) => Ok(()),
 
+            Self::Operand(RegexOperand::Exclusion { .. }) => Ok(()),
+
             Self::Unary { operator, inner } => {
                 match operator {
                     RegexOperator::ZeroOrMore {
@@ -123,7 +125,8 @@ impl Inline for Regex {
             Self::Operand(
                 RegexOperand::Unresolved { capture, .. }
                 | RegexOperand::Token { capture, .. }
-                | RegexOperand::Rule { capture, .. },
+                | RegexOperand::Rule { capture, .. }
+                | RegexOperand::Exclusion { capture, .. },
             ) => {
                 if let Some(capture) = capture {
                     if capture != target {

@@ -47,6 +47,8 @@ impl IsSkipRegex for Regex {
         match self {
             Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
 
+            Self::Operand(RegexOperand::Exclusion { .. }) => debug_panic!("Unresolved exclusion."),
+
             Self::Operand(RegexOperand::Debug { inner, .. }) => inner.is_skip(),
 
             Self::Operand(RegexOperand::Token {

@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use syn::{Error, Result};
+use syn::{spanned::Spanned, Error, Result};
 
 use crate::{
     node::{automata::NodeAutomata, regex::terminal::Terminal},
@@ -49,7 +49,15 @@ impl IsSkipAutomata for NodeAutomata {
                 match through {
                     Terminal::Null => debug_panic!("Automata with null transition."),
 
-                    Terminal::Node { name, .. } | Terminal::Token { name, .. } => {
+                    Terminal::Node { name, .. } => {
+                        return Err(Error::new(
+                            name.span(),
+                            "Skip expression cannot match token sequences of more than one \
+                            token.",
+                        ));
+                    }
+
+                    Terminal::Token { name, .. } => {
                         return Err(Error::new(
                             name.span(),
                             "Skip expression cannot match token sequences of more than one \

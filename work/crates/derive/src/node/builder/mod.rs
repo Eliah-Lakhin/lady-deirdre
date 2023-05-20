@@ -59,14 +59,14 @@ use crate::{
         regex::{
             encode::Encode,
             inline::Inline,
-            operand::RegexOperand,
+            operand::{RegexOperand, TokenLit},
             operator::RegexOperator,
             prefix::{Leftmost, RegexPrefix},
             skip::IsSkipRegex,
             Regex,
         },
     },
-    utils::{debug_panic, Map, PredictableCollection, Set},
+    utils::{debug_panic, Map, PredictableCollection, Set, SetImpl},
 };
 
 pub(in crate::node) mod constructor;
@@ -84,9 +84,10 @@ pub(in crate::node) struct Builder {
     skip: Option<Regex>,
     inline_map: Map<Ident, Regex>,
     variant_map: Map<Ident, NodeVariant>,
+    alphabet: Set<TokenLit>,
     skip_leftmost: Leftmost,
     skip_automata: Option<NodeAutomata>,
-    synchronization: Map<Ident, Ident>,
+    synchronization: Map<TokenLit, TokenLit>,
 }
 
 impl<'a> TryFrom<&'a DeriveInput> for Builder {
@@ -105,6 +106,7 @@ impl<'a> TryFrom<&'a DeriveInput> for Builder {
             skip: None,
             inline_map: Map::empty(),
             variant_map: Map::empty(),
+            alphabet: Set::empty(),
             skip_leftmost: Leftmost::default(),
             skip_automata: None,
             synchronization: Map::empty(),
@@ -161,12 +163,13 @@ impl<'a> TryFrom<&'a DeriveInput> for Builder {
         }
 
         for variant in &data.variants {
-            builder.add_variant(variant)?;
+            builder.alphabet = builder.add_variant(variant)?.merge(builder.alphabet);
         }
 
         builder.check_error_type()?;
         builder.check_token_type()?;
         builder.check_root()?;
+        builder.resolve_exclusions();
         builder.check_references()?;
         builder.build_indices()?;
         builder.build_leftmost()?;
@@ -248,7 +251,7 @@ impl Builder {
     }
 
     #[inline(always)]
-    pub(in crate::node) fn synchronization(&self) -> &Map<Ident, Ident> {
+    pub(in crate::node) fn synchronization(&self) -> &Map<TokenLit, TokenLit> {
         &self.synchronization
     }
 
@@ -335,12 +338,14 @@ impl Builder {
         Ok(())
     }
 
-    fn add_variant(&mut self, variant: &Variant) -> Result<()> {
+    fn add_variant(&mut self, variant: &Variant) -> Result<Set<TokenLit>> {
         let mut variant = NodeVariant::try_from(variant)?;
 
         self.is_vacant(variant.name())?;
 
         variant.inline(self)?;
+
+        let alphabet = variant.alphabet();
 
         assert!(
             self.variant_map
@@ -349,7 +354,7 @@ impl Builder {
             "Internal error. Variant redefined.",
         );
 
-        Ok(())
+        Ok(alphabet)
     }
 
     fn check_error_type(&self) -> Result<()> {
@@ -404,6 +409,14 @@ impl Builder {
         }
 
         Ok(())
+    }
+
+    fn resolve_exclusions(&mut self) {
+        let mut alphabet = self.alphabet.clone();
+
+        for variant in self.variant_map.values_mut() {
+            variant.resolve_exclusions(&alphabet)
+        }
     }
 
     fn check_references(&self) -> Result<()> {
@@ -638,7 +651,7 @@ impl Builder {
                     Suffix::Leftmost(conflict) => Err(Error::new(
                         variant_synchronization.span(),
                         format!(
-                            "Synchronization conflict.\nRule's leftmost token \"${}\" \
+                            "Synchronization conflict.\nRule's leftmost token \"{}\" \
                             conflicts with \"{}\" rule's leftmost token.\n.The set of all \
                             leftmost and rightmost tokens across all synchronization rules \
                             must be unique.",
@@ -649,7 +662,7 @@ impl Builder {
                     Suffix::Rightmost(conflict) => Err(Error::new(
                         variant_synchronization.span(),
                         format!(
-                            "Synchronization conflict.\nRule's leftmost token \"${}\" \
+                            "Synchronization conflict.\nRule's leftmost token \"{}\" \
                             conflicts with \"{}\" rule's rightmost token.\n.The set of all \
                             leftmost and rightmost tokens across all synchronization rules \
                             must be unique.",
@@ -667,7 +680,7 @@ impl Builder {
                     Suffix::Leftmost(conflict) => Err(Error::new(
                         variant_synchronization.span(),
                         format!(
-                            "Synchronization conflict.\nRule's rightmost token \"${}\" \
+                            "Synchronization conflict.\nRule's rightmost token \"{}\" \
                             conflicts with \"{}\" rule's leftmost token.\n.The set of all \
                             leftmost and rightmost tokens across all synchronization rules \
                             must be unique.",
@@ -678,7 +691,7 @@ impl Builder {
                     Suffix::Rightmost(conflict) => Err(Error::new(
                         variant_synchronization.span(),
                         format!(
-                            "Synchronization conflict.\nRule's rightmost token \"${}\" \
+                            "Synchronization conflict.\nRule's rightmost token \"{}\" \
                             conflicts with \"{}\" rule's rightmost token.\n.The set of all \
                             leftmost and rightmost tokens across all synchronization rules \
                             must be unique.",

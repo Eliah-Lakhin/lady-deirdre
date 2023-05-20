@@ -48,7 +48,7 @@ use crate::{
             rule::Rule,
             Builder,
         },
-        regex::{prefix::Leftmost, references::CheckReferences, Regex},
+        regex::{operand::TokenLit, prefix::Leftmost, references::CheckReferences, Regex},
     },
     utils::{debug_panic, PredictableCollection, Set},
 };
@@ -528,6 +528,23 @@ impl NodeVariant {
             None => Ok(()),
 
             Some(rule) => rule.inline(builder),
+        }
+    }
+
+    pub(in crate::node) fn alphabet(&self) -> Set<TokenLit> {
+        if let Some((_, _, leftmost)) = &self.parser {
+            return leftmost.tokens().clone();
+        }
+
+        match &self.rule {
+            None => Set::empty(),
+            Some(rule) => rule.alphabet(),
+        }
+    }
+
+    pub(in crate::node) fn resolve_exclusions(&mut self, alphabet: &Set<TokenLit>) {
+        if let Some(rule) = &mut self.rule {
+            rule.resolve_exclusions(alphabet);
         }
     }
 

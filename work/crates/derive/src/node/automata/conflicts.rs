@@ -39,21 +39,25 @@ use proc_macro2::Ident;
 use syn::{spanned::Spanned, Error, Result};
 
 use crate::{
-    node::{automata::NodeAutomata, builder::Builder, regex::terminal::Terminal},
+    node::{
+        automata::NodeAutomata,
+        builder::Builder,
+        regex::{operand::TokenLit, terminal::Terminal},
+    },
     utils::{debug_panic, Map, PredictableCollection, State},
 };
 
 impl CheckConflicts for NodeAutomata {
     fn check_conflicts(&self, builder: &Builder, allow_skips: bool) -> Result<()> {
         struct OutgoingView<'a> {
-            map: Map<&'a State, Map<&'a Ident, &'a Terminal>>,
+            map: Map<&'a State, Map<&'a TokenLit, &'a Terminal>>,
         }
 
         impl<'a> OutgoingView<'a> {
             fn insert(
                 &mut self,
                 from: &'a State,
-                token: &'a Ident,
+                token: &'a TokenLit,
                 terminal: &'a Terminal,
             ) -> Result<()> {
                 let map = self.map.entry(from).or_insert_with(|| Map::empty());
@@ -65,18 +69,15 @@ impl CheckConflicts for NodeAutomata {
                         Terminal::Null => debug_panic!("Automata with null transition."),
 
                         Terminal::Token { name, .. } => {
-                            message.push_str(&format!(
-                                "Token matching \"${}\" conflicts with ",
-                                name.to_string()
-                            ));
+                            message
+                                .push_str(&format!("Token matching \"{name}\" conflicts with ",));
                         }
 
                         Terminal::Node { name, .. } => {
                             message.push_str(&format!(
-                                "Rule {:?} with \"${}\" token in the leftmost position conflicts \
+                                "Rule {:?} with \"{token}\" token in the leftmost position conflicts \
                                 with ",
                                 name.to_string(),
-                                token.to_string(),
                             ));
                         }
                     }
@@ -116,7 +117,7 @@ impl CheckConflicts for NodeAutomata {
                             return Err(Error::new(
                                 name.span(),
                                 format!(
-                                    "Token capturing \"{}: ${}\" conflicts with Skip expression.",
+                                    "Token capturing \"{}: {}\" conflicts with Skip expression.",
                                     capture, name,
                                 ),
                             ));

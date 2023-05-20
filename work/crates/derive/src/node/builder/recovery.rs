@@ -61,17 +61,6 @@ impl<'a> TryFrom<&'a Attribute> for Recovery {
     type Error = Error;
 
     fn try_from(attribute: &'a Attribute) -> Result<Self> {
-        struct Token(Ident);
-
-        impl Parse for Token {
-            fn parse(input: ParseStream) -> Result<Self> {
-                let _ = input.parse::<Token![$]>()?;
-                let name = input.parse::<Ident>()?;
-
-                Ok(Self(name))
-            }
-        }
-
         enum Specification {
             Balance { open: Ident, close: Ident },
             Delimiters { set: Set<Ident> },
@@ -87,9 +76,9 @@ impl<'a> TryFrom<&'a Attribute> for Recovery {
                     let content;
                     bracketed!(content in input);
 
-                    let open = content.parse::<Token>()?;
+                    let open = content.parse::<TokenLit>()?;
                     let _ = content.parse::<Token![..]>()?;
-                    let close = content.parse::<Token>()?;
+                    let close = content.parse::<TokenLit>()?;
 
                     if open.0 == close.0 {
                         return Err(Error::new(
@@ -110,27 +99,9 @@ impl<'a> TryFrom<&'a Attribute> for Recovery {
 
                 if lookahead.peek(keyword::delimiters) {
                     let _ = input.parse::<keyword::delimiters>()?;
+                    let set = input.parser::<TokeLitSet>()?;
 
-                    let content;
-                    bracketed!(content in input);
-
-                    let sequence = Punctuated::<Token, Token![|]>::parse_separated_nonempty(input)?;
-
-                    if !content.is_empty() {
-                        return Err(input.error("Unexpected token."));
-                    }
-
-                    let mut set = Set::<Ident>::with_capacity(sequence.len());
-
-                    for Token(token) in sequence {
-                        if set.contains(&token) {
-                            return Err(Error::new(token.span(), "Duplicate delimiter token."));
-                        }
-
-                        let _ = set.insert(token);
-                    }
-
-                    return Ok(Self::Delimiters { set });
+                    return Ok(Self::Delimiters { set: set.set });
                 }
 
                 Err(lookahead.error())
@@ -159,7 +130,7 @@ impl<'a> TryFrom<&'a Attribute> for Recovery {
                                 open.span(),
                                 format!(
                                     "This token already used in the \
-                                    previous ${open}..${previous} balance pair. \
+                                    previous {open}..{previous} balance pair. \
                                     All balance tokens must be unique."
                                 ),
                             ));
@@ -201,7 +172,7 @@ impl<'a> TryFrom<&'a Attribute> for Recovery {
                                     token.span(),
                                     format!(
                                         "This token already used in the \
-                                        ${token}..${close} balance pair.\n\
+                                        {token}..{close} balance pair.\n\
                                         Balance tokens don't need \
                                         to be enumerated in delimiters, because \
                                         they serve as delimiters by themself."
@@ -214,7 +185,7 @@ impl<'a> TryFrom<&'a Attribute> for Recovery {
                                     token.span(),
                                     format!(
                                         "This token already used in the \
-                                        ${open}..${token} balance pair.\n\
+                                        {open}..{token} balance pair.\n\
                                         Balance tokens don't need \
                                         to be enumerated in delimiters, because \
                                         they serve as delimiters by themself."

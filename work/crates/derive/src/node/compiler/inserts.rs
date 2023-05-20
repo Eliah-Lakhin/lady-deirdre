@@ -44,13 +44,13 @@ use crate::{
         automata::NodeAutomata,
         builder::Builder,
         compiler::transitions::{TransitionsVector, TransitionsVectorImpl},
-        regex::terminal::Terminal,
+        regex::{operand::TokenLit, terminal::Terminal},
     },
     utils::{debug_panic, PredictableCollection, Set, State},
 };
 
 pub(in crate::node) struct Insert<'a> {
-    matching: &'a Ident,
+    matching: &'a TokenLit,
     expected_terminal: &'a Terminal,
     destination_terminal: &'a Terminal,
     destination_state: &'a State,
@@ -58,7 +58,7 @@ pub(in crate::node) struct Insert<'a> {
 
 impl<'a> Insert<'a> {
     #[inline(always)]
-    pub(in crate::node) fn matching(&self) -> &'a Ident {
+    pub(in crate::node) fn matching(&self) -> &'a TokenLit {
         self.matching
     }
 
@@ -79,7 +79,7 @@ impl<'a> Insert<'a> {
 }
 
 pub(in crate::node) struct InsertRecovery<'a> {
-    forbidden: Set<&'a Ident>,
+    forbidden: Set<&'a TokenLit>,
     inserts: Vec<Insert<'a>>,
 }
 
@@ -162,7 +162,7 @@ impl<'a> InsertRecovery<'a> {
         recovery
     }
 
-    fn forbid(&mut self, matching: &'a Ident) -> bool {
+    fn forbid(&mut self, matching: &'a TokenLit) -> bool {
         if self.forbidden.contains(matching) {
             return true;
         }

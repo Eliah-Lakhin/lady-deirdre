@@ -37,6 +37,7 @@
 
 use crate::{node::regex::operator::RegexOperator, utils::Expression};
 
+pub(in crate::node) mod alphabet;
 pub(in crate::node) mod encode;
 pub(in crate::node) mod inject;
 pub(in crate::node) mod inline;

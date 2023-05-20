@@ -38,30 +38,33 @@
 use proc_macro2::Ident;
 
 use crate::{
-    node::builder::{kind::VariantKind, variant::NodeVariant, Builder},
+    node::{
+        builder::{kind::VariantKind, variant::NodeVariant, Builder},
+        regex::operand::TokenLit,
+    },
     utils::{Map, PredictableCollection},
 };
 
 #[derive(Clone, Default)]
 pub(in crate::node) struct PanicDelimiters<'a> {
-    single: Option<&'a Ident>,
-    local: Option<(&'a Ident, &'a Ident)>,
-    global: Map<&'a Ident, SynchronizationAction>,
+    single: Option<&'a TokenLit>,
+    local: Option<(&'a TokenLit, &'a TokenLit)>,
+    global: Map<&'a TokenLit, SynchronizationAction>,
 }
 
 impl<'a> PanicDelimiters<'a> {
     #[inline(always)]
-    pub(in crate::node) fn single(&self) -> Option<&'a Ident> {
+    pub(in crate::node) fn single(&self) -> Option<&'a TokenLit> {
         self.single
     }
 
     #[inline(always)]
-    pub(in crate::node) fn local(&self) -> Option<(&'a Ident, &'a Ident)> {
+    pub(in crate::node) fn local(&self) -> Option<(&'a TokenLit, &'a TokenLit)> {
         self.local
     }
 
     #[inline(always)]
-    pub(in crate::node) fn global(&self) -> &Map<&'a Ident, SynchronizationAction> {
+    pub(in crate::node) fn global(&self) -> &Map<&'a TokenLit, SynchronizationAction> {
         &self.global
     }
 

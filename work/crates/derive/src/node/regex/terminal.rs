@@ -43,13 +43,22 @@ use std::{
 use proc_macro2::{Ident, Span};
 use syn::spanned::Spanned;
 
-use crate::{node::builder::Builder, utils::AutomataTerminal};
+use crate::{
+    node::{builder::Builder, regex::operand::TokenLit},
+    utils::AutomataTerminal,
+};
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub(in crate::node) enum Terminal {
     Null,
-    Token { name: Ident, capture: Option<Ident> },
-    Node { name: Ident, capture: Option<Ident> },
+    Token {
+        name: TokenLit,
+        capture: Option<Ident>,
+    },
+    Node {
+        name: Ident,
+        capture: Option<Ident>,
+    },
 }
 
 impl AutomataTerminal for Terminal {
@@ -75,7 +84,7 @@ impl Ord for Terminal {
         match self.order().cmp(&other.order()) {
             Less => Less,
             Greater => Greater,
-            Equal => match self.value().cmp(&other.value()) {
+            Equal => match self.string().cmp(&other.string()) {
                 Less => Less,
                 Greater => Greater,
                 Equal => self.capture().cmp(&other.capture()),
@@ -100,16 +109,12 @@ impl Display for Terminal {
             Self::Token {
                 name,
                 capture: None,
-            } => formatter.write_fmt(format_args!("${}", name.to_string())),
+            } => Display::fmt(name, formatter),
 
             Self::Token {
                 name,
                 capture: Some(target),
-            } => formatter.write_fmt(format_args!(
-                "{}: ${}",
-                target.to_string(),
-                name.to_string()
-            )),
+            } => formatter.write_fmt(format_args!("{}: {}", target.to_string(), name)),
 
             Self::Node {
                 name,
@@ -127,7 +132,11 @@ impl Display for Terminal {
 impl Spanned for Terminal {
     #[inline(always)]
     fn span(&self) -> Span {
-        self.value().span()
+        match self {
+            Terminal::Null => Span::call_site(),
+            Terminal::Token { name, .. } => name.span(),
+            Terminal::Node { name, .. } => name.span(),
+        }
     }
 }
 
@@ -160,11 +169,11 @@ impl Terminal {
     }
 
     #[inline(always)]
-    fn value(&self) -> Option<&Ident> {
+    fn string(&self) -> Option<String> {
         match self {
             Self::Null => None,
-            Self::Token { name, .. } => Some(name),
-            Self::Node { name, .. } => Some(name),
+            Self::Token { name, .. } => Some(name.to_string()),
+            Self::Node { name, .. } => Some(name.to_string()),
         }
     }
 }

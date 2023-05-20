@@ -35,20 +35,52 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::{Ident, Span};
-use syn::{parse::ParseStream, spanned::Spanned, token::Paren, Result};
+use std::{
+    borrow::Borrow,
+    cmp::Ordering,
+    fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
+    mem::{discriminant, take},
+};
+
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::ToTokens;
+use syn::{
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    spanned::Spanned,
+    token::Paren,
+    Error,
+    Result,
+};
 
 use crate::{
     node::regex::{inline::Inline, operator::RegexOperator, Regex},
-    utils::ExpressionOperand,
+    utils::{debug_panic, ExpressionOperand, PredictableCollection, Set},
 };
 
 #[derive(Clone)]
 pub(in crate::node) enum RegexOperand {
-    Unresolved { name: Ident, capture: Option<Ident> },
-    Debug { span: Span, inner: Box<Regex> },
-    Token { name: Ident, capture: Option<Ident> },
-    Rule { name: Ident, capture: Option<Ident> },
+    Unresolved {
+        name: Ident,
+        capture: Option<Ident>,
+    },
+    Debug {
+        span: Span,
+        inner: Box<Regex>,
+    },
+    Token {
+        name: TokenLit,
+        capture: Option<Ident>,
+    },
+    Rule {
+        name: Ident,
+        capture: Option<Ident>,
+    },
+    Exclusion {
+        set: TokenLitSet,
+        capture: Option<Ident>,
+    },
 }
 
 impl Default for RegexOperand {
@@ -67,8 +99,16 @@ impl Spanned for RegexOperand {
         match self {
             Self::Unresolved { name, .. } => name.span(),
             Self::Debug { span, .. } => *span,
-            Self::Token { name, .. } => name.span(),
+            Self::Token {
+                name: TokenLit::Ident(ident),
+                ..
+            } => ident.span(),
+            Self::Token {
+                name: TokenLit::Other(span),
+                ..
+            } => *span,
             Self::Rule { name, .. } => name.span(),
+            Self::Exclusion { set, .. } => set.span,
         }
     }
 }
@@ -104,12 +144,32 @@ impl ExpressionOperand<RegexOperator> for RegexOperand {
                 let lookahead = input.lookahead1();
 
                 if input.peek(Token![$]) {
-                    let _ = input.parse::<Token![$]>()?;
-
-                    let identifier_b = input.parse::<Ident>()?;
+                    let identifier_b = input.parse::<TokenLit>()?;
 
                     return Ok(Regex::Operand(RegexOperand::Token {
                         name: identifier_b,
+                        capture: Some(identifier_a),
+                    }));
+                }
+
+                if input.peek(Token![^]) {
+                    let _ = input.parse::<Token![^]>()?;
+                    let set = input.parse::<TokenLitSet>()?;
+
+                    return Ok(Regex::Operand(RegexOperand::Exclusion {
+                        set,
+                        capture: Some(identifier_a),
+                    }));
+                }
+
+                if input.peek(Token![.]) {
+                    let span = input.parse::<Token![.]>()?.span;
+
+                    return Ok(Regex::Operand(RegexOperand::Exclusion {
+                        set: TokenLitSet {
+                            span,
+                            set: Set::empty(),
+                        },
                         capture: Some(identifier_a),
                     }));
                 }
@@ -125,7 +185,6 @@ impl ExpressionOperand<RegexOperator> for RegexOperand {
 
                 if lookahead.peek(syn::token::Paren) {
                     let content;
-
                     parenthesized!(content in input);
 
                     let mut result = content.parse::<Regex>()?;
@@ -149,12 +208,32 @@ impl ExpressionOperand<RegexOperator> for RegexOperand {
         }
 
         if input.peek(Token![$]) {
-            let _ = input.parse::<Token![$]>()?;
-
-            let identifier = input.parse::<Ident>()?;
+            let identifier = input.parse::<TokenLit>()?;
 
             return Ok(Regex::Operand(RegexOperand::Token {
                 name: identifier,
+                capture: None,
+            }));
+        }
+
+        if input.peek(Token![^]) {
+            let _ = input.parse::<Token![^]>()?;
+            let set = input.parse::<TokenLitSet>()?;
+
+            return Ok(Regex::Operand(RegexOperand::Exclusion {
+                set,
+                capture: None,
+            }));
+        }
+
+        if input.peek(Token![.]) {
+            let span = input.parse::<Token![.]>()?.span;
+
+            return Ok(Regex::Operand(RegexOperand::Exclusion {
+                set: TokenLitSet {
+                    span,
+                    set: Set::empty(),
+                },
                 capture: None,
             }));
         }
@@ -174,5 +253,154 @@ impl ExpressionOperand<RegexOperator> for RegexOperand {
         }
 
         Err(lookahead.error())
+    }
+}
+
+#[derive(Clone)]
+pub(in crate::node) enum TokenLit {
+    Ident(Ident),
+    Other(Span),
+}
+
+impl Display for TokenLit {
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ident(ident) => formatter.write_fmt(format_args!("${ident}")),
+            Self::Other(..) => formatter.write_str("$_"),
+        }
+    }
+}
+
+impl Hash for TokenLit {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        discriminant(self).hash(state);
+
+        match self {
+            Self::Ident(ident) => ident.hash(state),
+            Self::Other(..) => (),
+        }
+    }
+}
+
+impl PartialEq for TokenLit {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Ident(this), Self::Ident(other)) => this.eq(other),
+            (Self::Other(..), Self::Other(..)) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for TokenLit {}
+
+impl PartialOrd for TokenLit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TokenLit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::Ident(this), Self::Ident(other)) => this.cmp(other),
+            (Self::Other(..), Self::Other(..)) => Ordering::Equal,
+            (Self::Ident(..), ..) => Ordering::Less,
+            (Self::Other(..), ..) => Ordering::Greater,
+        }
+    }
+}
+
+impl Parse for TokenLit {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let _ = input.parse::<Token![$]>()?;
+        let ident = input.parse::<Ident>()?;
+
+        Ok(Self::Ident(ident))
+    }
+}
+
+impl ToTokens for TokenLit {
+    #[inline]
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            Self::Ident(ident) => ident.to_tokens(tokens),
+            Self::Other(..) => {
+                todo!("Exclusion Operator is incomplete feature.")
+            }
+        }
+    }
+}
+
+impl TokenLit {
+    #[inline]
+    pub(in crate::node) fn set_span(&mut self, span: Span) {
+        match self {
+            Self::Ident(ident) => ident.set_span(span),
+            Self::Other(other) => *other = span,
+        }
+    }
+
+    #[inline]
+    pub(in crate::node) fn string(&self) -> String {
+        match self {
+            Self::Ident(ident) => ident.to_string(),
+            Self::Other(..) => String::from("_"),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(in crate::node) struct TokenLitSet {
+    pub(in crate::node) span: Span,
+    pub(in crate::node) set: Set<TokenLit>,
+}
+
+impl Parse for TokenLitSet {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let content;
+        bracketed!(content in input);
+
+        let span = content.span();
+        let sequence = Punctuated::<TokenLit, Token![|]>::parse_separated_nonempty(&content)?;
+
+        if !content.is_empty() {
+            return Err(content.error(
+                "Unexpected end of input. Expected a set \
+                of tokens [$A | $B | ...].",
+            ));
+        }
+
+        let mut set = Set::with_capacity(sequence.len());
+
+        for token_lit in sequence {
+            if set.contains(&token_lit) {
+                return Err(Error::new(token_lit.span(), "Duplicate token."));
+            }
+
+            let _ = set.insert(token_lit);
+        }
+
+        Ok(Self { span, set })
+    }
+}
+
+impl TokenLitSet {
+    pub(in crate::node) fn set_span(&mut self, span: Span) {
+        self.span = span;
+
+        let set = take(&mut self.set)
+            .into_iter()
+            .map(|mut lit| {
+                lit.set_span(span);
+
+                lit
+            })
+            .collect();
+
+        self.set = set;
     }
 }

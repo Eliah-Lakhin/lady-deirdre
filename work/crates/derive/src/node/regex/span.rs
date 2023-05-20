@@ -37,7 +37,7 @@
 
 use proc_macro2::Span;
 
-use crate::node::regex::{operand::RegexOperand, Regex};
+use crate::node::regex::{operand::RegexOperand, operator::RegexOperator, Regex};
 
 impl SetSpan for Regex {
     fn set_span(&mut self, span: Span) {
@@ -93,8 +93,35 @@ impl SetSpan for Regex {
                 name.set_span(span);
             }
 
-            Self::Unary { inner, .. } => {
+            Self::Operand(RegexOperand::Exclusion {
+                set,
+                capture: Some(capture),
+                ..
+            }) => {
+                set.set_span(span);
+                capture.set_span(span);
+            }
+
+            Self::Operand(RegexOperand::Exclusion {
+                set, capture: None, ..
+            }) => {
+                set.set_span(span);
+            }
+
+            Self::Unary { inner, operator } => {
                 inner.set_span(span);
+
+                match operator {
+                    RegexOperator::OneOrMore {
+                        separator: Some(separator),
+                    } => separator.set_span(span),
+
+                    RegexOperator::ZeroOrMore {
+                        separator: Some(separator),
+                    } => separator.set_span(span),
+
+                    _ => (),
+                }
             }
 
             Self::Binary { left, right, .. } => {

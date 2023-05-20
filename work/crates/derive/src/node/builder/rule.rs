@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::{Ident, Span};
-use syn::{spanned::Spanned, Attribute, Error, Result};
+use syn::{spanned::Spanned, Attribute, Error, LitInt, Result};
 
 use crate::{
     node::{
@@ -48,9 +48,11 @@ use crate::{
         },
         builder::{kind::VariantKind, Builder},
         regex::{
+            alphabet::Alphabet,
             encode::Encode,
             inject::Inject,
             inline::Inline,
+            operand::TokenLit,
             prefix::{Leftmost, RegexPrefix},
             references::CheckReferences,
             Regex,
@@ -144,6 +146,16 @@ impl Rule {
         );
 
         self.regex.inline(builder)
+    }
+
+    #[inline(always)]
+    pub(in crate::node) fn alphabet(&self) -> Set<TokenLit> {
+        self.regex.alphabet()
+    }
+
+    #[inline(always)]
+    pub(in crate::node) fn resolve_exclusions(&mut self, alphabet: &Set<TokenLit>) {
+        self.regex.resolve_exclusions(alphabet);
     }
 
     #[inline(always)]

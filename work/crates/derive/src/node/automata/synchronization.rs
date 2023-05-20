@@ -39,15 +39,18 @@ use proc_macro2::{Ident, Span};
 use syn::spanned::Spanned;
 
 use crate::{
-    node::{automata::NodeAutomata, regex::terminal::Terminal},
+    node::{
+        automata::NodeAutomata,
+        regex::{operand::TokenLit, terminal::Terminal},
+    },
     utils::debug_panic,
 };
 
 pub(in crate::node) struct Synchronization {
     variant_name: Ident,
     attribute_span: Span,
-    open: Option<Ident>,
-    close: Option<Ident>,
+    open: Option<TokenLit>,
+    close: Option<TokenLit>,
 }
 
 impl Spanned for Synchronization {
@@ -64,12 +67,12 @@ impl Synchronization {
     }
 
     #[inline(always)]
-    pub(in crate::node) fn open(&self) -> Option<&Ident> {
+    pub(in crate::node) fn open(&self) -> Option<&TokenLit> {
         self.open.as_ref()
     }
 
     #[inline(always)]
-    pub(in crate::node) fn close(&self) -> Option<&Ident> {
+    pub(in crate::node) fn close(&self) -> Option<&TokenLit> {
         self.close.as_ref()
     }
 }
@@ -78,7 +81,7 @@ impl AutomataSynchronization for NodeAutomata {
     fn synchronization(&self, variant_name: Ident, attribute_span: Span) -> Synchronization {
         enum Single<'a> {
             Vacant,
-            Found(&'a Ident),
+            Found(&'a TokenLit),
             Ambiguity,
         }
 

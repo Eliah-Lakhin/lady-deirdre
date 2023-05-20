@@ -38,12 +38,12 @@
 use std::mem::take;
 
 use proc_macro2::Ident;
-use syn::{Error, Result};
+use syn::{spanned::Spanned, Error, Result};
 
 use crate::{
     node::{
         automata::{scope::Scope, NodeAutomata},
-        regex::terminal::Terminal,
+        regex::{operand::TokenLit, terminal::Terminal},
     },
     utils::{debug_panic, AutomataContext, Map, PredictableCollection, State},
 };
@@ -56,7 +56,7 @@ impl AutomataMergeCaptures for NodeAutomata {
             self.try_map(|_, transitions| {
                 let count = transitions.len();
 
-                let mut tokens = Map::<Ident, (Terminal, State)>::with_capacity(count);
+                let mut tokens = Map::<TokenLit, (Terminal, State)>::with_capacity(count);
                 let mut nodes = Map::<Ident, (Terminal, State)>::with_capacity(count);
 
                 for (terminal, to) in take(transitions) {
