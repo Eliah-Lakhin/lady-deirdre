@@ -41,7 +41,7 @@ use syn::{Error, Result};
 use crate::{
     node::{
         builder::{kind::VariantKind, Builder},
-        regex::{operand::RegexOperand, prefix::Leftmost, Regex},
+        regex::{operand::RegexOperand, operator::RegexOperator, prefix::Leftmost, Regex},
     },
     utils::{debug_panic, PredictableCollection, Set, SetImpl},
 };
@@ -145,7 +145,21 @@ impl CheckReferences for Regex {
 
             Self::Operand(RegexOperand::Token { .. }) => Ok(Set::empty()),
 
-            Self::Unary { inner, .. } => inner.check_references(context, builder),
+            Self::Unary { operator, inner } => {
+                let inner = inner.check_references(context, builder)?;
+
+                match operator {
+                    RegexOperator::ZeroOrMore {
+                        separator: Some(separator),
+                    } => Ok(separator.check_references(context, builder)?.merge(inner)),
+
+                    RegexOperator::OneOrMore {
+                        separator: Some(separator),
+                    } => Ok(separator.check_references(context, builder)?.merge(inner)),
+
+                    _ => Ok(inner),
+                }
+            }
 
             Self::Binary { left, right, .. } => {
                 let left = left.check_references(context, builder)?;
