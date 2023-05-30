@@ -72,7 +72,7 @@ pub struct ChunkRef<'source, T: Token> {
     ///
     /// This instance is supposed to describe lexical kind of the "token", and possible additional
     /// generic semantic metadata inside this instance.
-    pub token: &'source T,
+    pub token: T,
 
     /// Token's substring absolute UTF-8 character offset inside the source code text.
     pub site: Site,

@@ -93,7 +93,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<&'unit Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
         if unsafe { self.next_chunk_ref.is_dangling() } {
             return None;
         }
@@ -232,7 +232,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
     fn descend(&mut self, rule: RuleIndex) -> NodeRef {
         if self.pending.leftmost {
-            let node = N::new(rule, self);
+            let node = N::parse(rule, self);
 
             let node_ref = self.pending.nodes.insert(node);
 
@@ -300,7 +300,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             },
         );
 
-        let primary = N::new(rule, self);
+        let primary = N::parse(rule, self);
 
         let child = replace(&mut self.pending, parent);
 
@@ -355,13 +355,13 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
-    fn error(&mut self, error: <Self::Node as Node>::Error) -> ErrorRef {
+    fn error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
         self.pending.successful = false;
 
         ErrorRef {
             id: self.id,
             cluster_ref: self.pending.cluster_ref,
-            error_ref: self.pending.errors.insert(error),
+            error_ref: self.pending.errors.insert(error.into()),
         }
     }
 }
@@ -420,7 +420,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             peek_site: start,
         };
 
-        let primary = N::new(rule, &mut session);
+        let primary = N::parse(rule, &mut session);
         let parsed_end_site = session.next_site;
         let parsed_end = session.parsed_end();
         let lookahead = session.pending.lookahead_end_site - session.next_site;

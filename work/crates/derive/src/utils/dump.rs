@@ -35,13 +35,68 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{node::automata::scope::Scope, utils::Automata};
+use proc_macro2::Span;
+use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, Result};
 
-pub(in crate::node) mod conflicts;
-pub(in crate::node) mod merge;
-pub(in crate::node) mod scope;
-pub(in crate::node) mod skip;
-pub(in crate::node) mod synchronization;
-pub(in crate::node) mod variables;
+use crate::utils::dump_kw;
 
-pub(in crate::node) type NodeAutomata = Automata<Scope>;
+#[derive(Clone, Copy, Default)]
+pub enum Dump {
+    #[default]
+    None,
+    Output(Span),
+    Trivia(Span),
+    Benchmark(Span),
+    Dry(Span),
+}
+
+impl TryFrom<Attribute> for Dump {
+    type Error = Error;
+
+    fn try_from(attr: Attribute) -> Result<Self> {
+        let attr_span = attr.span();
+
+        if attr.tokens.is_empty() {
+            return Ok(Self::Output(attr_span));
+        }
+
+        attr.parse_args_with(|input: ParseStream| {
+            if input.is_empty() {
+                return Ok(Self::Output(attr_span));
+            }
+
+            let lookahead = input.lookahead1();
+
+            if lookahead.peek(dump_kw::output) {
+                return Ok(Self::Output(input.parse::<dump_kw::output>()?.span()));
+            }
+
+            if lookahead.peek(dump_kw::trivia) {
+                return Ok(Self::Trivia(input.parse::<dump_kw::trivia>()?.span()));
+            }
+
+            if lookahead.peek(dump_kw::bench) {
+                return Ok(Self::Benchmark(input.parse::<dump_kw::bench>()?.span()));
+            }
+
+            if lookahead.peek(dump_kw::dry) {
+                return Ok(Self::Dry(input.parse::<dump_kw::dry>()?.span()));
+            }
+
+            return Err(lookahead.error());
+        })
+    }
+}
+
+impl Dump {
+    #[inline(always)]
+    pub fn span(self) -> Option<Span> {
+        match self {
+            Dump::None => None,
+            Dump::Output(span) => Some(span),
+            Dump::Trivia(span) => Some(span),
+            Dump::Benchmark(span) => Some(span),
+            Dump::Dry(span) => Some(span),
+        }
+    }
+}

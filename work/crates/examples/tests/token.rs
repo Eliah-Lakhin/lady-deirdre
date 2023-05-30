@@ -35,6 +35,9 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+//TODO check warnings regularly
+#![allow(warnings)]
+
 use lady_deirdre::lexis::{CodeContent, SimpleToken, TokenBuffer};
 
 #[test]

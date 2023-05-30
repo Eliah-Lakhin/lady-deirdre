@@ -210,23 +210,23 @@ pub unsafe trait ToSpan {
     /// let doc = Document::<SimpleNode>::from("foo\nbar baz");
     ///
     /// assert_eq!(doc.substring(2..7), "o\nbar");
-    /// assert_eq!((2..7).format(&doc), "[1:3] - [2:3]");
+    /// assert_eq!((2..7).display(&doc).to_string(), "[1:3]..[2:3]");
     /// ```
     #[inline]
-    fn format(&self, code: &impl SourceCode) -> Cow<'static, str> {
+    fn display(&self, code: &impl SourceCode) -> DisplayPositionSpan {
         let Range { start, end } = match self.to_span(code) {
-            None => return Cow::from("?"),
+            None => return DisplayPositionSpan(None),
             Some(span) => span,
         };
 
-        let mut result = unsafe { start.to_position(code).unwrap_unchecked() }.to_string();
+        let start_position = unsafe { start.to_position(code).unwrap_unchecked() };
 
-        if start + 1 < end {
-            result.push_str(" - ");
-            result.push_str(&unsafe { (end - 1).to_position(code).unwrap_unchecked() }.to_string());
-        }
+        let end_position = match start + 1 < end {
+            true => unsafe { (end - 1).to_position(code).unwrap_unchecked() },
+            false => start_position,
+        };
 
-        Cow::from(result)
+        DisplayPositionSpan(Some(start_position..end_position))
     }
 }
 
@@ -352,5 +352,20 @@ unsafe impl<Site: ToSite> ToSpan for RangeToInclusive<Site> {
     #[inline(always)]
     fn is_valid_span(&self, code: &impl SourceCode) -> bool {
         self.end.is_valid_site(code)
+    }
+}
+
+#[repr(transparent)]
+pub struct DisplayPositionSpan(Option<PositionSpan>);
+
+impl Display for DisplayPositionSpan {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        match &self.0 {
+            None => formatter.write_str("?"),
+            Some(span) if span.start == span.end => {
+                formatter.write_fmt(format_args!("{}", span.start))
+            }
+            Some(span) => formatter.write_fmt(format_args!("{}..{}", span.start, span.end)),
+        }
     }
 }

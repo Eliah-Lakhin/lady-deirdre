@@ -219,10 +219,9 @@ impl<N: Node> ChildRefIndex<N> {
     // Safety:
     // 1. `self` is not dangling.
     // 2. `self.item` is a Page reference.
-    // 3. `'a` does not outlive corresponding Page instance.
-    // 4. There are no other mutable references to this Token.
+    // 3. There are no other mutable references to this Token.
     #[inline(always)]
-    pub(crate) unsafe fn token<'a>(&self) -> &'a <N as Node>::Token {
+    pub(crate) unsafe fn token(&self) -> <N as Node>::Token {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
@@ -235,29 +234,7 @@ impl<N: Node> ChildRefIndex<N> {
             "ChildRefIndex index out of bounds.",
         );
 
-        unsafe { page.tokens.get_unchecked(self.index).assume_init_ref() }
-    }
-
-    // Safety:
-    // 1. `self` is not dangling.
-    // 2. `self.item` is a Page reference.
-    // 3. `'a` does not outlive corresponding Page instance.
-    // 4. There are no other mutable references to this Token.
-    #[inline(always)]
-    pub(crate) unsafe fn token_mut<'a>(&self) -> &'a mut <N as Node>::Token {
-        debug_assert!(
-            !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
-        );
-
-        let page = unsafe { self.item.as_page_ref().as_external_mut() };
-
-        debug_assert!(
-            self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
-        );
-
-        unsafe { page.tokens.get_unchecked_mut(self.index).assume_init_mut() }
+        unsafe { page.tokens.get_unchecked(self.index).assume_init_read() }
     }
 
     // Safety:

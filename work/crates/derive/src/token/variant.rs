@@ -35,15 +35,16 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use convert_case::{Case, Casing};
 use proc_macro2::Ident;
-use syn::{spanned::Spanned, AttrStyle, Error, ExprLit, Lit, Result, Variant};
+use syn::{spanned::Spanned, AttrStyle, Error, ExprLit, Lit, LitStr, Result, Variant};
 
 use crate::{
     token::{
         regex::{InlineMap, Regex, RegexImpl},
         rule::{RuleIndex, RulePrecedence},
     },
-    utils::debug_panic,
+    utils::system_panic,
 };
 
 pub(super) enum TokenVariant {
@@ -53,9 +54,11 @@ pub(super) enum TokenVariant {
         precedence: Option<RulePrecedence>,
         constructor: Option<Ident>,
         expression: Regex,
+        description: LitStr,
     },
     Mismatch {
         name: Ident,
+        description: LitStr,
     },
     Other,
 }
@@ -67,12 +70,19 @@ impl TokenVariant {
         inline_map: &InlineMap,
     ) -> Result<Self> {
         let name = variant.ident;
-        let trivial = variant.fields.is_empty();
+
+        if !variant.fields.is_empty() {
+            return Err(Error::new(
+                variant.fields.span(),
+                "Variants with fields not allowed.",
+            ));
+        }
 
         let mut precedence = None;
         let mut constructor = None;
         let mut mismatch = false;
         let mut expression = None;
+        let mut description = None;
 
         for attribute in variant.attrs {
             match attribute.style {
@@ -158,13 +168,6 @@ impl TokenVariant {
                         return Err(Error::new(name.span(), "Unexpected attribute parameters."));
                     }
 
-                    if !trivial {
-                        return Err(Error::new(
-                            name.span(),
-                            "Variants with defined body cannot be labeled as mismatch fallback.",
-                        ));
-                    }
-
                     mismatch = true;
                 }
 
@@ -187,6 +190,14 @@ impl TokenVariant {
                     expression = Some(regex);
                 }
 
+                "describe" => {
+                    if description.is_some() {
+                        return Err(Error::new(name.span(), "Duplicate Describe attribute."));
+                    }
+
+                    description = Some(attribute.parse_args::<LitStr>()?);
+                }
+
                 _ => continue,
             }
         }
@@ -203,22 +214,48 @@ impl TokenVariant {
                 }
 
                 Ok(match mismatch {
-                    true => Self::Mismatch { name },
-                    false => Self::Other,
+                    true => {
+                        let description = description.unwrap_or_else(|| {
+                            LitStr::new(
+                                &format!(
+                                    "<{}>",
+                                    name.to_string().to_case(Case::Title).to_lowercase()
+                                ),
+                                name.span(),
+                            )
+                        });
+
+                        Self::Mismatch { name, description }
+                    }
+
+                    false => {
+                        if let Some(description) = description {
+                            return Err(Error::new(
+                                description.span(),
+                                "Constructor attributes cannot be defined on the non-parsable \
+                                variants.\nTo make the variant parsable label it with \
+                                #[rule(<expression>)] attribute.",
+                            ));
+                        }
+
+                        Self::Other
+                    }
                 })
             }
 
             Some(expression) => {
-                if !trivial && constructor.is_none() {
-                    return Err(Error::new(
-                        name.span(),
-                        "Parsable variants with non-empty body must specify dedicated \
-                        constructor function.\nUse #[constructor(<function name>)] attribute to \
-                        refer self constructor function.\nThe constructor function should be \
-                        implement for derived type manually.\nExpected function's signature is \
-                        \"fn <function name>(matched_substring: &str) -> Self\".",
-                    ));
-                }
+                let description = description
+                    .or_else(|| {
+                        expression
+                            .name()
+                            .map(|string| LitStr::new(&string, name.span()))
+                    })
+                    .unwrap_or_else(|| {
+                        LitStr::new(
+                            &format!("<{}>", name.to_string().to_case(Case::Title).to_lowercase()),
+                            name.span(),
+                        )
+                    });
 
                 Ok(Self::Rule {
                     name,
@@ -226,6 +263,7 @@ impl TokenVariant {
                     precedence,
                     constructor,
                     expression,
+                    description,
                 })
             }
         }
@@ -235,7 +273,7 @@ impl TokenVariant {
     pub(super) fn rule_name(&self) -> &Ident {
         match self {
             TokenVariant::Rule { name, .. } => name,
-            _ => debug_panic!("Non-rule variant."),
+            _ => system_panic!("Non-rule variant."),
         }
     }
 
@@ -243,7 +281,7 @@ impl TokenVariant {
     pub(super) fn rule_precedence(&self) -> RulePrecedence {
         match self {
             TokenVariant::Rule { precedence, .. } => precedence.clone().unwrap_or(1),
-            _ => debug_panic!("Non-rule variant."),
+            _ => system_panic!("Non-rule variant."),
         }
     }
 }

@@ -72,3 +72,9 @@ features = ["default", "full", "extra-traits"]
 
 [dependencies.quote]
 version = "1.0"
+
+[dependencies.prettyplease]
+version = "0.1"
+
+[dependencies.convert_case]
+version = "0.6"

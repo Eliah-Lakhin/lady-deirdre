@@ -156,7 +156,7 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
         };
 
         loop {
-            let token = <N::Token as Token>::new(&mut session);
+            let token = <N::Token as Token>::parse(&mut session);
 
             if session.start_cursor.site != session.end_cursor.site {
                 let submission = session.get_submission();
@@ -201,7 +201,7 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
                 return true;
             }
 
-            let token = <N::Token as Token>::new(self);
+            let token = <N::Token as Token>::parse(self);
 
             if self.start_cursor.site < self.end_cursor.site {
                 self.product.push(

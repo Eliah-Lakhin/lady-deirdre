@@ -53,6 +53,7 @@ use crate::{lexis::Token, std::*};
     '!', '@', '#', '$', '%', '^', '&', '*', '-', '+', '=', '/', '|', ':', ';', '.',
     ',', '<', '>', '?', '~', '`'
 ])]
+#[repr(u8)]
 pub enum SimpleToken {
     /// A numerical literal. Either integer or a floating point(e.g. `12345` or `1234.56`).
     #[rule(NUM+ & ('.' & NUM+)?)]

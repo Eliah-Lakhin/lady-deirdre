@@ -39,7 +39,6 @@ use proc_macro2::{Ident, Span};
 use syn::{
     parse::{Lookahead1, ParseStream},
     spanned::Spanned,
-    token::Paren,
     Error,
     LitChar,
     LitStr,
@@ -49,7 +48,8 @@ use syn::{
 use crate::{
     token::{characters::CharacterSet, scope::Scope, NULL},
     utils::{
-        debug_panic,
+        dump_kw,
+        system_panic,
         Applicability,
         Automata,
         AutomataContext,
@@ -58,6 +58,7 @@ use crate::{
         ExpressionOperator,
         Map,
         OptimizationStrategy,
+        SetImpl,
     },
 };
 
@@ -84,16 +85,16 @@ impl RegexImpl for Regex {
                 };
             }
 
-            Self::Operand(Operand::Debug { inner, .. }) => {
+            Self::Operand(Operand::Dump { inner, .. }) => {
                 inner.inline(inline_map)?;
             }
 
-            Self::Unary { inner, .. } => inner.inline(inline_map)?,
-
-            Self::Binary { left, right, .. } => {
+            Self::Binary(left, _, right) => {
                 left.inline(inline_map)?;
                 right.inline(inline_map)?;
             }
+
+            Self::Unary(_, inner) => inner.inline(inline_map)?,
 
             _ => (),
         }
@@ -104,20 +105,44 @@ impl RegexImpl for Regex {
     fn alphabet(&self) -> CharacterSet {
         match self {
             Self::Operand(Operand::Inclusion { character_set }) => character_set.clone(),
-            Self::Operand(Operand::Debug { inner, .. }) => inner.alphabet(),
-            Self::Binary { left, right, .. } => left.alphabet().merge(right.alphabet()),
-            Self::Unary { inner, .. } => inner.alphabet(),
+            Self::Operand(Operand::Dump { inner, .. }) => inner.alphabet(),
+            Self::Binary(left, _, right) => left.alphabet().merge(right.alphabet()),
+            Self::Unary(_, inner) => inner.alphabet(),
             _ => CharacterSet::default(),
         }
+    }
+
+    fn name(&self) -> Option<String> {
+        return match self {
+            Self::Operand(Operand::Inclusion { character_set }) => {
+                match character_set.inner().single() {
+                    None => None,
+                    Some(ch) => Some(ch.to_string()),
+                }
+            }
+
+            Self::Operand(Operand::Dump { inner, .. }) => inner.name(),
+
+            Self::Binary(left, Operator::Concat, right) => {
+                let mut left = left.name()?;
+                let right = right.name()?;
+
+                left.push_str(right.as_str());
+
+                Some(left)
+            }
+
+            _ => None,
+        };
     }
 
     fn encode(&self, scope: &mut Scope) -> Result<Automata<Scope>> {
         Ok(match self {
             Self::Operand(Operand::Any) => scope.any(),
 
-            Self::Operand(Operand::Inline { .. }) => debug_panic!("Unresolved inline."),
+            Self::Operand(Operand::Inline { .. }) => system_panic!("Unresolved inline."),
 
-            Self::Operand(Operand::Debug { span, inner }) => {
+            Self::Operand(Operand::Dump { span, inner }) => {
                 scope.set_strategy(OptimizationStrategy::CANONICALIZE);
 
                 let inner = inner.encode(scope)?;
@@ -140,56 +165,39 @@ impl RegexImpl for Regex {
                 character_set.clone().into_exclusion(scope)?
             }
 
-            Self::Binary {
-                operator: Operator::Concat,
-                left,
-                right,
-            } => {
+            Self::Binary(left, Operator::Concat, right) => {
                 let left = left.encode(scope)?;
                 let right = right.encode(scope)?;
 
                 scope.concatenate(left, right)
             }
 
-            Self::Binary {
-                operator: Operator::Union,
-                left,
-                right,
-            } => {
+            Self::Binary(left, Operator::Union, right) => {
                 let left = left.encode(scope)?;
                 let right = right.encode(scope)?;
 
                 scope.union(left, right)
             }
 
-            Self::Unary {
-                operator: Operator::ZeroOrMore,
-                inner,
-            } => {
+            Self::Unary(Operator::ZeroOrMore, inner) => {
                 let inner = inner.encode(scope)?;
 
                 scope.repeat_zero(inner)
             }
 
-            Self::Unary {
-                operator: Operator::OneOrMore,
-                inner,
-            } => {
+            Self::Unary(Operator::OneOrMore, inner) => {
                 let inner = inner.encode(scope)?;
 
                 scope.repeat_one(inner)
             }
 
-            Self::Unary {
-                operator: Operator::Optional,
-                inner,
-            } => {
+            Self::Unary(Operator::Optional, inner) => {
                 let inner = inner.encode(scope)?;
 
                 scope.optional(inner)
             }
 
-            _ => debug_panic!("Unsupported operation."),
+            _ => system_panic!("Unsupported operation."),
         })
     }
 }
@@ -198,6 +206,8 @@ pub(super) trait RegexImpl {
     fn inline(&mut self, inline_map: &InlineMap) -> Result<()>;
 
     fn alphabet(&self) -> CharacterSet;
+
+    fn name(&self) -> Option<String>;
 
     fn encode(&self, scope: &mut Scope) -> Result<Automata<Scope>>;
 }
@@ -208,7 +218,7 @@ pub(super) type InlineMap = Map<String, Regex>;
 pub(super) enum Operand {
     Any,
     Inline { name: Ident },
-    Debug { span: Span, inner: Box<Regex> },
+    Dump { span: Span, inner: Box<Regex> },
     Inclusion { character_set: CharacterSet },
     Exclusion { character_set: CharacterSet },
 }
@@ -246,11 +256,9 @@ impl ExpressionOperand<Operator> for Operand {
 
                     Ok(Some(match accumulator {
                         None => right,
-                        Some(left) => Expression::Binary {
-                            operator: Operator::Concat,
-                            left: Box::new(left),
-                            right: Box::new(right),
-                        },
+                        Some(left) => {
+                            Expression::Binary(Box::new(left), Operator::Concat, Box::new(right))
+                        }
                     }))
                 })?
                 .ok_or_else(|| Error::new(literal.span(), "Empty strings are forbidden."));
@@ -284,19 +292,27 @@ impl ExpressionOperand<Operator> for Operand {
             return Ok(Expression::Operand(Operand::Exclusion { character_set }));
         }
 
+        if lookahead.peek(dump_kw::dump) {
+            let _ = input.parse::<dump_kw::dump>()?;
+
+            let content;
+            parenthesized!(content in input);
+
+            let span = content.span();
+            let inner = content.parse::<Regex>()?;
+
+            if !content.is_empty() {
+                return Err(content.error("Unexpected expression end."));
+            }
+
+            return Ok(Regex::Operand(Operand::Dump {
+                span,
+                inner: Box::new(inner),
+            }));
+        }
+
         if lookahead.peek(syn::Ident) {
             let identifier = input.parse::<Ident>()?;
-
-            if identifier.to_string() == "debug" && input.peek(Paren) {
-                let content;
-
-                parenthesized!(content in input);
-
-                return Ok(Expression::Operand(Operand::Debug {
-                    span: identifier.span(),
-                    inner: Box::new(content.parse::<Regex>()?),
-                }));
-            }
 
             return Ok(Expression::Operand(Operand::Inline { name: identifier }));
         }

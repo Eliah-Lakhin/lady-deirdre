@@ -41,7 +41,7 @@ pub use lady_deirdre_derive::Token;
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    lexis::{ChunkRef, Length, LexisSession, Site, SiteRef, SourceCode, TokenBuffer},
+    lexis::{ChunkRef, Length, LexisSession, Site, SiteRef, SourceCode, TokenIndex},
     std::*,
 };
 
@@ -66,7 +66,8 @@ pub type TokenCount = usize;
 /// ```rust
 /// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, ChunkRef};
 ///
-/// #[derive(Token, PartialEq, Debug)]
+/// #[derive(Token, Clone, Copy, PartialEq, Eq, Debug)]
+/// #[repr(u8)]
 /// enum MyToken {
 ///     // Exact string "FOO".
 ///     #[rule("FOO")]
@@ -90,13 +91,13 @@ pub type TokenCount = usize;
 /// assert_eq!(
 ///     buf.chunks(..).map(|chunk: ChunkRef<'_, MyToken>| chunk.token).collect::<Vec<_>>(),
 ///     vec![
-///         &MyToken::Foo,
-///         &MyToken::LowDashes,
-///         &MyToken::Bar,
-///         &MyToken::LowDashes,
-///         &MyToken::Mismatch,
-///         &MyToken::LowDashes,
-///         &MyToken::Foo,
+///         MyToken::Foo,
+///         MyToken::LowDashes,
+///         MyToken::Bar,
+///         MyToken::LowDashes,
+///         MyToken::Mismatch,
+///         MyToken::LowDashes,
+///         MyToken::Foo,
 ///     ],
 /// );
 /// ```
@@ -106,9 +107,9 @@ pub type TokenCount = usize;
 /// allocated memory as possible(ideally one byte).
 ///
 /// An API user can implement the Token trait manually too. For example, using 3rd party lexical
-/// scanner libraries. See [`Token::new`](crate::lexis::Token::new) function specification for
+/// scanner libraries. See [`Token::new`](crate::lexis::Token::parse) function specification for
 /// details.
-pub trait Token: Sized + 'static {
+pub trait Token: Copy + PartialEq + Eq + Sized + 'static {
     /// Parses a single token from the source code text, and returns a Token instance that
     /// represents this token kind.
     ///
@@ -167,18 +168,26 @@ pub trait Token: Sized + 'static {
     ///     Token instance.
     ///
     /// ```rust
-    /// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, LexisSession, ChunkRef};
+    /// use lady_deirdre::lexis::{
+    ///     Token,
+    ///     TokenBuffer,
+    ///     TokenIndex,
+    ///     CodeContent,
+    ///     LexisSession,
+    ///     ChunkRef,
+    /// };
     ///
     /// // Represents integer numbers or lower case alphabetic words.
-    /// #[derive(PartialEq, Debug)]
+    /// #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    /// #[repr(u8)]
     /// enum NumOrWord {
-    ///     Num(usize),
-    ///     Word(String),
-    ///     Mismatch,
+    ///     Num = 1,
+    ///     Word = 2,
+    ///     Mismatch = 0,
     /// }
     ///
     /// impl Token for NumOrWord {
-    ///     fn new(session: &mut impl LexisSession) -> Self {
+    ///     fn parse(session: &mut impl LexisSession) -> Self {
     ///         if session.character() >= 'a' && session.character() <= 'z' {
     ///             loop {
     ///                 session.advance();
@@ -187,13 +196,13 @@ pub trait Token: Sized + 'static {
     ///
     ///             session.submit();
     ///
-    ///             return Self::Word(session.substring().to_string());
+    ///             return Self::Word;
     ///         }
     ///
     ///         if session.character() == '0' {
     ///             session.advance();
     ///             session.submit();
-    ///             return Self::Num(0);
+    ///             return Self::Num;
     ///         }
     ///
     ///         if session.character() >= '1' && session.character() <= '9' {
@@ -204,10 +213,23 @@ pub trait Token: Sized + 'static {
     ///
     ///             session.submit();
     ///
-    ///             return Self::Num(session.substring().parse::<usize>().unwrap());
+    ///             return Self::Num;
     ///         }
     ///
     ///         Self::Mismatch
+    ///     }
+    ///
+    ///     fn index(self) -> TokenIndex {
+    ///         self as u8
+    ///     }
+    ///
+    ///     fn describe(index: TokenIndex) -> Option<&'static str> {
+    ///         match index {
+    ///             0 => Some("<mismatch>"),
+    ///             1 => Some("<num>"),
+    ///             2 => Some("<word>"),
+    ///             _ => None,
+    ///         }
     ///     }
     /// }
     ///
@@ -219,26 +241,18 @@ pub trait Token: Sized + 'static {
     ///         .map(|chunk_ref: ChunkRef<NumOrWord>| chunk_ref.token)
     ///         .collect::<Vec<_>>(),
     ///     vec![
-    ///         &NumOrWord::Word(String::from("foo")),
-    ///         &NumOrWord::Num(123),
-    ///         &NumOrWord::Mismatch,
-    ///         &NumOrWord::Word(String::from("bar")),
+    ///         NumOrWord::Word,
+    ///         NumOrWord::Num,
+    ///         NumOrWord::Mismatch,
+    ///         NumOrWord::Word,
     ///     ],
     /// );
     /// ```
-    fn new(session: &mut impl LexisSession) -> Self;
+    fn parse(session: &mut impl LexisSession) -> Self;
 
-    /// A helper function to lexically scan provided `string`.
-    ///
-    /// This function is a shortcut to the `TokenBuffer::from(string)` call.
-    #[inline(always)]
-    fn parse(string: impl Borrow<str>) -> TokenBuffer<Self> {
-        let mut buffer = TokenBuffer::default();
+    fn index(self) -> TokenIndex;
 
-        buffer.append(string.borrow());
-
-        buffer
-    }
+    fn describe(index: TokenIndex) -> Option<&'static str>;
 }
 
 /// A weak reference of the [Token] and its [Chunk](crate::lexis::Chunk) metadata inside the source
@@ -263,7 +277,7 @@ pub trait Token: Sized + 'static {
 /// let bar_token: TokenRef = doc.cursor(..).token_ref(2);
 ///
 /// assert!(bar_token.is_valid_ref(&doc));
-/// assert_eq!(bar_token.deref(&doc).unwrap(), &SimpleToken::Identifier);
+/// assert_eq!(bar_token.deref(&doc).unwrap(), SimpleToken::Identifier);
 /// assert_eq!(bar_token.string(&doc).unwrap(), "bar");
 ///
 /// // Prepend the source code text.
@@ -353,44 +367,12 @@ impl TokenRef {
     /// This function uses [`SourceCode::get_token`](crate::lexis::SourceCode::get_token) function
     /// under the hood.
     #[inline(always)]
-    pub fn deref<'code, T: Token>(
-        &self,
-        code: &'code impl SourceCode<Token = T>,
-    ) -> Option<&'code T> {
+    pub fn deref<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<T> {
         if self.id != code.id() {
             return None;
         }
 
         code.get_token(&self.chunk_ref)
-    }
-
-    /// Mutably dereferences weakly referred [Token](crate::lexis::Token) of specified
-    /// [SourceCode](crate::lexis::SourceCode).
-    ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
-    ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// Even though this function provides a way to mutate a Token instance, it is not recommended
-    /// to mutate the token in a way that would change its lexical group. In other words, for enum
-    /// Token implementations it is fine to change variant's inner fields, but is not recommended
-    /// to replace one variant with another variant.
-    ///
-    /// Such mutations do not lead to undefined behavior, but they could corrupt syntax parser
-    /// correctness.
-    ///
-    /// This function uses [`SourceCode::get_token_mut`](crate::lexis::SourceCode::get_token)
-    /// function under the hood.
-    #[inline(always)]
-    pub fn deref_mut<'code, T: Token>(
-        &self,
-        code: &'code mut impl SourceCode<Token = T>,
-    ) -> Option<&'code mut T> {
-        if self.id != code.id() {
-            return None;
-        }
-
-        code.get_token_mut(&self.chunk_ref)
     }
 
     /// Returns a [ChunkRef](crate::lexis::ChunkRef) overall token metadata object of the weakly

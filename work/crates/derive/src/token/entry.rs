@@ -45,6 +45,7 @@ use syn::{
     DeriveInput,
     Error,
     Generics,
+    LitStr,
     Result,
 };
 
@@ -58,7 +59,8 @@ use crate::{
         variant::TokenVariant,
     },
     utils::{
-        debug_panic,
+        null,
+        system_panic,
         Automata,
         AutomataContext,
         Facade,
@@ -76,7 +78,7 @@ pub struct Token {
     pub(super) token_name: Ident,
     pub(super) generics: Generics,
     pub(super) rules: Vec<RuleMeta>,
-    pub(super) mismatch: Ident,
+    pub(super) mismatch: (Ident, LitStr),
     pub(super) scope: Scope,
     pub(super) automata: Automata<Scope>,
     pub(super) products: Map<State, RuleIndex>,
@@ -98,7 +100,7 @@ impl Parse for Token {
                 let span = match other {
                     Data::Struct(data) => data.struct_token.span,
                     Data::Union(data) => data.union_token.span,
-                    _ => debug_panic!("Unsupported Item format."),
+                    _ => system_panic!("Unsupported Item format."),
                 };
 
                 return Err(Error::new(
@@ -110,6 +112,7 @@ impl Parse for Token {
         };
 
         let mut inline_map = InlineMap::empty();
+        let mut repr = false;
 
         for attribute in input.attrs {
             match attribute.style {
@@ -143,34 +146,66 @@ impl Parse for Token {
                     expression.inline(&inline_map)?;
 
                     if inline_map.insert(name, expression).is_some() {
-                        debug_panic!("Inline expression redefined.");
+                        system_panic!("Inline expression redefined.");
                     }
+                }
+
+                "repr" => {
+                    attribute.parse_args_with(|input: ParseStream| {
+                        let repr_kind = input.parse::<Ident>()?;
+
+                        if repr_kind != "u8" {
+                            return Err(Error::new(
+                                repr_kind.span(),
+                                "Token type must be #[repr(u8)].",
+                            ));
+                        }
+
+                        if !input.is_empty() {
+                            return Err(Error::new(
+                                input.span(),
+                                "Token type must be #[repr(u8)].",
+                            ));
+                        }
+
+                        Ok(())
+                    })?;
+
+                    repr = true;
                 }
 
                 _ => continue,
             }
         }
 
-        let mut mismatch: Option<Ident> = None;
+        if !repr {
+            return Err(Error::new(
+                token_name.span(),
+                "Token type must be #[repr(u8)].\nAnnotate this type \
+                with #[repr(u8)] inert attribute.",
+            ));
+        }
+
+        let mut mismatch: Option<(Ident, LitStr)> = None;
         let mut rules = Vec::with_capacity(data.variants.len());
 
         for variant in data.variants.into_iter() {
             let variant = TokenVariant::from_variant(variant, rules.len(), &inline_map)?;
 
             match variant {
-                TokenVariant::Mismatch { name } => {
+                TokenVariant::Mismatch { name, description } => {
                     if let Some(previous) = &mismatch {
                         return Err(Error::new(
                             name.span(),
                             format!(
                                 "The variant {:?} already labeled as mismatch fallback.\nToken \
                                 must specify only one mismatch variant.",
-                                previous.to_string(),
+                                previous.0.to_string(),
                             ),
                         ));
                     }
 
-                    mismatch = Some(name);
+                    mismatch = Some((name, description));
                 }
 
                 TokenVariant::Other => (),
@@ -198,7 +233,7 @@ impl Parse for Token {
             .fold(None, |accumulator: Option<CharacterSet>, rule| {
                 let alphabet = match rule {
                     TokenVariant::Rule { expression, .. } => expression.alphabet(),
-                    _ => debug_panic!("Non-rule variant."),
+                    _ => system_panic!("Non-rule variant."),
                 };
 
                 Some(match accumulator {
@@ -234,7 +269,7 @@ impl Parse for Token {
                         rule_expression = expression;
                     }
 
-                    _ => debug_panic!("Non-rule variant."),
+                    _ => system_panic!("Non-rule variant."),
                 }
 
                 let mut automata = rule_expression.encode(&mut scope)?;
@@ -333,7 +368,7 @@ impl Parse for Token {
         let mut matched_products = Set::empty();
 
         automata.retain(|from, through, _| match through {
-            Terminal::Null => debug_panic!("Automata with null transition."),
+            Terminal::Null => null!(),
             Terminal::Character(..) => true,
             Terminal::Product(index) => {
                 assert!(

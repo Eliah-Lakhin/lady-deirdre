@@ -39,7 +39,7 @@ use crate::{
     arena::{Identifiable, Ref},
     lexis::{SiteRefSpan, ToSpan},
     std::*,
-    syntax::{Cluster, ClusterRef, Node, NodeRef},
+    syntax::{Cluster, ClusterRef, Node},
 };
 
 /// A low-level interface to access and inspect syntax structure of the compilation unit.

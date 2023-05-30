@@ -37,7 +37,7 @@
 
 use lady_deirdre::lexis::Token;
 
-#[derive(Token, Debug, Clone, Copy)]
+#[derive(Token, Debug, Clone, Copy, PartialEq, Eq)]
 #[define(DEC = ['0'..'9'])]
 #[define(HEX = DEC | ['A'..'F'])]
 #[define(POSITIVE = ['1'..'9'] & DEC*)]
@@ -45,6 +45,7 @@ use lady_deirdre::lexis::Token;
       ['"', '\\', '/', 'b', 'f', 'n', 'r', 't']
     | ('u' & HEX & HEX & HEX & HEX)
 ))]
+#[repr(u8)]
 pub enum JsonToken {
     #[rule("true")]
     True,

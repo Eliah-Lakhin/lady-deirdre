@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::{Ident, Span};
+use proc_macro2::{Ident, Span, TokenStream};
 use syn::{
     parse::ParseStream,
     punctuated::Punctuated,
@@ -49,38 +49,39 @@ use syn::{
     Variant,
 };
 
-pub(in crate::node) struct Constructor {
+use crate::{
+    node::{input::NodeInput, variables::VariableMap},
+    utils::{error, expect_some},
+};
+
+pub(super) struct Constructor {
     span: Span,
     name: Ident,
     parameters: Vec<Parameter>,
-    explicit: bool,
+    overridden: bool,
 }
 
-impl Spanned for Constructor {
-    #[inline(always)]
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl<'a> TryFrom<&'a Attribute> for Constructor {
+impl TryFrom<Attribute> for Constructor {
     type Error = Error;
 
-    fn try_from(attribute: &'a Attribute) -> Result<Self> {
-        let span = attribute.span();
+    fn try_from(attr: Attribute) -> Result<Self> {
+        let span = attr.span();
 
-        attribute.parse_args_with(|input: ParseStream| {
+        attr.parse_args_with(|input: ParseStream| {
             let name = input.parse::<Ident>()?;
 
             let content;
             parenthesized!(content in input);
 
+            if !input.is_empty() {
+                return Err(error!(input.span(), "Unexpected end of input.",));
+            }
+
             let parameters = Punctuated::<Ident, Token![,]>::parse_terminated(&content)?
                 .into_iter()
                 .map(|name| Parameter {
                     name,
-                    default_value: None,
-                    default_attribute: None,
+                    default: None,
                 })
                 .collect::<Vec<_>>();
 
@@ -88,22 +89,23 @@ impl<'a> TryFrom<&'a Attribute> for Constructor {
                 span,
                 name,
                 parameters,
-                explicit: true,
+                overridden: true,
             })
         })
     }
 }
 
-impl<'a> TryFrom<&'a Variant> for Constructor {
+impl TryFrom<Variant> for Constructor {
     type Error = Error;
 
-    fn try_from(variant: &'a Variant) -> Result<Self> {
+    fn try_from(variant: Variant) -> Result<Self> {
         match &variant.fields {
             Fields::Unnamed(fields) => {
-                return Err(Error::new(
+                return Err(error!(
                     fields.span(),
-                    "Variants with unnamed fields require explicit constructor.\nAnnotate \
-                    this variant with #[constructor(...)] attribute.",
+                    "Variants with unnamed fields require overridden \
+                    constructor.\nAnnotate this variant with \
+                    #[constructor(...)] attribute.",
                 ));
             }
 
@@ -115,11 +117,11 @@ impl<'a> TryFrom<&'a Variant> for Constructor {
 
         let parameters = variant
             .fields
-            .iter()
+            .into_iter()
             .map(|field| {
                 let mut default = None;
 
-                for attribute in &field.attrs {
+                for attribute in field.attrs {
                     match attribute.style {
                         AttrStyle::Inner(_) => continue,
                         AttrStyle::Outer => (),
@@ -133,7 +135,7 @@ impl<'a> TryFrom<&'a Variant> for Constructor {
                     match name.to_string().as_str() {
                         "default" => {
                             if default.is_some() {
-                                return Err(Error::new(
+                                return Err(error!(
                                     attribute.span(),
                                     "Duplicate Default attribute.",
                                 ));
@@ -146,19 +148,17 @@ impl<'a> TryFrom<&'a Variant> for Constructor {
                     }
                 }
 
-                let name = field.ident.clone().expect("Internal error. Unnamed field.");
+                let name = expect_some!(field.ident, "Unnamed field.",);
 
                 match default {
                     None => Ok(Parameter {
                         name,
-                        default_value: None,
-                        default_attribute: None,
+                        default: None,
                     }),
 
                     Some((span, value)) => Ok(Parameter {
                         name,
-                        default_value: Some(value),
-                        default_attribute: Some(span),
+                        default: Some((span, value)),
                     }),
                 }
             })
@@ -168,56 +168,120 @@ impl<'a> TryFrom<&'a Variant> for Constructor {
             span,
             name,
             parameters,
-            explicit: false,
+            overridden: false,
         })
     }
 }
 
 impl Constructor {
     #[inline(always)]
-    pub(in crate::node) fn name(&self) -> &Ident {
-        &self.name
+    pub(super) fn span(&self) -> Span {
+        self.span
     }
 
-    #[inline(always)]
-    pub(in crate::node) fn is_explicit(&self) -> bool {
-        self.explicit
+    pub(super) fn fits(&self, variables: &VariableMap) -> Result<()> {
+        for Parameter { name, default } in &self.parameters {
+            if variables.contains(name) {
+                if let Some((span, _)) = default {
+                    return Err(error!(
+                        *span,
+                        "Default attribute is not applicable here, because \
+                        corresponding variable is explicitly captured in the \
+                        rule expression.",
+                    ));
+                }
+
+                continue;
+            }
+
+            if self.overridden {
+                return Err(error!(
+                    name.span(),
+                    "This parameter is missing in the set of the rule \
+                    capturing variables.",
+                ));
+            }
+
+            if default.is_none() {
+                return Err(error!(
+                    name.span(),
+                    "This parameter is missing in the set of the rule \
+                    capturing variables.\nIf this is intending, the rule needs \
+                    an explicit constructor.\nUse #[constructor(...)] \
+                    attribute to specify constructor function.\n\
+                    Alternatively, associate this parameter with \
+                    #[default(...)] attribute.",
+                ));
+            }
+        }
+
+        for variable in variables {
+            let has_corresponding_parameter = self
+                .parameters
+                .iter()
+                .any(|parameter| &parameter.name == variable);
+
+            if has_corresponding_parameter {
+                continue;
+            }
+
+            if self.overridden {
+                return Err(error!(
+                    variable.span(),
+                    "Capturing \"{variable}\" variable is missing in \
+                    constructor's parameters.",
+                ));
+            }
+
+            return Err(error!(
+                variable.span(),
+                "Capturing \"{variable}\" variable is missing in the list of \
+                variant fields.",
+            ));
+        }
+
+        Ok(())
     }
 
-    #[inline(always)]
-    pub(in crate::node) fn parameters(&self) -> &[Parameter] {
-        &self.parameters
+    pub(super) fn compile(&self, input: &NodeInput, variables: &VariableMap) -> TokenStream {
+        let span = self.name.span();
+        let this = input.this();
+        let constructor_name = &self.name;
+
+        if self.overridden {
+            let parameters = self
+                .parameters
+                .iter()
+                .map(|parameter| variables.get(&parameter.name));
+
+            return quote_spanned!(span=>
+                #this::#constructor_name(#( #parameters ),*));
+        }
+
+        let parameters = self.parameters.iter().map(|parameter| {
+            let key = &parameter.name;
+            let span = key.span();
+
+            match &parameter.default {
+                None => {
+                    let variable = variables.get(key);
+
+                    quote_spanned!(span=> #key: #variable,)
+                }
+
+                Some((span, default)) => {
+                    quote_spanned!(*span=> #key: #default,)
+                }
+            }
+        });
+
+        quote_spanned!(span=>#this::#constructor_name {#(
+            #parameters
+        )*})
     }
 }
 
-pub(in crate::node) struct Parameter {
+struct Parameter {
     name: Ident,
-    default_value: Option<Expr>,
-    default_attribute: Option<Span>,
-}
-
-impl Parameter {
-    #[inline(always)]
-    pub(in crate::node) fn name(&self) -> &Ident {
-        &self.name
-    }
-
-    #[inline(always)]
-    pub(in crate::node) fn is_default(&self) -> bool {
-        self.default_value.is_some()
-    }
-
-    #[inline(always)]
-    pub(in crate::node) fn default_value(&self) -> &Expr {
-        self.default_value
-            .as_ref()
-            .expect("Internal error. Missing default value.")
-    }
-
-    #[inline(always)]
-    pub(in crate::node) fn default_attribute(&self) -> &Span {
-        self.default_attribute
-            .as_ref()
-            .expect("Internal error. Missing default attribute.")
-    }
+    default: Option<(Span, Expr)>,
 }

@@ -37,9 +37,10 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    lexis::SiteRefSpan,
+    compiler::CompilationUnit,
+    lexis::{SiteRefSpan, ToSpan, Token, TokenSet},
     std::*,
-    syntax::{ClusterRef, Node, SyntaxTree},
+    syntax::{ClusterRef, Node, RuleIndex, RuleSet, SyntaxTree, ROOT_RULE},
 };
 
 /// A base syntax parse error object.
@@ -65,220 +66,235 @@ use crate::{
 /// }
 /// ```
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum SyntaxError {
-    /// A parse rule `context` did not expect continuation of the token input sequence.
-    ///
-    /// Usually this parse error indicates that the parser (semi-)successfully parsed
-    /// input sequence, but in the end it has matched tail tokens that do not fit any top level
-    /// parse rules.
-    ///
-    /// **Example:**
-    ///
-    /// ```text
-    /// fn main() { foo(); }
-    ///
-    /// fn foo() {}
-    ///
-    /// bar
-    /// ^^^ Unexpected end of input.
-    /// ```
-    UnexpectedEndOfInput {
-        /// A [site](crate::lexis::Site) reference span of where the rule has failed.
-        ///
-        /// Usually this span is the tail of input site.
-        span: SiteRefSpan,
+pub struct SyntaxError {
+    /// A [site](crate::lexis::Site) reference span of where the rule has failed.
+    pub span: SiteRefSpan,
 
-        /// A name of the rule that has failed.
-        context: &'static str,
-    },
+    /// A name of the rule that has failed.
+    pub context: RuleIndex,
 
-    /// A parse rule `context` expected a `token` in specified `span`.
+    /// A set of tokens that the parser was expected.
     ///
-    /// Usually this parse error indicates that specific parse rule expected particular token in
-    /// particular place, and decided to recover this error using "insert" recovery
-    /// strategy(by virtually skipping this unambiguous sub-rule switching to the next sub-rule).
-    ///
-    /// **Example:**
-    ///
-    /// ```text
-    /// fn main() { foo(10   20); }
-    ///                   ^^^ Missing token ",".
-    ///
-    /// fn foo(x: usize, y: usize) {}
-    /// ```
-    MissingToken {
-        /// A [site](crate::lexis::Site) reference span of where the rule has failed.
-        ///
-        /// Usually this span is just a single Site.
-        span: SiteRefSpan,
+    /// Possibly empty set.
+    pub expected_tokens: &'static TokenSet,
 
-        /// A name of the rule that has failed.
-        context: &'static str,
-
-        /// A name of expected mismatched token.
-        token: &'static str,
-    },
-
-    /// A parse rule `context` expected a `token` in specified `span`.
+    /// A set of named rules that the parser was expected to be descend to.
     ///
-    /// Usually this parse error indicates that specific parse rule expected particular named rule
-    /// in particular place to be descend to, and decided to recover this error using "insert"
-    /// recovery strategy(by virtually skipping this unambiguous sub-rule switching to the next
-    /// sub-rule).
-    ///
-    /// **Example:**
-    ///
-    /// ```text
-    /// fn main() { foo(10,   ); }
-    ///                    ^^^ Missing rule "Rust expression".
-    ///
-    /// fn foo(x: usize, y: usize) {}
-    /// ```
-    MissingRule {
-        /// A [site](crate::lexis::Site) reference span of where the rule has failed.
-        ///
-        /// Usually this span is just a single Site.
-        span: SiteRefSpan,
-
-        /// A name of the rule that has failed.
-        context: &'static str,
-
-        /// A name of expected mismatched rule.
-        rule: &'static str,
-    },
-
-    /// A parse rule `context` expected a set of tokens and/or a set of parse rules in specified
-    /// `span`.
-    ///
-    /// Usually this parse error indicates that specific parse rule failed to match specific set of
-    /// possible tokens and/or named rules to be descend to due to ambiguity between possible rules
-    /// in specified parse position. The rule decided to recover from this error using "panic"
-    /// recovery strategy(by virtually skipping a number of tokens ahead until expected token was
-    /// found, or just by skipping a number of tokens in some parse context and then skipping
-    /// specified sub-rule).
-    ///
-    /// **Example:**
-    ///
-    /// ```text
-    /// fn main() { foo(10, 20; }
-    ///                       ^ Mismatch. ")" or any other expression operator expected,
-    ///                         but ";" found.
-    ///
-    /// fn foo(x: usize, y: usize) {}
-    /// ```
-    Mismatch {
-        /// A [site](crate::lexis::Site) reference span of where the rule has failed.
-        span: SiteRefSpan,
-
-        /// A name of the rule that has failed.
-        context: &'static str,
-
-        /// A set of tokens that the parser was expected.
-        ///
-        /// Possibly empty set.
-        expected_tokens: Vec<&'static str>,
-
-        /// A set of named rules that the parser was expected to be descend to.
-        ///
-        /// Possibly empty set.
-        expected_rules: Vec<&'static str>,
-    },
+    /// Possibly empty set.
+    pub expected_rules: &'static RuleSet,
 }
 
-impl Display for SyntaxError {
-    #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::UnexpectedEndOfInput { context, .. } => {
-                formatter.write_str(&format!("{} unexpected end of input.", context))
-            }
+impl SyntaxError {
+    #[inline(always)]
+    pub fn title<N: Node>(&self) -> impl Display + '_ {
+        struct Title<'error, N> {
+            error: &'error SyntaxError,
+            _node: PhantomData<N>,
+        }
 
-            Self::MissingToken { context, token, .. } => {
-                formatter.write_str(&format!("Missing ${} in {}.", token, context))
+        impl<'error, N: Node> Display for Title<'error, N> {
+            #[inline(always)]
+            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                match N::describe(self.error.context) {
+                    Some(context) => {
+                        formatter.write_fmt(format_args!("Syntax error in {context}."))
+                    }
+                    None => formatter.write_str("Syntax error."),
+                }
             }
+        }
 
-            Self::MissingRule { context, rule, .. } => {
-                formatter.write_str(&format!("Missing {} in {}.", rule, context))
-            }
+        Title {
+            error: self,
+            _node: PhantomData::<N>,
+        }
+    }
 
-            Self::Mismatch {
-                context,
-                expected_tokens,
-                expected_rules,
-                ..
-            } => {
-                let mut expected_tokens = expected_tokens
-                    .iter()
-                    .map(|token| format!("${}", token))
+    #[inline(always)]
+    pub fn describe<N: Node>(&self) -> impl Display + '_ {
+        const SHORT_LENGTH: usize = 80;
+
+        struct Describe<'error, N> {
+            error: &'error SyntaxError,
+            _node: PhantomData<N>,
+        }
+
+        impl<'error, N: Node> Display for Describe<'error, N> {
+            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                #[derive(PartialEq, Eq, PartialOrd, Ord)]
+                enum RuleOrToken {
+                    Rule(&'static str),
+                    Token(&'static str),
+                }
+
+                impl Display for RuleOrToken {
+                    #[inline(always)]
+                    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                        match self {
+                            Self::Rule(string) => formatter.write_str(string),
+                            Self::Token(string) => formatter.write_fmt(format_args!("'{string}'")),
+                        }
+                    }
+                }
+
+                let mut expected_rules = (&self.error.expected_rules)
+                    .into_iter()
+                    .map(|rule| N::describe(rule))
+                    .flatten()
+                    .map(RuleOrToken::Rule)
                     .collect::<Vec<_>>();
+
+                let mut expected_tokens = self
+                    .error
+                    .expected_tokens
+                    .into_iter()
+                    .map(|rule| <N as Node>::Token::describe(rule))
+                    .flatten()
+                    .map(RuleOrToken::Token)
+                    .collect::<Vec<_>>();
+
+                let total = expected_rules.len() + expected_tokens.len();
+
+                if total == 0 {
+                    return match formatter.alternate() {
+                        true => match self.error.context == ROOT_RULE {
+                            false => match N::describe(self.error.context) {
+                                Some(context) if self.error.context != ROOT_RULE => formatter
+                                    .write_fmt(format_args!(
+                                        "Unexpected end of input in {context}."
+                                    )),
+
+                                _ => formatter.write_str("Unexpected end of input."),
+                            },
+                            true => formatter.write_str("Unexpected end of input."),
+                        },
+                        false => formatter.write_str("unexpected end of input"),
+                    };
+                }
+
+                expected_rules.sort();
                 expected_tokens.sort();
 
-                let mut expected_rules = expected_rules
-                    .iter()
-                    .map(|rule| rule.to_string())
-                    .collect::<Vec<_>>();
-                expected_rules.sort();
+                let limit;
+                let mut length;
 
-                let expected_len = expected_tokens.len() + expected_rules.len();
+                match formatter.alternate() {
+                    true => {
+                        limit = usize::MAX;
+                        length = 0;
 
-                let expected = expected_rules
-                    .into_iter()
-                    .chain(expected_tokens.into_iter());
+                        match total <= 2 {
+                            true => {
+                                formatter.write_str("Missing ")?;
+                            }
 
-                formatter.write_str(context)?;
-                formatter.write_str(" format mismatch.")?;
+                            false => {
+                                if let Some(context) = N::describe(self.error.context) {
+                                    formatter
+                                        .write_fmt(format_args!("{context} format mismatch. "))?;
+                                }
 
-                if expected_len > 0 {
-                    formatter.write_str(" Expected ")?;
-
-                    let last = expected_len - 1;
-
-                    let is_multi = last > 1;
-
-                    for (index, expected) in expected.enumerate() {
-                        let is_first = index == 0;
-                        let is_last = index == last;
-
-                        match (is_first, is_last, is_multi) {
-                            (true, _, _) => (),
-                            (false, false, _) => formatter.write_str(", ")?,
-                            (false, true, true) => formatter.write_str(", or ")?,
-                            (false, true, false) => formatter.write_str(" or ")?,
+                                formatter.write_str("Expected ")?;
+                            }
                         }
-
-                        formatter.write_str(&expected)?;
                     }
 
-                    formatter.write_str(".")?;
+                    false => {
+                        limit = SHORT_LENGTH;
+
+                        match total == 1 {
+                            true => {
+                                formatter.write_str("missing ")?;
+                                length = "missing ".len();
+                            }
+
+                            false => {
+                                formatter.write_str("expected ")?;
+                                length = "expected ".len();
+                            }
+                        }
+                    }
+                }
+
+                let mut index = 0;
+
+                for item in expected_rules.into_iter().chain(expected_tokens) {
+                    let mut next = String::with_capacity(SHORT_LENGTH);
+
+                    match index {
+                        0 => (),
+                        1 => match total == 2 {
+                            true => {
+                                next += " or ";
+                            }
+
+                            false => {
+                                next += ", ";
+                            }
+                        },
+
+                        _ => {
+                            next += ", ";
+                        }
+                    }
+
+                    next += item.to_string().as_str();
+
+                    if index == 0 || length + next.len() < limit {
+                        index += 1;
+                        length += next.len();
+                        formatter.write_str(&next)?;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                match index < total - 1 {
+                    true => formatter.write_str("...")?,
+
+                    false => {
+                        if formatter.alternate() {
+                            if total <= 2 {
+                                if let Some(context) = N::describe(self.error.context) {
+                                    formatter.write_fmt(format_args!(" in {context}"))?;
+                                }
+                            }
+
+                            formatter.write_str(".")?;
+                        }
+                    }
                 }
 
                 Ok(())
             }
         }
-    }
-}
 
-impl SyntaxError {
-    /// A [site](crate::lexis::Site) reference span of where the rule has failed.
-    #[inline(always)]
-    pub fn span(&self) -> &SiteRefSpan {
-        match self {
-            Self::UnexpectedEndOfInput { span, .. } => span,
-            Self::MissingToken { span, .. } => span,
-            Self::MissingRule { span, .. } => span,
-            Self::Mismatch { span, .. } => span,
+        Describe {
+            error: self,
+            _node: PhantomData::<N>,
         }
     }
 
-    /// A name of the rule that has failed.
     #[inline(always)]
-    pub fn context(&self) -> &'static str {
-        match self {
-            Self::UnexpectedEndOfInput { context, .. } => context,
-            Self::MissingToken { context, .. } => context,
-            Self::MissingRule { context, .. } => context,
-            Self::Mismatch { context, .. } => context,
+    pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Display + '_ {
+        struct DisplaySyntaxError<'a, U: CompilationUnit> {
+            error: &'a SyntaxError,
+            unit: &'a U,
         }
+
+        impl<'a, U: CompilationUnit> Display for DisplaySyntaxError<'a, U> {
+            #[inline]
+            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                Display::fmt(&self.error.span.display(self.unit), formatter)?;
+                formatter.write_str(": ")?;
+                formatter.write_fmt(format_args!("{:#}", self.error.describe::<U::Node>()))?;
+
+                Ok(())
+            }
+        }
+
+        DisplaySyntaxError { error: self, unit }
     }
 }
 
@@ -293,23 +309,33 @@ impl SyntaxError {
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     syntax::{SimpleNode, SyntaxTree, SyntaxError, TreeContent},
-///     lexis::SiteRef,
+///     syntax::{
+///         SimpleNode,
+///         SyntaxTree,
+///         SyntaxError,
+///         TreeContent,
+///         RuleSet,
+///         ROOT_RULE,
+///         EMPTY_RULE_SET,
+///     },
+///     lexis::{SiteRef, TokenSet, EMPTY_TOKEN_SET},
 /// };
 ///
 /// let mut doc = Document::<SimpleNode>::from("foo bar");
 ///
 /// let new_custom_error_ref = doc.root_node_ref().cluster().link_error(
 ///     &mut doc,
-///     SyntaxError::UnexpectedEndOfInput {
+///     SyntaxError {
 ///         span: SiteRef::nil()..SiteRef::nil(),
-///         context: "BAZ",
+///         context: ROOT_RULE,
+///         expected_tokens: &EMPTY_TOKEN_SET,
+///         expected_rules: &EMPTY_RULE_SET,
 ///     },
 /// );
 ///
 /// assert_eq!(
-///     new_custom_error_ref.deref(&doc).unwrap().to_string(),
-///     "BAZ unexpected end of input.",
+///     new_custom_error_ref.deref(&doc).unwrap().display(&doc).to_string(),
+///     "?: Unexpected end of input.",
 /// );
 ///
 /// // This change touches "root" node of the syntax tree(the only node of the tree), as such

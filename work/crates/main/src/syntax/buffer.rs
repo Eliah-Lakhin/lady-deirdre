@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref, Repository, RepositoryIterator},
+    arena::{Id, Identifiable, Ref, Repository},
     lexis::{SiteRef, SiteRefSpan, ToSpan, TokenCursor},
     std::*,
     syntax::{
@@ -44,7 +44,6 @@ use crate::{
         Cluster,
         ClusterRef,
         Node,
-        NodeRef,
         SyntaxSession,
         SyntaxTree,
         ROOT_RULE,
@@ -72,8 +71,8 @@ use crate::{
 ///     syntax::{SyntaxBuffer, SimpleNode, SyntaxTree, NodeRef, Node, TreeContent},
 /// };
 ///
-/// let token_buffer = SimpleToken::parse("foo({bar}[baz])");
-/// let syntax_buffer = SimpleNode::parse(token_buffer.cursor(..));
+/// let token_buffer = TokenBuffer::parse("foo({bar}[baz])");
+/// let syntax_buffer = SyntaxBuffer::parse(token_buffer.cursor(..));
 ///
 /// fn format(tree: &impl SyntaxTree<Node = SimpleNode>, node: &NodeRef) -> String {
 ///     let node = node.deref(tree).unwrap();
@@ -190,6 +189,11 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
 }
 
 impl<N: Node> SyntaxBuffer<N> {
+    #[inline(always)]
+    pub fn parse<'code>(token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>) -> Self {
+        Self::new(Id::new(), token_cursor)
+    }
+
     pub(crate) fn new<'code>(
         id: Id,
         mut token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,

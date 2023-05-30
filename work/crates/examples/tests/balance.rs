@@ -39,7 +39,7 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    lexis::{CodeContent, SimpleToken, ToSpan},
+    lexis::{CodeContent, SimpleToken},
     syntax::{Node, NodeRef, SyntaxError, SyntaxTree, TreeContent},
     Document,
 };
@@ -51,7 +51,15 @@ fn test_balance() {
     #[derive(Node, Clone, Debug, PartialEq, Eq)]
     #[token(SimpleToken)]
     #[error(SyntaxError)]
-    #[skip($Number | $Symbol | $Identifier | $String | $Char | $Whitespace | $Mismatch)]
+    #[trivia($Number | $Symbol | $Identifier | $String | $Char | $Whitespace | $Mismatch)]
+    #[recovery(
+        $ParenClose,
+        $BracketClose,
+        $BraceClose,
+        [$ParenOpen..$ParenClose],
+        [$BracketOpen..$BracketClose],
+        [$BraceOpen..$BraceClose],
+    )]
     #[define(ANY = Parenthesis | Brackets | Braces)]
     enum DebugNode {
         #[root]
@@ -63,7 +71,6 @@ fn test_balance() {
         },
 
         #[rule($ParenOpen & inner: ANY* & $ParenClose)]
-        #[synchronization]
         Parenthesis {
             #[default(unsafe { VERSION })]
             version: usize,
@@ -71,7 +78,6 @@ fn test_balance() {
         },
 
         #[rule($BracketOpen & inner: ANY* & $BracketClose)]
-        #[synchronization]
         Brackets {
             #[default(unsafe { VERSION })]
             version: usize,
@@ -79,7 +85,6 @@ fn test_balance() {
         },
 
         #[rule($BraceOpen & inner: ANY* & $BraceClose)]
-        #[synchronization]
         Braces {
             #[default(unsafe { VERSION })]
             version: usize,
@@ -167,7 +172,7 @@ fn test_balance() {
 
         fn debug_errors(&self) -> String {
             self.errors()
-                .map(|error| format!("{}: {}", error.span().format(self), error))
+                .map(|error| error.display(self).to_string())
                 .collect::<Vec<_>>()
                 .join("\n")
         }
@@ -184,7 +189,10 @@ fn test_balance() {
     document.write(0..0, "(");
     assert_eq!(document.debug_print(), "1:1<1:1()>");
     assert_eq!(document.substring(..), "(foo bar baz");
-    assert_eq!(document.debug_errors(), "[1:13]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, or $ParenClose.");
+    assert_eq!(
+        document.debug_errors(),
+        "[1:13]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'."
+    );
 
     unsafe { VERSION = 2 };
 
@@ -193,9 +201,9 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        r#"[1:15]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, or $ParenClose.
-[1:15]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, or $BracketClose.
-[1:15]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, or $BraceClose."#
+        "[1:15]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
+        [1:15]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
+        [1:15]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
     );
 
     unsafe { VERSION = 3 };
@@ -205,8 +213,8 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo) bar baz");
     assert_eq!(
         document.debug_errors(),
-        r#"[1:7]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, or $BracketClose.
-[1:7]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, or $BraceClose."#
+        "[1:7]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
+        [1:7]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
     );
 
     unsafe { VERSION = 4 };
@@ -216,9 +224,9 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        r#"[1:15]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, or $ParenClose.
-[1:15]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, or $BracketClose.
-[1:15]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, or $BraceClose."#
+        "[1:15]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
+        [1:15]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
+        [1:15]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
     );
 
     unsafe { VERSION = 5 };
@@ -235,44 +243,52 @@ fn test_balance() {
     unsafe { VERSION = 8 };
 
     document.write(7..8, "");
-    assert_eq!(document.debug_print(), "7:0<7:0(8:1[8:0{}5:0[]])>");
+    assert_eq!(document.debug_print(), "8:1<8:1(8:1[8:0{}])5:0[]>");
     assert_eq!(document.substring(..), "([{foo})[] bar] baz)");
     assert_eq!(
         document.debug_errors(),
-        r#"[1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, or $BracketClose."#
+        "[1:15]..[1:20]: Unexpected end of input.\n\
+        [1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
     );
 
     unsafe { VERSION = 9 };
 
     document.write(12..12, "X");
-    assert_eq!(document.debug_print(), "7:0<7:0(9:1[8:0{}5:0[]])>");
+    assert_eq!(document.debug_print(), "9:1<9:1(9:1[8:0{}])5:0[]>");
     assert_eq!(document.substring(..), "([{foo})[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        r#"[1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, or $BracketClose."#
+        "[1:16]..[1:21]: Unexpected end of input.\n\
+        [1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
     );
 
     unsafe { VERSION = 10 };
 
     document.write(2..2, "(");
-    assert_eq!(document.debug_print(), "7:0<7:0(10:0[10:0(8:0{})5:0[]])>");
+    assert_eq!(document.debug_print(), "10:0<10:0(10:0[10:0(8:0{})5:0[]])>");
     assert_eq!(document.substring(..), "([({foo})[] bXar] baz)");
-    assert_eq!(document.debug_errors(), r#""#);
+    assert_eq!(document.debug_errors(), "");
 
     unsafe { VERSION = 11 };
 
     document.write(7..8, "");
-    assert_eq!(document.debug_print(), "7:0<7:0(10:0[10:0(11:1{})5:0[]])>");
+    assert_eq!(
+        document.debug_print(),
+        "10:0<10:0(10:0[10:0(11:1{})5:0[]])>",
+    );
     assert_eq!(document.substring(..), "([({foo)[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        r#"[1:8]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, or $BraceClose."#
+        "[1:8]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'.",
     );
 
     unsafe { VERSION = 12 };
 
     document.write(7..7, "}");
-    assert_eq!(document.debug_print(), "7:0<7:0(10:0[10:0(12:0{})5:0[]])>");
+    assert_eq!(
+        document.debug_print(),
+        "10:0<10:0(10:0[10:0(12:0{})5:0[]])>",
+    );
     assert_eq!(document.substring(..), "([({foo})[] bXar] baz)");
-    assert_eq!(document.debug_errors(), r#""#);
+    assert_eq!(document.debug_errors(), "");
 }

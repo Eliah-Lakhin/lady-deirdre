@@ -48,6 +48,10 @@ extern crate syn;
 extern crate core;
 extern crate proc_macro;
 
+use quote::ToTokens;
+
+use crate::node::NodeInput;
+
 mod node;
 mod token;
 mod utils;
@@ -55,7 +59,10 @@ mod utils;
 const BENCHMARK: bool = false;
 
 #[doc = include_str!("./token/readme.md")]
-#[proc_macro_derive(Token, attributes(define, rule, precedence, constructor, mismatch))]
+#[proc_macro_derive(
+    Token,
+    attributes(define, rule, precedence, constructor, describe, mismatch)
+)]
 pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     // panic!(
     //     "{}",
@@ -73,27 +80,22 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     attributes(
         token,
         error,
-        skip,
         define,
+        trivia,
+        recovery,
         rule,
         root,
-        comment,
-        synchronization,
         index,
         constructor,
         secondary,
-        leftmost,
         parser,
         default,
+        describe,
+        dump,
     )
 )]
 pub fn node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    // panic!(
-    //     "{}",
-    //     proc_macro::TokenStream::from(parse_macro_input!(input as node::Node))
-    // );
+    let node_input = parse_macro_input!(input as NodeInput);
 
-    parse_macro_input!(input as node::Node).into()
-
-    // (quote! {}).into()
+    node_input.to_token_stream().into()
 }

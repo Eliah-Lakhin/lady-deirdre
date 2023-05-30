@@ -39,7 +39,7 @@ use crate::{
     arena::{Id, Identifiable, Ref, Repository},
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
     std::*,
-    syntax::{ErrorRef, Node, NodeRef},
+    syntax::{ErrorRef, Node, NodeRef, RuleIndex, ROOT_RULE},
 };
 
 /// An interface to the source code syntax parsing/re-parsing session.
@@ -57,7 +57,7 @@ use crate::{
 /// [SyntaxSession] trait as an input/output "thin" interaction interface.
 ///
 /// The Syntax Tree Manager passes a mutable reference to SyntaxSession object to the
-/// [`Node::new`](crate::syntax::Node::new) function to initiate syntax parsing procedure in
+/// [`Node::new`](crate::syntax::Node::parse) function to initiate syntax parsing procedure in
 /// specified context. And, in turn, the `Node::new` function uses this object to read
 /// [Tokens](crate::lexis::Token) from the input sequence, and to drive the parsing process.
 ///
@@ -66,7 +66,7 @@ use crate::{
 /// existing syntax grammar definitions seamlessly.
 ///
 /// As long as the the [Node](crate::syntax::Node) trait implementation follows
-/// [`Algorithm Specification`](crate::syntax::Node::new), the
+/// [`Algorithm Specification`](crate::syntax::Node::parse), the
 /// intercommunication between the Syntax Parser and the Syntax Tree Manager works correctly too.
 ///
 /// The SyntaxSession inherits [TokenCursor](crate::lexis::TokenCursor) trait that provides
@@ -79,7 +79,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// [TokenCursor](crate::lexis::TokenCursor) inner [Site](crate::lexis::Site).
     ///
     /// Depending on implementation this function may recursively invoke
-    /// [`Node::new`](crate::syntax::Node::new) function under the hood to process specified `rule`,
+    /// [`Node::new`](crate::syntax::Node::parse) function under the hood to process specified `rule`,
     /// or get previously parsed value from the Syntax Tree Manager internal cache.
     ///
     /// The function returns a [`weak reference`](crate::syntax::NodeRef) into the parsed Node.
@@ -87,7 +87,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// The `Node::new` algorithm should prefer to call this function to recursively descend into
     /// the syntax grammar rules instead of the direct recursive invocation of the `Node::new`.
     ///
-    /// By the [`Algorithm Specification`](crate::syntax::Node::new) the `Node::new` function should
+    /// By the [`Algorithm Specification`](crate::syntax::Node::parse) the `Node::new` function should
     /// avoid of calling of this function with the [ROOT_RULE](crate::syntax::ROOT_RULE) value.
     fn descend(&mut self, rule: RuleIndex) -> NodeRef;
 
@@ -100,22 +100,8 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// [RuleIndex](crate::syntax::RuleIndex) using this function.
     ///
     /// The function returns a [`weak reference`](crate::syntax::ErrorRef) into registered error.
-    fn error(&mut self, error: <Self::Node as Node>::Error) -> ErrorRef;
+    fn error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef;
 }
-
-/// A static identifier of arbitrary syntax grammar rule.
-///
-/// The exact values of this type are uniquely specified by the particular
-/// [`syntax parsing algorithm`](crate::syntax::Node::new) except the [ROOT_RULE] that is always
-/// specifies grammar's an entry rule.
-pub type RuleIndex = usize;
-
-/// A syntax grammar entry rule.
-///
-/// See [`syntax parser algorithm specification`](crate::syntax::Node::new) for details.
-pub static ROOT_RULE: RuleIndex = 0;
-
-pub(crate) static NON_ROOT_RULE: RuleIndex = 1;
 
 pub(super) struct SequentialSyntaxSession<
     'code,
@@ -154,7 +140,7 @@ where
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<&'code Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
         self.token_cursor.token(distance)
     }
 
@@ -197,7 +183,7 @@ where
     type Node = N;
 
     fn descend(&mut self, rule: RuleIndex) -> NodeRef {
-        let node = N::new(rule, self);
+        let node = N::parse(rule, self);
 
         let node_ref = match rule == ROOT_RULE {
             true => {
@@ -226,11 +212,11 @@ where
     }
 
     #[inline(always)]
-    fn error(&mut self, error: <Self::Node as Node>::Error) -> ErrorRef {
+    fn error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
         ErrorRef {
             id: self.id,
             cluster_ref: Ref::Primary,
-            error_ref: self.errors.insert(error),
+            error_ref: self.errors.insert(error.into()),
         }
     }
 }

@@ -61,7 +61,7 @@ use crate::{
 /// [LexisSession] trait as an input/output "thin" interaction interface.
 ///
 /// The Source Code Manager passes a mutable reference to LexisSession object to the
-/// [`Token::new`](crate::lexis::Token::new) function to initiate lexical scanning procedure in
+/// [`Token::new`](crate::lexis::Token::parse) function to initiate lexical scanning procedure in
 /// specified context. And, in turn, the `Token::new` function uses this object to read
 /// Unicode input character, and to drive the scanning process.
 ///
@@ -70,7 +70,7 @@ use crate::{
 /// existing lexical grammar definitions seamlessly.
 ///
 /// As long as the the [Token](crate::lexis::Token) trait implementation follows
-/// [`Algorithm Specification`](crate::syntax::Node::new), the
+/// [`Algorithm Specification`](crate::syntax::Node::parse), the
 /// intercommunication between the Lexical Scanner and the Source Code Manager works correctly.
 ///
 /// ```rust
@@ -118,7 +118,7 @@ use crate::{
 ///             end: 0,
 ///         };
 ///
-///         let token = T::new(&mut session);
+///         let token = T::parse(&mut session);
 ///
 ///         // Token scanner didn't submit anything.
 ///         // Then the `token` value is "Mismatch" token type.
@@ -128,7 +128,7 @@ use crate::{
 ///                 session.start += input[session.start..].chars().next().unwrap().len_utf8();
 ///                 session.cursor = session.start;
 ///
-///                 let _ = T::new(&mut session);
+///                 let _ = T::parse(&mut session);
 ///
 ///                 if session.end > session.start { break; }
 ///             }
@@ -237,7 +237,7 @@ impl<'code, T: Token> SequentialLexisSession<'code, T> {
         };
 
         loop {
-            let token = T::new(&mut session);
+            let token = T::parse(&mut session);
 
             if session.start_cursor.site != session.end_cursor.site {
                 session
@@ -276,7 +276,7 @@ impl<'code, T: Token> SequentialLexisSession<'code, T> {
                 return true;
             }
 
-            let token = T::new(self);
+            let token = T::parse(self);
 
             if self.start_cursor.site < self.end_cursor.site {
                 self.buffer

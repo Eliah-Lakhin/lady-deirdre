@@ -82,8 +82,16 @@ impl<T: Token> Node for NoSyntax<T> {
     type Error = SyntaxError;
 
     #[inline(always)]
-    fn new<'code>(_rule: RuleIndex, _session: &mut impl SyntaxSession<'code, Node = Self>) -> Self {
+    fn parse<'code>(
+        _rule: RuleIndex,
+        _session: &mut impl SyntaxSession<'code, Node = Self>,
+    ) -> Self {
         Self::nil()
+    }
+
+    #[inline(always)]
+    fn describe(_index: RuleIndex) -> Option<&'static str> {
+        None
     }
 }
 

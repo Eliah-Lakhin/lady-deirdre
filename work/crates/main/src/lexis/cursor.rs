@@ -89,7 +89,7 @@ use crate::{
 /// let mut cursor = buf.cursor(4..5);
 ///
 /// // Looking ahead from the beginning.
-/// assert_eq!(cursor.token(0).unwrap(), &SimpleToken::Identifier);
+/// assert_eq!(cursor.token(0).unwrap(), SimpleToken::Identifier);
 /// assert_eq!(cursor.site(0).unwrap(), 1); // Token "foo" starts from Site 1.
 /// assert_eq!(cursor.string(0).unwrap(), "foo");
 /// assert_eq!(cursor.string(1).unwrap(), " ");
@@ -154,7 +154,7 @@ pub trait TokenCursor<'code>: Identifiable {
     /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
     /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
     /// distance to gain the best performance.
-    fn token(&mut self, distance: TokenCount) -> Option<&'code Self::Token>;
+    fn token(&mut self, distance: TokenCount) -> Option<Self::Token>;
 
     /// Looks ahead of the [Token](crate::lexis::Token)'s start [Site](crate::lexis::Site) in front
     /// of the TokenCursor inner Site.
@@ -295,7 +295,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
     }
 
     #[inline]
-    fn token(&mut self, mut distance: TokenCount) -> Option<&'code Self::Token> {
+    fn token(&mut self, mut distance: TokenCount) -> Option<Self::Token> {
         distance += self.next;
 
         if distance >= self.buffer.token_count() {
@@ -308,7 +308,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
             return None;
         }
 
-        Some(unsafe { self.buffer.tokens.inner().get_unchecked(distance) })
+        Some(*unsafe { self.buffer.tokens.inner().get_unchecked(distance) })
     }
 
     #[inline]

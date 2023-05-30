@@ -45,15 +45,24 @@ use crate::json::lexis::JsonToken;
 #[derive(Node, Clone)]
 #[token(JsonToken)]
 #[error(SyntaxError)]
-#[skip($Whitespace)]
+#[trivia($Whitespace)]
 #[define(ANY = Object | Array | True | False | String | Number | Null)]
+#[recovery(
+    $BraceClose,
+    $BracketClose,
+    [$BraceOpen..$BraceClose],
+    [$BracketOpen..$BracketClose],
+)]
 pub enum JsonNode {
     #[root]
     #[rule(object: Object)]
     Root { object: NodeRef },
 
     #[rule($BraceOpen & (entries: Entry)*{$Comma} & $BraceClose)]
-    #[synchronization]
+    #[recovery(
+        [$BraceOpen..$BraceClose],
+        [$BracketOpen..$BracketClose],
+    )]
     Object { entries: Vec<NodeRef> },
 
     #[rule(key: $String & $Colon & value: ANY)]
@@ -61,7 +70,10 @@ pub enum JsonNode {
     Entry { key: TokenRef, value: NodeRef },
 
     #[rule($BracketOpen & (items: ANY)*{$Comma} & $BracketClose)]
-    #[synchronization]
+    #[recovery(
+        [$BraceOpen..$BraceClose],
+        [$BracketOpen..$BracketClose],
+    )]
     Array { items: Vec<NodeRef> },
 
     #[rule(value: $String)]

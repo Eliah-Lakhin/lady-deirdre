@@ -84,7 +84,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<&'unit Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
         if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
             return None;
         }

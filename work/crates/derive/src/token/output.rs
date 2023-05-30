@@ -43,12 +43,13 @@ use syn::LitChar;
 
 use crate::{
     token::{terminal::Terminal, Token, NULL},
-    utils::{debug_panic, Facade, Map, PredictableCollection, Set, SetImpl, State},
+    utils::{null, system_panic, Facade, Map, PredictableCollection, Set, SetImpl, State},
 };
 
 impl Token {
     pub(super) fn output(self, facade: &Facade) -> TokenStream {
         let core = facade.core_crate();
+        let option = facade.option();
 
         let alphabet = self.scope.alphabet();
 
@@ -61,8 +62,8 @@ impl Token {
 
             for (through, to) in outgoing {
                 let through = match through {
-                    Terminal::Null => debug_panic!("Automata with null transition."),
-                    Terminal::Product(..) => debug_panic!("Unfiltered production terminal."),
+                    Terminal::Null => null!(),
+                    Terminal::Product(..) => system_panic!("Unfiltered production terminal."),
                     Terminal::Character(character) => character,
                 };
 
@@ -159,7 +160,22 @@ impl Token {
 
         let token_name = self.token_name;
         let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
-        let mismatch = self.mismatch;
+        let (mismatch_ident, mismatch_description) = self.mismatch;
+
+        let description = self
+            .rules
+            .iter()
+            .map(|rule| {
+                let ident = &rule.name;
+                let description = &rule.description;
+
+                quote! {
+                    if Self::#ident as u8 == token {
+                        return #option::Some(#description);
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
 
         let rules = self.rules.into_iter().map(|rule| rule.output(facade));
 
@@ -167,7 +183,7 @@ impl Token {
             impl #impl_generics #core::lexis::Token for #token_name #ty_generics
             #where_clause
             {
-                fn new(session: &mut impl #core::lexis::LexisSession) -> Self {
+                fn parse(session: &mut impl #core::lexis::LexisSession) -> Self {
                     #[allow(unused_mut)]
                     let mut state = #start;
                     #[allow(unused_mut)]
@@ -186,8 +202,24 @@ impl Token {
                         #(
                         #rules
                         )*
-                        _ => Self::#mismatch
+                        _ => Self::#mismatch_ident
                     }
+                }
+
+                #[inline(always)]
+                fn index(self) -> #core::lexis::TokenIndex {
+                    self as u8
+                }
+
+                #[inline(always)]
+                fn describe(token: #core::lexis::TokenIndex) -> #option<&'static str> {
+                    #(#description)*
+
+                    if Self::#mismatch_ident as u8 == token {
+                        return #option::Some(#mismatch_description);
+                    }
+
+                    None
                 }
             }
         }

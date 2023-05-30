@@ -41,9 +41,9 @@ pub use lady_deirdre_derive::Node;
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    lexis::{Token, TokenCursor},
+    lexis::Token,
     std::*,
-    syntax::{ClusterRef, RuleIndex, SyntaxBuffer, SyntaxError, SyntaxSession, SyntaxTree},
+    syntax::{ClusterRef, RuleIndex, SyntaxError, SyntaxSession, SyntaxTree},
 };
 
 /// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
@@ -71,7 +71,7 @@ use crate::{
 /// #[derive(Node, PartialEq, Debug)]
 /// #[token(SimpleToken)]
 /// #[error(SyntaxError)]
-/// #[skip($Whitespace)]
+/// #[trivia($Whitespace)]
 /// enum NumbersInParens {
 ///     #[root]
 ///     #[rule($ParenOpen & (numbers: $Number)*{$Symbol} & $ParenClose)]
@@ -95,7 +95,7 @@ use crate::{
 /// ```
 ///
 /// An API user can implement the Node trait manually too. For example, using 3rd party parser
-/// libraries. See [`Node::new`](crate::syntax::Node::new) function specification for details.
+/// libraries. See [`Node::new`](crate::syntax::Node::parse) function specification for details.
 pub trait Node: Sized + 'static {
     /// Describes programming language's lexical grammar.
     type Token: Token;
@@ -159,9 +159,11 @@ pub trait Node: Sized + 'static {
     ///         SyntaxError,
     ///         SyntaxTree,
     ///         TreeContent,
+    ///         RuleSet,
     ///         ROOT_RULE,
-    /// },
-    ///     lexis::{SimpleToken, TokenCursor},
+    ///         EMPTY_RULE_SET,
+    ///     },
+    ///     lexis::{SimpleToken, TokenCursor, TokenSet, EMPTY_TOKEN_SET},
     ///     Document,
     /// };
     ///
@@ -179,7 +181,7 @@ pub trait Node: Sized + 'static {
     ///     type Token = SimpleToken;
     ///     type Error = SyntaxError;
     ///
-    ///     fn new<'code>(
+    ///     fn parse<'code>(
     ///         rule: RuleIndex,
     ///         session: &mut impl SyntaxSession<'code, Node = Self>,
     ///     ) -> Self {
@@ -199,6 +201,13 @@ pub trait Node: Sized + 'static {
     ///         Self::parse_other(session)
     ///     }
     ///
+    ///     fn describe(index: RuleIndex) -> Option<&'static str> {
+    ///         match index {
+    ///             PARENS_RULE => Some("Parens"),
+    ///             OTHER_RULE => Some("Other"),
+    ///             _ => None,
+    ///         }
+    ///     }
     /// }
     ///
     /// impl Parens {
@@ -208,7 +217,7 @@ pub trait Node: Sized + 'static {
     ///         loop {
     ///             // Analysing of the next incoming token.
     ///             match session.token(0) {
-    ///                 Some(&SimpleToken::ParenOpen) => {
+    ///                 Some(SimpleToken::ParenOpen) => {
     ///                     inner.push(session.descend(PARENS_RULE));
     ///                 }
     ///
@@ -233,12 +242,12 @@ pub trait Node: Sized + 'static {
     ///         loop {
     ///             // Analysing of the next incoming token.
     ///             match session.token(0) {
-    ///                 Some(&SimpleToken::ParenOpen) => {
+    ///                 Some(SimpleToken::ParenOpen) => {
     ///                     inner.push(session.descend(PARENS_RULE));
     ///                 }
     ///
     ///                 // Close parenthesis(")") found. Parsing process finished successfully.
-    ///                 Some(&SimpleToken::ParenClose) => {
+    ///                 Some(SimpleToken::ParenClose) => {
     ///                     // Consuming this token.
     ///                     session.advance();
     ///
@@ -257,9 +266,11 @@ pub trait Node: Sized + 'static {
     ///
     ///         // Registering a syntax error.
     ///         let span = session.site_ref(0)..session.site_ref(0);
-    ///         session.error(SyntaxError::UnexpectedEndOfInput {
+    ///         session.error(SyntaxError {
     ///             span,
-    ///             context: "Parse Parens",
+    ///             context: PARENS_RULE,
+    ///             expected_tokens: &EMPTY_TOKEN_SET,
+    ///             expected_rules: &EMPTY_RULE_SET,
     ///         });
     ///
     ///         // Returning what we have parsed so far.
@@ -274,7 +285,7 @@ pub trait Node: Sized + 'static {
     ///         loop {
     ///             // Analysing of the next incoming token.
     ///             match session.token(0) {
-    ///                 Some(&SimpleToken::ParenOpen) | Some(&SimpleToken::ParenClose) | None => {
+    ///                 Some(SimpleToken::ParenOpen) | Some(SimpleToken::ParenClose) | None => {
     ///                     break;
     ///                 }
     ///
@@ -294,30 +305,9 @@ pub trait Node: Sized + 'static {
     /// // The input text has been parsed without errors.
     /// assert_eq!(doc.errors().count(), 0);
     /// ```
-    fn new<'code>(rule: RuleIndex, session: &mut impl SyntaxSession<'code, Node = Self>) -> Self;
+    fn parse<'code>(rule: RuleIndex, session: &mut impl SyntaxSession<'code, Node = Self>) -> Self;
 
-    /// A helper function to immediately parse a subsequent of tokens in non-incremental way.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{
-    ///     lexis::{SimpleToken, Token, SourceCode},
-    ///     syntax::{SimpleNode, Node, SyntaxTree, TreeContent},
-    /// };
-    ///
-    /// let tokens = SimpleToken::parse("(foo bar)");
-    ///
-    /// let sub_sequence = tokens.cursor(0..5); // A cursor into the "(foo bar" substring.
-    ///
-    /// let syntax = SimpleNode::parse(sub_sequence);
-    ///
-    /// // Close parenthesis is missing in this subsequence, so the syntax tree of the subsequence
-    /// // has syntax errors.
-    /// assert!(syntax.errors().count() > 0);
-    /// ```
-    #[inline(always)]
-    fn parse<'code>(cursor: impl TokenCursor<'code, Token = Self::Token>) -> SyntaxBuffer<Self> {
-        SyntaxBuffer::new(Id::new(), cursor)
-    }
+    fn describe(index: RuleIndex) -> Option<&'static str>;
 }
 
 /// A weak reference of the [Node] and its metadata inside the syntax structure of the compilation

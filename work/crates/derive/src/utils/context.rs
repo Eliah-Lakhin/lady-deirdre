@@ -39,7 +39,7 @@ use std::{hash::Hash, mem::replace};
 
 use crate::utils::{
     automata::Automata,
-    debug_panic,
+    system_panic,
     transitions::Transitions,
     Map,
     PredictableCollection,
@@ -81,7 +81,7 @@ pub trait AutomataContext: Sized {
 
     fn terminal(&mut self, terminals: Set<Self::Terminal>) -> Automata<Self> {
         if terminals.is_empty() {
-            debug_panic!("An attempt to create a terminal of empty set.");
+            system_panic!("An attempt to create a terminal of empty set.");
         }
 
         let start = self.gen_state();

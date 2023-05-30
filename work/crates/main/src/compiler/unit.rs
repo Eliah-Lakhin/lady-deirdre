@@ -43,7 +43,9 @@ use crate::{
     Document,
 };
 
-pub trait CompilationUnit<N: Node>: SourceCode<Token = N::Token> + SyntaxTree<Node = N> {
+pub trait CompilationUnit:
+    SourceCode<Token = <<Self as SyntaxTree>::Node as Node>::Token> + SyntaxTree
+{
     fn is_mutable(&self) -> bool;
 
     #[inline(always)]
@@ -51,10 +53,10 @@ pub trait CompilationUnit<N: Node>: SourceCode<Token = N::Token> + SyntaxTree<No
         !self.is_mutable()
     }
 
-    fn into_token_buffer(self) -> TokenBuffer<N::Token>;
+    fn into_token_buffer(self) -> TokenBuffer<<Self as SourceCode>::Token>;
 
     #[inline(always)]
-    fn into_document(self) -> Document<N>
+    fn into_document(self) -> Document<<Self as SyntaxTree>::Node>
     where
         Self: Sized,
     {
@@ -65,7 +67,7 @@ pub trait CompilationUnit<N: Node>: SourceCode<Token = N::Token> + SyntaxTree<No
     }
 
     #[inline(always)]
-    fn into_mutable_unit(self) -> MutableUnit<N>
+    fn into_mutable_unit(self) -> MutableUnit<<Self as SyntaxTree>::Node>
     where
         Self: Sized,
     {
@@ -73,7 +75,7 @@ pub trait CompilationUnit<N: Node>: SourceCode<Token = N::Token> + SyntaxTree<No
     }
 
     #[inline(always)]
-    fn into_immutable_unit(self) -> ImmutableUnit<N>
+    fn into_immutable_unit(self) -> ImmutableUnit<<Self as SyntaxTree>::Node>
     where
         Self: Sized,
     {

@@ -41,14 +41,15 @@
 use std::fmt::{Debug, Display, Formatter};
 
 use lady_deirdre::{
-    lexis::{CodeContent, LexisSession, SourceCode, Token, TokenCursor},
+    lexis::{CodeContent, LexisSession, SourceCode, Token, TokenCursor, TokenIndex},
     syntax::{NoSyntax, SimpleNode},
     Document,
 };
 
 #[test]
 fn test_document_lexis() {
-    #[derive(Clone, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    #[repr(u8)]
     pub enum CustomToken {
         A,
         B,
@@ -58,7 +59,7 @@ fn test_document_lexis() {
 
     impl Token for CustomToken {
         #[inline]
-        fn new(session: &mut impl LexisSession) -> Self {
+        fn parse(session: &mut impl LexisSession) -> Self {
             let mut kind = 0;
 
             loop {
@@ -137,6 +138,31 @@ fn test_document_lexis() {
                 3 => CustomToken::C,
                 _ => unreachable!(),
             }
+        }
+
+        #[inline(always)]
+        fn index(self) -> TokenIndex {
+            self as u8
+        }
+
+        fn describe(index: TokenIndex) -> Option<&'static str> {
+            if index == Self::A as u8 {
+                return Some("A");
+            }
+
+            if index == Self::B as u8 {
+                return Some("B");
+            }
+
+            if index == Self::C as u8 {
+                return Some("C");
+            }
+
+            if index == Self::F as u8 {
+                return Some("F");
+            }
+
+            None
         }
     }
 

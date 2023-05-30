@@ -116,18 +116,10 @@ impl<N: Node> SourceCode for Document<N> {
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<&Self::Token> {
+    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
         match self {
             Self::Mutable(unit) => unit.get_token(chunk_ref),
             Self::Immutable(unit) => unit.get_token(chunk_ref),
-        }
-    }
-
-    #[inline(always)]
-    fn get_token_mut(&mut self, chunk_ref: &Ref) -> Option<&mut Self::Token> {
-        match self {
-            Self::Mutable(unit) => unit.get_token_mut(chunk_ref),
-            Self::Immutable(unit) => unit.get_token_mut(chunk_ref),
         }
     }
 
@@ -248,7 +240,7 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 }
 
-impl<N: Node> CompilationUnit<N> for Document<N> {
+impl<N: Node> CompilationUnit for Document<N> {
     #[inline(always)]
     fn is_mutable(&self) -> bool {
         match self {
@@ -376,7 +368,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<&'document Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
         match self {
             Self::Mutable(cursor) => cursor.token(distance),
             Self::Immutable(cursor) => cursor.token(distance),

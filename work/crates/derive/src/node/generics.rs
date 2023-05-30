@@ -35,60 +35,56 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::{Ident, TokenStream};
+use syn::{
+    punctuated::Punctuated,
+    spanned::Spanned,
+    GenericParam,
+    Generics,
+    Lifetime,
+    LifetimeDef,
+};
 
-use crate::node::{builder::constructor::Constructor, compiler::Compiler};
+pub(super) struct ParserGenerics {
+    pub(super) ty: Generics,
+    pub(super) func: Generics,
+    pub(super) code: Lifetime,
+}
 
-impl Constructor {
-    pub(in crate::node) fn compile(
-        &self,
-        compiler: &Compiler<'_>,
-        variant_name: &Ident,
-    ) -> TokenStream {
-        let constructor_name = self.name();
-        let node_name = compiler.builder().node_name();
+impl ParserGenerics {
+    pub(super) fn new(generics: Generics) -> Self {
+        let code = {
+            let mut candidate = String::from("'code");
 
-        let variables = compiler.builder().variant(variant_name).variables();
-
-        match self.is_explicit() {
-            true => {
-                let parameters = self
-                    .parameters()
-                    .iter()
-                    .map(|parameter| variables.get(parameter.name()).read());
-
-                quote! {
-                    #node_name::#constructor_name(
-                        #( #parameters ),*
-                    )
-                }
-            }
-
-            false => {
-                let parameters = self.parameters().iter().map(|parameter| {
-                    let key = parameter.name();
-
-                    let value = match parameter.is_default() {
-                        false => variables.get(key).read(),
-
-                        true => {
-                            let default = parameter.default_value();
-
-                            quote! { #default }
-                        }
-                    };
-
-                    quote! {
-                        #key: #value,
-                    }
-                });
-
-                quote! {
-                    #node_name::#constructor_name {
-                        #( #parameters )*
+            'outer: loop {
+                for lifetime_def in generics.lifetimes() {
+                    if candidate == lifetime_def.lifetime.ident.to_string() {
+                        candidate.push('_');
+                        continue 'outer;
                     }
                 }
+
+                break;
             }
+
+            Lifetime::new(candidate.as_str(), generics.span())
+        };
+
+        let mut func = generics.clone();
+
+        func.params.insert(
+            0,
+            GenericParam::Lifetime(LifetimeDef {
+                attrs: Vec::new(),
+                lifetime: code.clone(),
+                colon_token: None,
+                bounds: Punctuated::new(),
+            }),
+        );
+
+        ParserGenerics {
+            ty: generics,
+            func,
+            code,
         }
     }
 }

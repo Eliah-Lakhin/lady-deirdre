@@ -46,8 +46,8 @@ use std::{
 use syn::Result;
 
 use crate::utils::{
-    debug_panic,
     deterministic::Deterministic,
+    system_panic,
     transitions::Transitions,
     AutomataContext,
     Map,
@@ -71,9 +71,9 @@ where
         struct Visitor<'a, 'f, C: AutomataContext> {
             original: &'a Automata<C>,
             formatter: &'a mut Formatter<'f>,
-            pending: VecDeque<&'a State>,
-            visited: Set<&'a State>,
-            names: Map<&'a State, usize>,
+            pending: VecDeque<State>,
+            visited: Set<State>,
+            names: Map<State, usize>,
             generator: RangeFrom<usize>,
         }
 
@@ -113,22 +113,22 @@ where
 
                     let mut string_from = format!("{}", self.name_of(state));
 
-                    if self.original.finish.contains(state) {
+                    if self.original.finish.contains(&state) {
                         string_from = format!("{}\u{2192}", string_from);
                     }
 
-                    if state == &self.original.start {
+                    if state == self.original.start {
                         string_from = format!("\u{2192}{}", string_from);
                     }
 
                     for (_, through, to) in transitions {
                         let mut string_to = format!("{}", self.name_of(to));
 
-                        if self.original.finish.contains(to) {
+                        if self.original.finish.contains(&to) {
                             string_to = format!("{}\u{2192}", string_to);
                         }
 
-                        if to == &self.original.start {
+                        if to == self.original.start {
                             string_to = format!("\u{2192}{}", string_to);
                         }
 
@@ -138,7 +138,7 @@ where
                             string_from, through, string_to,
                         )?;
 
-                        if !self.visited.contains(to) {
+                        if !self.visited.contains(&to) {
                             let _ = self.visited.insert(to);
                             self.pending.push_back(to);
                         }
@@ -149,7 +149,7 @@ where
             }
 
             #[inline]
-            fn name_of(&mut self, state: &'a State) -> usize {
+            fn name_of(&mut self, state: State) -> usize {
                 *self.names.entry(state).or_insert_with(|| {
                     self.generator
                         .next()
@@ -161,8 +161,8 @@ where
         let mut visitor = Visitor {
             original: self,
             formatter,
-            pending: VecDeque::from([&self.start]),
-            visited: Set::new([&self.start]),
+            pending: VecDeque::from([self.start]),
+            visited: Set::new([self.start]),
             names: Map::empty(),
             generator: 1..,
         };
@@ -182,8 +182,8 @@ impl<C: AutomataContext> Automata<C> {
     }
 
     #[inline(always)]
-    pub fn start(&self) -> &State {
-        &self.start
+    pub fn start(&self) -> State {
+        self.start
     }
 
     #[inline(always)]
@@ -219,7 +219,7 @@ impl<C: AutomataContext> Automata<C> {
 
                 let finish = match self.finish.single() {
                     Some(finish) => finish,
-                    None => debug_panic!("Reversed DFA with multiple start states."),
+                    None => system_panic!("Reversed DFA with multiple start states."),
                 };
 
                 self.finish = Set::new([self.start]);
@@ -246,7 +246,7 @@ impl<C: AutomataContext> Automata<C> {
 
                 let finish = match self.finish.single() {
                     Some(finish) => finish,
-                    None => debug_panic!("Reversed DFA with multiple start states."),
+                    None => system_panic!("Reversed DFA with multiple start states."),
                 };
 
                 self.finish = Set::new([self.start]);
@@ -286,7 +286,7 @@ impl<C: AutomataContext> Automata<C> {
     pub(super) fn test(&self, input: Vec<C::Terminal>) -> bool {
         use crate::utils::context::AutomataTerminal;
 
-        let mut state = &self.start;
+        let mut state = self.start;
 
         'outer: for terminal in &input {
             for (from, through, to) in &self.transitions {
@@ -305,6 +305,6 @@ impl<C: AutomataContext> Automata<C> {
             return false;
         }
 
-        self.finish.contains(state)
+        self.finish.contains(&state)
     }
 }

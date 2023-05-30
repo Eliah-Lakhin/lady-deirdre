@@ -58,4 +58,3 @@ extern crate self as lady_deirdre;
 extern crate alloc;
 #[cfg(not(feature = "std"))]
 extern crate core;
-extern crate core;

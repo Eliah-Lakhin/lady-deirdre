@@ -67,7 +67,7 @@ mod tests {
             references::References,
             tree::Tree,
         },
-        lexis::{LexisSession, Token},
+        lexis::{LexisSession, Token, TokenIndex},
         std::*,
         syntax::{Node, RuleIndex, SyntaxError, SyntaxSession},
     };
@@ -629,7 +629,7 @@ mod tests {
         for index in range {
             spans.push(1);
             strings.push(index.to_string());
-            tokens.push(TestToken(index));
+            tokens.push(TestToken::Nothing((index % 0xFF) as u8));
         }
 
         unsafe {
@@ -832,19 +832,34 @@ mod tests {
         type Token = TestToken;
         type Error = SyntaxError;
 
-        fn new<'code>(
+        fn parse<'code>(
             _rule: RuleIndex,
             _session: &mut impl SyntaxSession<'code, Node = Self>,
         ) -> Self {
             unimplemented!()
         }
+
+        fn describe(_index: RuleIndex) -> Option<&'static str> {
+            unimplemented!()
+        }
     }
 
-    #[derive(PartialEq, Eq, Debug)]
-    struct TestToken(usize);
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    #[repr(u8)]
+    enum TestToken {
+        Nothing(u8),
+    }
 
     impl Token for TestToken {
-        fn new(_session: &mut impl LexisSession) -> Self {
+        fn parse(_session: &mut impl LexisSession) -> Self {
+            unimplemented!()
+        }
+
+        fn index(self) -> TokenIndex {
+            unimplemented!()
+        }
+
+        fn describe(_index: TokenIndex) -> Option<&'static str> {
             unimplemented!()
         }
     }

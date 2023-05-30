@@ -91,9 +91,9 @@ pub trait CodeContent: SourceCode {
     ///         .map(|chunk_ref: ChunkRef<'_, SimpleToken>| (chunk_ref.token, chunk_ref.string))
     ///         .collect::<Vec<_>>(),
     ///     vec![
-    ///         (&SimpleToken::Whitespace, " "),
-    ///         (&SimpleToken::Identifier, "bar"),
-    ///         (&SimpleToken::Whitespace, " "),
+    ///         (SimpleToken::Whitespace, " "),
+    ///         (SimpleToken::Identifier, "bar"),
+    ///         (SimpleToken::Whitespace, " "),
     ///     ],
     /// );
     /// ```

@@ -45,7 +45,6 @@ use crate::{
             syntax::MutableSyntaxSession,
         },
         CompilationUnit,
-        ImmutableUnit,
     },
     lexis::{
         utils::{split_left, split_right},
@@ -65,7 +64,7 @@ use crate::{
     },
     report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
-    syntax::{Cluster, ClusterRef, NoSyntax, Node, NodeRef, SyntaxTree, NON_ROOT_RULE, ROOT_RULE},
+    syntax::{Cluster, ClusterRef, NoSyntax, Node, SyntaxTree, NON_ROOT_RULE, ROOT_RULE},
 };
 
 /// An incrementally managed compilation unit.
@@ -201,7 +200,7 @@ use crate::{
 /// let token_ref = cursor.token_ref(0);
 ///
 /// // "bar" is of "Identifier" type.
-/// assert_eq!(token_ref.deref(&doc), Some(&SimpleToken::Identifier));
+/// assert_eq!(token_ref.deref(&doc), Some(SimpleToken::Identifier));
 /// assert_eq!(token_ref.string(&doc), Some("bar"));
 ///
 /// // Write something at the beginning of the Document.
@@ -284,12 +283,12 @@ use crate::{
 ///
 /// // Collecting syntax errors.
 /// let errors = doc.errors()
-///     .map(|error| format!("{}: {}", error.span().format(&doc), error))
+///     .map(|error| error.display(&doc).to_string())
 ///     .collect::<Vec<_>>()
 ///     .join("\n");
 /// assert_eq!(
 ///     errors.as_str(),
-///     "[1:3]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, or $BracketClose.",
+///     "[1:3]..[1:4]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.",
 /// );
 ///
 /// // Syntax Tree is a mutable structure.
@@ -361,7 +360,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<&Self::Token> {
+    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
         let chunk_ref = self.references.chunks().get(chunk_ref)?;
 
         debug_assert!(
@@ -370,18 +369,6 @@ impl<N: Node> SourceCode for MutableUnit<N> {
         );
 
         Some(unsafe { chunk_ref.token() })
-    }
-
-    #[inline(always)]
-    fn get_token_mut(&mut self, chunk_ref: &Ref) -> Option<&mut Self::Token> {
-        let chunk_ref = self.references.chunks().get(chunk_ref)?;
-
-        debug_assert!(
-            !chunk_ref.is_dangling(),
-            "Dangling chunk ref in the References repository."
-        );
-
-        Some(unsafe { chunk_ref.token_mut() })
     }
 
     #[inline(always)]
@@ -678,13 +665,13 @@ where
     }
 }
 
-impl<N: Node> CompilationUnit<N> for MutableUnit<N> {
+impl<N: Node> CompilationUnit for MutableUnit<N> {
     #[inline(always)]
     fn is_mutable(&self) -> bool {
         true
     }
 
-    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
+    fn into_token_buffer(self) -> TokenBuffer<N::Token> {
         let mut buffer = TokenBuffer::with_capacity(self.token_count);
 
         buffer.set_length(self.length());

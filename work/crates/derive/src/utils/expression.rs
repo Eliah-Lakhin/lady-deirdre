@@ -44,15 +44,15 @@ use syn::{
 #[derive(Clone)]
 pub enum Expression<O: ExpressionOperator> {
     Operand(O::Operand),
-    Binary {
-        operator: O,
-        left: Box<Self>,
-        right: Box<Self>,
-    },
-    Unary {
-        operator: O,
-        inner: Box<Self>,
-    },
+    Binary(Box<Self>, O, Box<Self>),
+    Unary(O, Box<Self>),
+}
+
+impl<O: ExpressionOperator> AsRef<Self> for Expression<O> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Self {
+        self
+    }
 }
 
 impl<O> Default for Expression<O>
@@ -74,8 +74,8 @@ where
     fn span(&self) -> Span {
         match self {
             Self::Operand(operand) => operand.span(),
-            Self::Binary { left, .. } => left.span(),
-            Self::Unary { inner, .. } => inner.span(),
+            Self::Binary(left, _, _) => left.span(),
+            Self::Unary(_, inner) => inner.span(),
         }
     }
 }
@@ -89,7 +89,7 @@ impl<O: ExpressionOperator> Parse for Expression<O> {
 
 impl<O: ExpressionOperator> Expression<O> {
     fn binding_parse(input: ParseStream, right_binding_power: u8) -> Result<Self> {
-        let mut result = O::Operand::parse(input)?;
+        let mut left = O::Operand::parse(input)?;
 
         'outer: loop {
             if input.is_empty() || input.peek(Token![,]) {
@@ -111,10 +111,7 @@ impl<O: ExpressionOperator> Expression<O> {
 
                         operator.parse(input)?;
 
-                        result = Expression::Unary {
-                            operator,
-                            inner: Box::new(result),
-                        };
+                        left = Expression::Unary(operator, Box::new(left));
 
                         continue 'outer;
                     }
@@ -128,11 +125,7 @@ impl<O: ExpressionOperator> Expression<O> {
 
                         let right = Self::binding_parse(input, binding_power - 1)?;
 
-                        result = Expression::Binary {
-                            operator,
-                            left: Box::new(result),
-                            right: Box::new(right),
-                        };
+                        left = Expression::Binary(Box::new(left), operator, Box::new(right));
 
                         continue 'outer;
                     }
@@ -142,7 +135,7 @@ impl<O: ExpressionOperator> Expression<O> {
             return Err(lookahead.error());
         }
 
-        Ok(result)
+        Ok(left)
     }
 }
 

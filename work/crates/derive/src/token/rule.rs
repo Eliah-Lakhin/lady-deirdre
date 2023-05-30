@@ -36,19 +36,21 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::{Ident, TokenStream};
+use syn::LitStr;
 
 use crate::{
     token::variant::TokenVariant,
-    utils::{debug_panic, Facade},
+    utils::{system_panic, Facade},
 };
 
 pub(super) type RuleIndex = usize;
 pub(super) type RulePrecedence = usize;
 
 pub(super) struct RuleMeta {
-    name: Ident,
+    pub(super) name: Ident,
     index: RuleIndex,
     constructor: Option<Ident>,
+    pub(super) description: LitStr,
 }
 
 impl From<TokenVariant> for RuleMeta {
@@ -59,14 +61,16 @@ impl From<TokenVariant> for RuleMeta {
                 name,
                 index,
                 constructor,
+                description,
                 ..
             } => Self {
                 name,
                 index,
                 constructor,
+                description,
             },
 
-            _ => debug_panic!("Non-rule variant."),
+            _ => system_panic!("Non-rule variant."),
         }
     }
 }

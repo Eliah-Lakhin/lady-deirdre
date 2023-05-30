@@ -36,14 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::TokenStream;
+use syn::spanned::Spanned;
 
 pub struct Facade {
     core_crate: TokenStream,
     option: TokenStream,
-    vec: TokenStream,
-    into: TokenStream,
-    unreachable: TokenStream,
-    unimplemented: TokenStream,
 }
 
 impl Facade {
@@ -61,50 +58,7 @@ impl Facade {
             ::core::option::Option
         };
 
-        #[cfg(feature = "std")]
-        let vec = quote! {
-            ::std::vec::Vec
-        };
-        #[cfg(not(feature = "std"))]
-        let vec = quote! {
-            ::alloc::vec::Vec
-        };
-
-        #[cfg(feature = "std")]
-        let into = quote! {
-            ::std::convert::From
-        };
-        #[cfg(not(feature = "std"))]
-        let into = quote! {
-            ::core::convert::From
-        };
-
-        #[cfg(feature = "std")]
-        let unreachable = quote! {
-            ::std::unreachable!
-        };
-        #[cfg(not(feature = "std"))]
-        let unreachable = quote! {
-            ::core::unreachable!
-        };
-
-        #[cfg(feature = "std")]
-        let unimplemented = quote! {
-            ::std::unimplemented!
-        };
-        #[cfg(not(feature = "std"))]
-        let unimplemented = quote! {
-            ::core::unimplemented!
-        };
-
-        Self {
-            core_crate,
-            option,
-            vec,
-            into,
-            unreachable,
-            unimplemented,
-        }
+        Self { core_crate, option }
     }
 
     #[inline(always)]
@@ -116,24 +70,76 @@ impl Facade {
     pub fn option(&self) -> &TokenStream {
         &self.option
     }
+}
 
+//todo merge with Facade
+pub trait SpanFacade: Spanned {
     #[inline(always)]
-    pub fn vec(&self) -> &TokenStream {
-        &self.vec
+    fn face_core(&self) -> TokenStream {
+        let span = self.span();
+
+        quote_spanned!(span=> ::lady_deirdre)
     }
 
     #[inline(always)]
-    pub fn convert(&self) -> &TokenStream {
-        &self.into
+    fn face_vec(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::vec::Vec)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::alloc::vec::Vec)
+        }
     }
 
     #[inline(always)]
-    pub fn unreachable(&self) -> &TokenStream {
-        &self.unreachable
+    fn face_option(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::option::Option)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::core::option::Option)
+        }
     }
 
     #[inline(always)]
-    pub fn unimplemented(&self) -> &TokenStream {
-        &self.unimplemented
+    fn face_unimplemented(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::unimplemented!)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::core::unimplemented!)
+        }
+    }
+
+    #[inline(always)]
+    fn face_unreachable(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::unreachable!)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::core::unreachable!)
+        }
     }
 }
+
+impl<S: Spanned> SpanFacade for S {}

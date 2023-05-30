@@ -40,7 +40,7 @@ use std::{collections::BTreeSet, mem::take};
 use syn::Result;
 
 use crate::utils::{
-    debug_panic,
+    system_panic,
     AutomataTerminal,
     Map,
     PredictableCollection,
@@ -292,7 +292,7 @@ impl<T: AutomataTerminal> Transitions<T> {
     pub(super) fn merge(&mut self, other: Self) {
         for (from, outgoing) in other.view {
             if self.view.insert(from, outgoing).is_some() {
-                debug_panic!("Merging of automatas with duplicate states.")
+                system_panic!("Merging of automatas with duplicate states.")
             }
         }
 
@@ -309,14 +309,14 @@ pub struct TransitionsIter<'a, T: AutomataTerminal> {
 }
 
 impl<'a, T: AutomataTerminal> Iterator for TransitionsIter<'a, T> {
-    type Item = (&'a State, &'a T, &'a State);
+    type Item = (State, &'a T, State);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match &mut self.outgoing_iterator {
                 Some((from, outgoing_iterator)) => match outgoing_iterator.next() {
-                    Some((through, to)) => return Some((from, through, to)),
+                    Some((through, to)) => return Some((**from, through, *to)),
                     None => (),
                 },
 

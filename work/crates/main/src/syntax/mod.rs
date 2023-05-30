@@ -39,23 +39,27 @@
 
 mod buffer;
 mod cluster;
+mod combinators;
 mod content;
 mod error;
+mod index;
 mod no;
 mod node;
 mod session;
 mod simple;
 mod tree;
 
-pub(crate) use crate::syntax::session::NON_ROOT_RULE;
+pub(crate) use crate::syntax::index::NON_ROOT_RULE;
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
     cluster::{Cluster, ClusterRef},
+    combinators::{Recovery, UNLIMITED_RECOVERY},
     content::TreeContent,
     error::{ErrorRef, SyntaxError},
+    index::{RuleIndex, RuleSet, EMPTY_RULE_SET, ROOT_RULE},
     no::NoSyntax,
     node::{Node, NodeRef},
-    session::{RuleIndex, SyntaxSession, ROOT_RULE},
+    session::SyntaxSession,
     simple::SimpleNode,
     tree::SyntaxTree,
 };

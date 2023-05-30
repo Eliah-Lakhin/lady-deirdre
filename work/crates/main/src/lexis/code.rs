@@ -97,23 +97,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_token(&self, chunk_ref: &Ref) -> Option<&Self::Token>;
-
-    /// Mutably dereferences a [Token](crate::lexis::Token) instance by specified low-level
-    /// `chunk_ref` weak reference.
-    ///
-    /// Returns [None] if referred Token Chunk does not exist in this instance.
-    ///
-    /// Even though the SourceCode provides a way to mutate Token instances inside the source code
-    /// lexical structure, it is recommended to avoid replacing of these instances with the token
-    /// instances of different lexical kinds(with different enum variants in particular).
-    /// Such replacement is not an undefined behavior, but it could lead to logical errors in
-    /// further syntax parsing/re-parsing stages.
-    ///
-    /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
-    /// weak reference under the hood. An API user normally does not need to call this function
-    /// directly.
-    fn get_token_mut(&mut self, chunk_ref: &Ref) -> Option<&mut Self::Token>;
+    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token>;
 
     /// Returns absolute character index of the [Token](crate::lexis::Token) substring inside this
     /// source code text by specified low-level `chunk_ref` weak reference.

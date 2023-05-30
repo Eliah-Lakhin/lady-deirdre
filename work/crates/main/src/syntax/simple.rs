@@ -41,9 +41,6 @@ use crate::{
     syntax::{Node, NodeRef, SyntaxError},
 };
 
-#[cfg(not(feature = "std"))]
-extern crate alloc;
-
 /// A common generic syntax.
 ///
 /// This is a companion object of the [SimpleToken](SimpleToken) lexis that represents
@@ -51,8 +48,9 @@ extern crate alloc;
 #[derive(Node, Clone, Debug, PartialEq, Eq)]
 #[token(SimpleToken)]
 #[error(SyntaxError)]
-#[skip($Number | $Symbol | $Identifier | $String | $Char | $Whitespace | $Mismatch)]
+#[trivia($Number | $Symbol | $Identifier | $String | $Char | $Whitespace | $Mismatch)]
 #[define(ANY = Parenthesis | Brackets | Braces)]
+#[recovery([$ParenOpen..$ParenClose], [$BracketOpen..$BracketClose], [$BraceOpen..$BraceClose])]
 pub enum SimpleNode {
     /// A root node that contains all top-level parents.
     #[root]
@@ -64,7 +62,6 @@ pub enum SimpleNode {
 
     /// A pair of parenthesis(`( ... )`)
     #[rule($ParenOpen & inner: ANY* & $ParenClose)]
-    #[synchronization]
     Parenthesis {
         /// Parens that nested inside this Parenthesis pair.
         inner: Vec<NodeRef>,
@@ -72,7 +69,6 @@ pub enum SimpleNode {
 
     /// A pair of brackets(`[ ... ]`)
     #[rule($BracketOpen & inner: ANY* & $BracketClose)]
-    #[synchronization]
     Brackets {
         /// Parens that nested inside this Brackets pair.
         inner: Vec<NodeRef>,
@@ -80,7 +76,6 @@ pub enum SimpleNode {
 
     /// A pair of braces(`{ ... }`)
     #[rule($BraceOpen & inner: ANY* & $BraceClose)]
-    #[synchronization]
     Braces {
         /// Parens that nested inside this Braces pair.
         inner: Vec<NodeRef>,

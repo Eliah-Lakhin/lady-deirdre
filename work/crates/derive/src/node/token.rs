@@ -35,50 +35,110 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use syn::{Error, Result};
-
-use crate::{
-    node::regex::{operand::RegexOperand, Regex},
-    utils::debug_panic,
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Formatter},
+    hash::{Hash, Hasher},
+    mem::discriminant,
 };
 
-impl IsSkipRegex for Regex {
-    fn is_skip(&self) -> Result<()> {
+use proc_macro2::{Ident, Span, TokenStream};
+use syn::{
+    parse::{Parse, ParseStream},
+    Result,
+    Type,
+};
+
+#[derive(Clone)]
+pub(super) enum TokenLit {
+    Ident(Ident),
+    Other(Span),
+}
+
+impl Display for TokenLit {
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Operand(RegexOperand::Unresolved { .. }) => debug_panic!("Unresolved operand."),
-
-            Self::Operand(RegexOperand::Exclusion { .. }) => debug_panic!("Unresolved exclusion."),
-
-            Self::Operand(RegexOperand::Debug { inner, .. }) => inner.is_skip(),
-
-            Self::Operand(RegexOperand::Token {
-                capture: Some(target),
-                ..
-            }) => Err(Error::new(
-                target.span(),
-                "Capturing is not allowed in the skip expression.",
-            )),
-
-            Self::Operand(RegexOperand::Token { .. }) => Ok(()),
-
-            Self::Operand(RegexOperand::Rule { name, .. }) => {
-                return Err(Error::new(
-                    name.span(),
-                    "Rule reference is not allowed in the skip expression.",
-                ));
-            }
-
-            Self::Unary { inner, .. } => inner.is_skip(),
-
-            Self::Binary { left, right, .. } => {
-                left.is_skip()?;
-                right.is_skip()?;
-                Ok(())
-            }
+            Self::Ident(ident) => formatter.write_fmt(format_args!("${ident}")),
+            Self::Other(..) => formatter.write_str("$_"),
         }
     }
 }
 
-pub(in crate::node) trait IsSkipRegex {
-    fn is_skip(&self) -> Result<()>;
+impl Hash for TokenLit {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        discriminant(self).hash(state);
+
+        match self {
+            Self::Ident(ident) => ident.hash(state),
+            Self::Other(..) => (),
+        }
+    }
+}
+
+impl PartialEq for TokenLit {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Ident(this), Self::Ident(other)) => this.eq(other),
+            (Self::Other(..), Self::Other(..)) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for TokenLit {}
+
+impl PartialOrd for TokenLit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TokenLit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::Ident(this), Self::Ident(other)) => this.cmp(other),
+            (Self::Other(..), Self::Other(..)) => Ordering::Equal,
+            (Self::Ident(..), ..) => Ordering::Less,
+            (Self::Other(..), ..) => Ordering::Greater,
+        }
+    }
+}
+
+impl Parse for TokenLit {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let _ = input.parse::<Token![$]>()?;
+        let ident = input.parse::<Ident>()?;
+
+        Ok(Self::Ident(ident))
+    }
+}
+
+impl TokenLit {
+    #[inline]
+    pub(super) fn span(&self) -> Span {
+        match self {
+            Self::Ident(ident) => ident.span(),
+            Self::Other(span) => *span,
+        }
+    }
+
+    #[inline]
+    pub(super) fn set_span(&mut self, span: Span) {
+        match self {
+            Self::Ident(ident) => ident.set_span(span),
+            Self::Other(other) => *other = span,
+        }
+    }
+
+    pub(super) fn as_enum_variant(&self, token_type: &Type) -> Option<TokenStream> {
+        let ident = match self {
+            Self::Ident(ident) => ident,
+            Self::Other(..) => return None,
+        };
+
+        Some(quote_spanned!(ident.span()=> #token_type::#ident))
+    }
 }

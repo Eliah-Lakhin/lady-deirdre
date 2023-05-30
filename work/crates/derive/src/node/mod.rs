@@ -36,56 +36,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 mod automata;
-mod builder;
-mod compiler;
+mod constructor;
+mod generics;
+mod index;
+mod input;
+mod leftmost;
+mod recovery;
 mod regex;
+mod rule;
+mod token;
+mod variables;
+mod variant;
 
-use std::time::{Duration, Instant};
-
-use syn::{
-    parse::{Parse, ParseStream, Result},
-    DeriveInput,
-};
-
-use crate::{
-    node::{builder::Builder, compiler::Compiler},
-    BENCHMARK,
-};
-
-pub struct Node {
-    builder: Builder,
-    build_time: Duration,
-}
-
-impl Parse for Node {
-    #[inline(always)]
-    fn parse(input: ParseStream) -> Result<Self> {
-        let build_start = Instant::now();
-        let builder = Builder::try_from(&input.parse::<DeriveInput>()?)?;
-
-        Ok(Self {
-            builder,
-            build_time: build_start.elapsed(),
-        })
-    }
-}
-
-impl From<Node> for proc_macro::TokenStream {
-    #[inline(always)]
-    fn from(node: Node) -> Self {
-        let name = node.builder.node_name().clone();
-        let compile_start = Instant::now();
-        let result = Compiler::compile(&node.builder).into();
-        let compile_time = compile_start.elapsed();
-
-        if BENCHMARK {
-            println!(
-                "Node {} compile time: {:?}",
-                name,
-                compile_time + node.build_time
-            )
-        }
-
-        result
-    }
-}
+pub use crate::node::input::NodeInput;

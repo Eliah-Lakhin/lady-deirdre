@@ -161,7 +161,8 @@ on integer values and their combinations only.
 
 use lady_deirdre::lexis::Token;
 
-#[derive(Token, Debug, PartialEq)]
+#[derive(Token, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 enum CalcToken {
     #[rule("(")]
     Open,
@@ -179,9 +180,7 @@ enum CalcToken {
     Comma,
 
     #[rule(['1'..'9'] & ['0'..'9']* | '0')]
-    #[constructor(parse_num)] // This variant contains a custom field,
-                              // so we need a dedicated constructor.
-    Num(usize),
+    Num,
 
     // Any `char::is_ascii_whitespace()` character.
     #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
@@ -191,12 +190,6 @@ enum CalcToken {
     // "mismatch" token.
     #[mismatch]
     Mismatch,
-}
-
-impl CalcToken {
-    fn parse_num(input: &str) -> Self {
-        Self::Num(input.parse().unwrap())
-    }
 }
 
 // Lets try our lexer.
@@ -225,14 +218,14 @@ use lady_deirdre::lexis::CodeContent;
 assert_eq!(
     doc.chunks(..).map(|chunk| chunk.token).collect::<Vec<_>>(),
     vec![
-        &CalcToken::Open,
-        &CalcToken::Plus,
-        &CalcToken::Whitespace,
-        &CalcToken::Num(5),
-        &CalcToken::Comma,
-        &CalcToken::Whitespace,
-        &CalcToken::Num(10),
-        &CalcToken::Close,
+        CalcToken::Open,
+        CalcToken::Plus,
+        CalcToken::Whitespace,
+        CalcToken::Num,
+        CalcToken::Comma,
+        CalcToken::Whitespace,
+        CalcToken::Num,
+        CalcToken::Close,
     ],
 );
 
@@ -251,7 +244,8 @@ use lady_deirdre::{
 #[error(SyntaxError)] // An object that will store syntax errors.
                       // SyntaxError is the default implement, but you can use
                       // any custom type that implements From<SyntaxError>.
-#[skip($Whitespace)] // Tokens to be ignored in the syntax rule expressions.
+#[trivia($Whitespace)] // Tokens to be ignored in the syntax rule expressions.
+#[recovery([$Open..$Close])]
 enum CalcNode {
     #[root] // The entry-point Rule of the Syntax Tree root node.
     #[rule(expr: Expression)]
@@ -266,9 +260,6 @@ enum CalcNode {
         & (operands: (Number | Expression))+{$Comma}
         & $Close
     )]
-    #[synchronization] // "synchronization" directive tells the parse to recover
-                       // from syntax errors through balancing of to the "(" and
-                       // ")" tokens.
     Expression {
         operator: TokenRef,
         operands: Vec<NodeRef>,
@@ -319,7 +310,7 @@ fn show_tree(node_ref: &NodeRef, tree: &Document<CalcNode>) -> String {
 
         CalcNode::Number { value } => {
             match value.deref(tree) {
-                Some(CalcToken::Num(num)) => num.to_string(),
+                Some(CalcToken::Num) => value.string(tree).unwrap().to_string(),
                 Some(_) => unreachable!(),
                 None => String::from("?"),
             }
@@ -380,7 +371,7 @@ fn interpret(node_ref: &NodeRef, doc: &Document<CalcNode>) -> usize {
 
         CalcNode::Number { value } => {
             match value.deref(doc) {
-                Some(CalcToken::Num(num)) => *num,
+                Some(CalcToken::Num) => value.string(doc).unwrap().parse::<usize>().unwrap(),
                 Some(_) => unreachable!(),
                 None => 0,
             }

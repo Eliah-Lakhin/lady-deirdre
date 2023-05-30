@@ -35,6 +35,9 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+//TODO check warnings regularly
+#![allow(warnings)]
+
 use lady_deirdre::{
     lexis::{Position, SimpleToken, SourceCode, ToPosition, ToSite, TokenBuffer},
     syntax::NoSyntax,

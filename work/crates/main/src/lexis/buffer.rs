@@ -48,11 +48,10 @@ use crate::{
         ToSpan,
         Token,
         TokenCount,
-        TokenRef,
+        CHUNK_SIZE,
     },
     report::debug_unreachable,
     std::*,
-    syntax::Node,
 };
 
 /// A growable buffer of the source code lexical data.
@@ -102,7 +101,7 @@ use crate::{
 /// token_buf.append("Second line\n");
 ///
 /// // Obtaining a non-incremental syntax structure of the entire compilation unit.
-/// let _syntax_tree: SyntaxBuffer<SimpleNode> = SimpleNode::parse(token_buf.cursor(..));
+/// let _syntax_tree: SyntaxBuffer<SimpleNode> = SyntaxBuffer::parse(token_buf.cursor(..));
 ///
 /// // TokenBuffer is traversable structure of Chunk references.
 /// let token_strings = (&token_buf)
@@ -138,48 +137,16 @@ impl<T: Token> Debug for TokenBuffer<T> {
     }
 }
 
-impl<T: Token> Index<TokenRef> for TokenBuffer<T> {
-    type Output = T;
-
-    #[inline(always)]
-    fn index(&self, index: TokenRef) -> &Self::Output {
-        &self
-            .get_token(&index.chunk_ref)
-            .expect("TokenRef is not a valid index into specified TokenBuffer.")
-    }
-}
-
-impl<T: Token> IndexMut<TokenRef> for TokenBuffer<T> {
-    #[inline(always)]
-    fn index_mut(&mut self, index: TokenRef) -> &mut Self::Output {
-        self.get_token_mut(&index.chunk_ref)
-            .expect("TokenRef is not a valid index into specified TokenBuffer.")
-    }
-}
-
-impl<'r, T: Token> Index<&'r TokenRef> for TokenBuffer<T> {
-    type Output = T;
-
-    #[inline(always)]
-    fn index(&self, index: &'r TokenRef) -> &Self::Output {
-        &self
-            .get_token(&index.chunk_ref)
-            .expect("TokenRef is not a valid index into specified TokenBuffer.")
-    }
-}
-
-impl<'r, T: Token> IndexMut<&'r TokenRef> for TokenBuffer<T> {
-    #[inline(always)]
-    fn index_mut(&mut self, index: &'r TokenRef) -> &mut Self::Output {
-        self.get_token_mut(&index.chunk_ref)
-            .expect("TokenRef is not a valid index into specified TokenBuffer.")
-    }
-}
-
 impl<T: Token, S: Borrow<str>> From<S> for TokenBuffer<T> {
     #[inline(always)]
     fn from(string: S) -> Self {
-        T::parse(string)
+        let string = string.borrow();
+
+        let mut buffer = TokenBuffer::with_capacity(string.len() / CHUNK_SIZE);
+
+        buffer.append(string);
+
+        buffer
     }
 }
 
@@ -201,13 +168,8 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<&Self::Token> {
-        self.tokens.get(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn get_token_mut(&mut self, chunk_ref: &Ref) -> Option<&mut Self::Token> {
-        self.tokens.get_mut(chunk_ref)
+    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
+        self.tokens.get(chunk_ref).copied()
     }
 
     #[inline(always)]
@@ -294,6 +256,11 @@ impl<'buffer, T: Token> IntoIterator for &'buffer TokenBuffer<T> {
 }
 
 impl<T: Token> TokenBuffer<T> {
+    #[inline(always)]
+    pub fn parse(string: impl Borrow<str>) -> Self {
+        Self::from(string)
+    }
+
     /// Creates a new TokenBuffer instance with pre-allocated memory for at least `capacity` token
     /// chunks to be stored in.
     #[inline(always)]
@@ -424,7 +391,7 @@ impl<'sequence, T: Token> Iterator for TokenBufferIter<'sequence, T> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        let token = self.tokens.next()?;
+        let token = *self.tokens.next()?;
         let site = self.site;
         let length = *self.spans.next()?;
         let string = self.strings.next()?;

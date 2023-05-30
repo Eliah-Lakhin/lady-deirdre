@@ -39,15 +39,11 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    lexis::{CodeContent, SourceCode, ToSpan, TokenBuffer, TokenRef},
-    syntax::{Node, NodeRef, SyntaxError, SyntaxTree, TreeContent},
+    lexis::{CodeContent, TokenBuffer, TokenRef},
+    syntax::{Node, NodeRef, SyntaxError, TreeContent},
     Document,
 };
-use lady_deirdre_examples::json::{
-    formatter::{JsonFormatter, ToJsonString},
-    lexis::JsonToken,
-    syntax::JsonNode,
-};
+use lady_deirdre_examples::json::{formatter::ToJsonString, lexis::JsonToken, syntax::JsonNode};
 
 #[test]
 fn test_json_success() {
@@ -58,9 +54,9 @@ fn test_json_success() {
 
     assert_eq!(SNIPPET, code.to_json_string());
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
-    assert!(tree.errors().collect::<Vec<_>>().is_empty());
+    assert!(doc.errors().collect::<Vec<_>>().is_empty());
 }
 
 #[test]
@@ -74,12 +70,12 @@ fn test_json_errors_1() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:2] - [1:4]: Object format mismatch. Expected Entry or $BraceClose.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:2]..[1:5]: Missing Entry or '}' in Object.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -96,12 +92,12 @@ fn test_json_errors_2() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:14]: Missing $Comma in Array.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:15]: Missing ',' in Array.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -118,12 +114,12 @@ fn test_json_errors_3() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:15]: Array format mismatch. Expected Array, False, Null, Number, Object, String, or True.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:15]..[1:16]: Array format mismatch. Expected Array, False, Null, Number, Object, String, True.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -140,13 +136,13 @@ fn test_json_errors_4() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:38] - [1:44]: Array format mismatch. Expected $BracketClose or $Comma.\n\
-        [1:50] - [1:56]: Array format mismatch. Expected $BracketClose or $Comma.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:38]..[1:44]: Missing ',' or ']' in Array.\n\
+        [1:50]..[1:56]: Missing ',' or ']' in Array.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -161,12 +157,12 @@ fn test_json_errors_5() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:24]: Object format mismatch. Expected Entry.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:24]..[1:25]: Missing Entry in Object.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -181,13 +177,13 @@ fn test_json_errors_6() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:18]: Entry format mismatch. Expected Array, False, Null, Number, Object, String, or True.\n\
-        [1:18]: Object format mismatch. Expected $BraceClose or $Comma.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:18]: Entry format mismatch. Expected Array, False, Null, Number, Object, String, True.\n\
+        [1:18]: Missing ',' or '}' in Object.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -204,15 +200,16 @@ fn test_json_errors_7() {
         code.to_json_string()
     );
 
-    let tree = JsonNode::parse(code.cursor(..));
+    let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:19]: Array format mismatch. Expected Array, False, Null, Number, Object, String, True, or $BracketClose.\n\
-        [1:24] - [1:30]: Array format mismatch. Expected $BracketClose or $Comma.\n\
-        [1:49] - [1:58]: Entry format mismatch. Expected $Colon.\n\
-        [1:67]: Array format mismatch. Expected $BracketClose or $Comma.\n[1:67]: Object format mismatch. Expected $BraceClose or $Comma.",
-        tree.errors()
-            .map(|error| format!("{}: {}", error.span().format(&code), error))
+        "[1:19]..[1:20]: Array format mismatch. Expected Array, False, Null, Number, Object, String, True, ']'.\n\
+        [1:24]..[1:30]: Missing ',' or ']' in Array.\n\
+        [1:49]..[1:58]: Missing ':' in Entry.\n\
+        [1:67]: Missing ',' or ']' in Array.\n\
+        [1:67]: Missing ',' or '}' in Object.",
+        doc.errors()
+            .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -225,8 +222,14 @@ fn test_json_incremental() {
     #[derive(Node, Clone)]
     #[token(JsonToken)]
     #[error(SyntaxError)]
-    #[skip($Whitespace)]
+    #[trivia($Whitespace)]
     #[define(ANY = Object | Array | True | False | String | Number | Null)]
+    #[recovery(
+        $BraceClose,
+        $BracketClose,
+        [$BraceOpen..$BraceClose],
+        [$BracketOpen..$BracketClose],
+    )]
     pub enum DebugNode {
         #[root]
         #[rule(object: Object)]
@@ -237,7 +240,10 @@ fn test_json_incremental() {
         },
 
         #[rule($BraceOpen & (entries: Entry)*{$Comma} & $BraceClose)]
-        #[synchronization]
+        #[recovery(
+            [$BraceOpen..$BraceClose],
+            [$BracketOpen..$BracketClose],
+        )]
         Object {
             #[default(unsafe { VERSION })]
             version: usize,
@@ -253,7 +259,10 @@ fn test_json_incremental() {
         },
 
         #[rule($BracketOpen & (items: ANY)*{$Comma} & $BracketClose)]
-        #[synchronization]
+        #[recovery(
+            [$BraceOpen..$BraceClose],
+            [$BracketOpen..$BracketClose],
+        )]
         Array {
             #[default(unsafe { VERSION })]
             version: usize,
@@ -366,7 +375,7 @@ fn test_json_incremental() {
 
         fn debug_errors(&self) -> String {
             self.errors()
-                .map(|error| format!("{}: {}", error.span().format(self), error))
+                .map(|error| error.display(self).to_string())
                 .collect::<Vec<_>>()
                 .join("\n")
         }
@@ -376,10 +385,7 @@ fn test_json_incremental() {
 
     let mut document = Document::<DebugNode>::from("");
     assert_eq!(document.substring(..), r#""#);
-    assert_eq!(
-        document.debug_errors(),
-        "[1:1]: Root format mismatch. Expected Object.",
-    );
+    assert_eq!(document.debug_errors(), "[1:1]: Missing Object in Root.",);
     assert_eq!(document.to_json_string(), r#"?"#);
     assert_eq!(document.debug_print(), r#"0(?)"#);
 
@@ -389,7 +395,7 @@ fn test_json_incremental() {
     assert_eq!(document.substring(..), r#"{"#);
     assert_eq!(
         document.debug_errors(),
-        "[1:2]: Object format mismatch. Expected Entry or $BraceClose.",
+        "[1:2]: Missing Entry or '}' in Object.",
     );
     assert_eq!(document.to_json_string(), r#"{}"#);
     assert_eq!(document.debug_print(), r#"1(1({}))"#);
@@ -405,10 +411,7 @@ fn test_json_incremental() {
 
     document.write(1..1, r#""foo""#);
     assert_eq!(document.substring(..), r#"{"foo"}"#);
-    assert_eq!(
-        document.debug_errors(),
-        "[1:7]: Entry format mismatch. Expected $Colon."
-    );
+    assert_eq!(document.debug_errors(), "[1:7]: Missing ':' in Entry.");
     assert_eq!(document.to_json_string(), r#"{"foo": ?}"#);
     assert_eq!(document.debug_print(), r#"3(3({3("foo": ?)}))"#);
 
@@ -422,7 +425,7 @@ fn test_json_incremental() {
         document.substring(..),
         r#"{"foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
-    assert_eq!(document.debug_errors(), "[1:7]: Missing $Colon in Entry.");
+    assert_eq!(document.debug_errors(), "[1:7]: Missing ':' in Entry.");
     assert_eq!(
         document.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
@@ -474,7 +477,7 @@ fn test_json_incremental() {
     );
     assert_eq!(
         document.debug_errors(),
-        "[1:32]: Object format mismatch. Expected $BraceClose or $Comma."
+        "[1:32]: Missing ',' or '}' in Object."
     );
     assert_eq!(
         document.to_json_string(),

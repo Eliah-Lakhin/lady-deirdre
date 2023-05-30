@@ -37,24 +37,34 @@
 
 mod automata;
 mod context;
-mod debug;
 mod deterministic;
+mod dump;
 mod expression;
 mod facade;
 mod map;
 mod predictable;
+mod report;
 mod set;
 mod transitions;
 
-pub(crate) use debug::debug_panic;
+pub(crate) use report::{error, error_message, expect_some, null, system_panic};
 
 pub use crate::utils::{
     automata::Automata,
     context::{AutomataContext, AutomataTerminal, OptimizationStrategy, State},
+    dump::Dump,
     expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::Facade,
+    facade::{Facade, SpanFacade},
     map::{Map, MapImpl},
     predictable::PredictableCollection,
     set::{Set, SetImpl},
     transitions::Transitions,
 };
+
+pub mod dump_kw {
+    syn::custom_keyword!(output);
+    syn::custom_keyword!(trivia);
+    syn::custom_keyword!(bench);
+    syn::custom_keyword!(dry);
+    syn::custom_keyword!(dump);
+}

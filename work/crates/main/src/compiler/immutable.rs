@@ -37,10 +37,10 @@
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    compiler::{CompilationUnit, MutableUnit},
+    compiler::CompilationUnit,
     lexis::{Length, Site, SiteRefSpan, SourceCode, ToSpan, Token, TokenBuffer, TokenCount},
     std::*,
-    syntax::{Cluster, ClusterRef, Node, NodeRef, SyntaxBuffer, SyntaxTree},
+    syntax::{Cluster, ClusterRef, Node, SyntaxBuffer, SyntaxTree},
 };
 
 pub struct ImmutableUnit<N: Node> {
@@ -77,13 +77,8 @@ impl<N: Node> SourceCode for ImmutableUnit<N> {
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<&Self::Token> {
+    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
         self.lexis.get_token(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn get_token_mut(&mut self, chunk_ref: &Ref) -> Option<&mut Self::Token> {
-        self.lexis.get_token_mut(chunk_ref)
     }
 
     #[inline(always)]
@@ -178,7 +173,7 @@ impl<T: Token> TokenBuffer<T> {
     }
 }
 
-impl<N: Node> CompilationUnit<N> for ImmutableUnit<N> {
+impl<N: Node> CompilationUnit for ImmutableUnit<N> {
     #[inline(always)]
     fn is_mutable(&self) -> bool {
         false
