@@ -36,11 +36,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 //TODO check warnings regularly
-#![allow(warnings)]
+#![deny(warnings)]
 
 mod data;
 mod frameworks;
 mod layer;
+
+use std::{thread::sleep, time::Duration};
 
 use criterion::Criterion;
 use lady_deirdre::syntax::NoSyntax;
@@ -58,18 +60,57 @@ use crate::{
     layer::BenchDataLayer,
 };
 
+const SEED: u64 = 154656;
+
+static CULLDOWN: Duration = Duration::from_secs(3);
+
+const LD_LEXIS: bool = true;
+const LD_SYNTAX: bool = true;
+const ROPEY: bool = false; //todo revert
+const NOM: bool = false; //todo revert
+const TREE_SITTER: bool = false; //todo revert
+
 fn main() {
-    let layers = BenchDataLayer::new();
+    let mut frameworks = Vec::with_capacity(5);
+
+    if LD_LEXIS {
+        frameworks
+            .push(Box::new(SelfCase::<NoSyntax<JsonToken>>::new("LD Lexis"))
+                as Box<dyn FrameworkCase>);
+    }
+
+    if LD_SYNTAX {
+        frameworks.push(Box::new(SelfCase::<JsonNode>::new("LD Syntax")) as Box<dyn FrameworkCase>);
+    }
+
+    if ROPEY {
+        frameworks.push(Box::new(RopeyCase("Ropey")) as Box<dyn FrameworkCase>);
+    }
+
+    if NOM {
+        frameworks.push(Box::new(NomCase("Nom")) as Box<dyn FrameworkCase>);
+    }
+
+    if TREE_SITTER {
+        frameworks.push(Box::new(TreeSitterCase("Tree Sitter")) as Box<dyn FrameworkCase>);
+    }
+
+    let layers = BenchDataLayer::cached(SEED);
+
+    println!(
+        "\nThe following frameworks will be tested:\n{}\n",
+        frameworks
+            .iter()
+            .map(|framework| format!("  - {}", framework.name()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+
+    println!("Benchmark tests will start in {CULLDOWN:?}...");
+
+    sleep(CULLDOWN);
 
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
-
-    let frameworks = Vec::from([
-        Box::new(SelfCase::<NoSyntax<JsonToken>>::new("Self Lexis")) as Box<dyn FrameworkCase>,
-        Box::new(SelfCase::<JsonNode>::new("Self Syntax")) as Box<dyn FrameworkCase>,
-        Box::new(RopeyCase("Ropey")) as Box<dyn FrameworkCase>,
-        Box::new(NomCase("Nom")) as Box<dyn FrameworkCase>,
-        Box::new(TreeSitterCase("Tree Sitter")) as Box<dyn FrameworkCase>,
-    ]);
 
     let mut criterion = Criterion::default().configure_from_args();
 

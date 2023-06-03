@@ -35,19 +35,26 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{ops::Range, time::Duration};
+use std::{
+    fs::{read_to_string, write},
+    ops::Range,
+    time::Duration,
+};
 
 use criterion::{BenchmarkId, Criterion};
+use dirs::cache_dir;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
 
 use crate::{BenchData, FrameworkCase, SourceSample};
 
-const SEED: u64 = 154656;
-static LAYERS: [Range<usize>; 3] = [1500..2000, 60000..80000, 160000..200000];
-static SHORT_EDITS: usize = 1000;
-static LONG_EDITS: usize = 100;
+const LAYERS: [Range<usize>; 3] = [1500..2000, 60000..80000, 160000..200000];
+const SHORT_EDITS: usize = 1000;
+const LONG_EDITS: usize = 100;
 
+#[derive(Serialize, Deserialize)]
 pub struct BenchDataLayer {
+    pub seed: u64,
     pub index: usize,
     pub load: BenchData,
     pub short_edits: BenchData,
@@ -56,10 +63,113 @@ pub struct BenchDataLayer {
 }
 
 impl BenchDataLayer {
-    pub fn new() -> Vec<Self> {
-        println!("Preparing test data...");
+    pub fn cached(seed: u64) -> Vec<Self> {
+        println!("Loading data for seed {seed} from cache...");
 
-        let mut random = StdRng::seed_from_u64(SEED);
+        let mut path = match cache_dir() {
+            Some(path) => path,
+            None => {
+                println!(
+                    "Cache directory is not available.\nThe test data will be \
+                    regenerated."
+                );
+                return Self::generate(seed);
+            }
+        };
+
+        path.push(format!(".ld-bench-data-{seed}.json"));
+
+        if path.is_dir() {
+            println!("{path:?} is a directory.\nThe test data will be regenerated.",);
+            return Self::generate(seed);
+        }
+
+        let mut save = false;
+        let deserialized;
+
+        loop {
+            if !path.exists() {
+                println!(
+                    "{path:?} file does not exist.\nThe test data will be \
+                regenerated and the saved to this file.",
+                );
+
+                save = true;
+                deserialized = Self::generate(seed);
+                break;
+            }
+
+            match read_to_string(&path) {
+                Ok(string) => {
+                    deserialized = match serde_json::from_str::<Vec<Self>>(string.as_str()) {
+                        Ok(data) => data,
+
+                        Err(error) => {
+                            println!(
+                                "{path:?} deserialization error: {error}.\nThe \
+                            test data will be regenerated and the saved to \
+                            this file.",
+                            );
+
+                            save = true;
+                            Self::generate(seed)
+                        }
+                    };
+                    break;
+                }
+                Err(error) => {
+                    println!(
+                        "{path:?} read error: {error}.\nThe test data will be \
+                    regenerated and the saved to this file.",
+                    );
+
+                    save = true;
+                    deserialized = Self::generate(seed);
+                    break;
+                }
+            };
+        }
+
+        match save {
+            true => {
+                let serialized = match serde_json::to_string(&deserialized) {
+                    Ok(data) => {
+                        println!("The test data serialized successfully.");
+                        data
+                    }
+
+                    Err(error) => {
+                        println!("Test data serialization failure: {error}.");
+                        return deserialized;
+                    }
+                };
+
+                match write(&path, serialized) {
+                    Ok(()) => {
+                        println!("The test data successfully save to file: {path:?}.");
+                    }
+
+                    Err(error) => {
+                        println!("File {path:?} save error: {error}.");
+                    }
+                }
+            }
+
+            false => {
+                println!(
+                    "{path:?} cached data for the seed {seed} loaded and \
+                    deserialized successfully.",
+                );
+            }
+        }
+
+        deserialized
+    }
+
+    pub fn generate(seed: u64) -> Vec<Self> {
+        println!("Preparing test data for seed {seed}...");
+
+        let mut random = StdRng::seed_from_u64(seed);
         let mut layers = Vec::new();
 
         let mut short_edits = Vec::with_capacity(50);
@@ -127,6 +237,7 @@ impl BenchDataLayer {
             println!("Layer {} complete.", load_data.describe_init());
 
             layers.push(BenchDataLayer {
+                seed,
                 index,
                 load: load_data,
                 short_edits: short_edits_data,
@@ -191,7 +302,7 @@ impl BenchDataLayer {
                     &self.short_edits,
                     |bencher, sample| {
                         let init = sample.init.source.as_str();
-                        let mut random = StdRng::seed_from_u64(SEED);
+                        let mut random = StdRng::seed_from_u64(self.seed);
 
                         bencher.iter_custom(|iterations| {
                             let mut total = Duration::ZERO;
@@ -221,7 +332,7 @@ impl BenchDataLayer {
                     &self.long_edits,
                     |bencher, sample| {
                         let init = sample.init.source.as_str();
-                        let mut random = StdRng::seed_from_u64(SEED);
+                        let mut random = StdRng::seed_from_u64(self.seed);
 
                         bencher.iter_custom(|iterations| {
                             let mut total = Duration::ZERO;

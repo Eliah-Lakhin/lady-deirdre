@@ -39,7 +39,7 @@ use std::ops::Range;
 
 use lady_deirdre::{
     lexis::{CodeContent, Length, Site, SiteSpan},
-    syntax::{SyntaxTree, TreeContent},
+    syntax::TreeContent,
     Document,
 };
 use lady_deirdre_examples::json::syntax::JsonNode;
@@ -47,6 +47,7 @@ use rand::{
     distributions::{Distribution, WeightedIndex},
     Rng,
 };
+use serde::{Deserialize, Serialize};
 
 const BRANCHING: usize = 8;
 const NESTING_MIN: usize = 1;
@@ -54,7 +55,7 @@ const NESTING_MAX: usize = 13;
 const MB: usize = KB * KB;
 const KB: usize = 1024;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BenchData {
     pub init: SourceSample,
     current: SourceSample,
@@ -193,7 +194,7 @@ impl BenchData {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SourceSample {
     pub source: String,
     pub span: SiteSpan,

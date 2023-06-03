@@ -106,4 +106,13 @@ version = "0.20"
 version = "0.19"
 
 [dev-dependencies.criterion]
-version = "0.3"
+version = "0.5"
+
+[dev-dependencies.dirs]
+version = "5.0"
+
+[dev-dependencies.serde]
+version = "1.0"
+
+[dev-dependencies.serde_json]
+version = "1.0"
