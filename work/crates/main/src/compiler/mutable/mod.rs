@@ -38,6 +38,7 @@
 //todo Review all mentions of "Document" term inside this module's Rustdoc.
 
 mod cursor;
+// mod lexis;
 mod lexis;
 mod storage;
 mod syntax;

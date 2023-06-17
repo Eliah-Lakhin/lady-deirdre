@@ -164,6 +164,12 @@ use lady_deirdre::lexis::Token;
 #[derive(Token, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 enum CalcToken {
+    EOI = 0,
+
+    // The lexer sinks all unrecognizable tokens into this special kind of
+    // "mismatch" token.
+    Mismatch = 1,
+    
     #[rule("(")]
     Open,
 
@@ -185,11 +191,6 @@ enum CalcToken {
     // Any `char::is_ascii_whitespace()` character.
     #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
     Whitespace,
-
-    // The lexer sinks all unrecognizable tokens into this special kind of
-    // "mismatch" token.
-    #[mismatch]
-    Mismatch,
 }
 
 // Lets try our lexer.

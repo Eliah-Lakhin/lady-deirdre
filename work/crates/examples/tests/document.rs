@@ -51,93 +51,56 @@ fn test_document_lexis() {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     #[repr(u8)]
     pub enum CustomToken {
+        EOI = 0,
+        F = 1,
         A,
         B,
         C,
-        F,
     }
 
     impl Token for CustomToken {
         #[inline]
         fn parse(session: &mut impl LexisSession) -> Self {
-            let mut kind = 0;
+            let mut token = Self::F;
 
             loop {
-                let current = session.character();
-                session.advance();
-
-                if current == '\0' {
+                if session.advance() == 0xFF {
                     break;
                 }
 
-                let next = session.character();
+                let ch = unsafe { session.read() };
 
-                match (kind, current, next) {
-                    // Token A
-                    (0, '1', '1') => {
-                        kind = 1;
+                match (token, ch) {
+                    (Self::F | Self::A, '1') => {
+                        token = Self::A;
+                        unsafe { session.submit() };
                     }
 
-                    (0, '1', _) => {
-                        kind = 1;
-                        session.submit();
-                        break;
+                    (Self::F | Self::B, '2') => {
+                        token = Self::B;
+                        unsafe { session.submit() };
                     }
 
-                    (1, '1', '1') => (),
-
-                    (1, '1', _) => {
-                        session.submit();
-                        break;
-                    }
-
-                    // Token B
-                    (0, '2', '2') => {
-                        kind = 2;
-                    }
-
-                    (0, '2', _) => {
-                        kind = 2;
-                        session.submit();
-                        break;
-                    }
-
-                    (2, '2', '2') => (),
-
-                    (2, '2', _) => {
-                        session.submit();
-                        break;
-                    }
-
-                    // Token C
-                    (0, '3', '3') => {
-                        kind = 2;
-                    }
-
-                    (0, '3', _) => {
-                        kind = 2;
-                        session.submit();
-                        break;
-                    }
-
-                    (2, '3', '3') => (),
-
-                    (2, '3', _) => {
-                        session.submit();
-                        break;
+                    (Self::F | Self::C, '3') => {
+                        token = Self::C;
+                        unsafe { session.submit() };
                     }
 
                     _ => break,
                 }
             }
 
-            match kind {
-                0 => CustomToken::F,
-                1 => CustomToken::A,
-                2 => CustomToken::B,
-                3 => CustomToken::C,
-                _ => unreachable!(),
-            }
+            token
+        }
+
+        #[inline(always)]
+        fn eoi() -> Self {
+            Self::EOI
+        }
+
+        #[inline(always)]
+        fn mismatch() -> Self {
+            Self::F
         }
 
         #[inline(always)]
@@ -145,6 +108,7 @@ fn test_document_lexis() {
             self as u8
         }
 
+        #[inline(always)]
         fn describe(index: TokenIndex) -> Option<&'static str> {
             if index == Self::A as u8 {
                 return Some("A");
@@ -160,6 +124,10 @@ fn test_document_lexis() {
 
             if index == Self::F as u8 {
                 return Some("F");
+            }
+
+            if index == Self::EOI as u8 {
+                return Some("<eoi>");
             }
 
             None

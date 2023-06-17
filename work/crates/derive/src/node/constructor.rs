@@ -121,27 +121,24 @@ impl TryFrom<Variant> for Constructor {
             .map(|field| {
                 let mut default = None;
 
-                for attribute in field.attrs {
-                    match attribute.style {
+                for attr in field.attrs {
+                    match attr.style {
                         AttrStyle::Inner(_) => continue,
                         AttrStyle::Outer => (),
                     }
 
-                    let name = match attribute.path.get_ident() {
+                    let name = match attr.meta.path().get_ident() {
+                        Some(ident) => ident,
                         None => continue,
-                        Some(name) => name,
                     };
 
                     match name.to_string().as_str() {
                         "default" => {
                             if default.is_some() {
-                                return Err(error!(
-                                    attribute.span(),
-                                    "Duplicate Default attribute.",
-                                ));
+                                return Err(error!(attr.span(), "Duplicate Default attribute.",));
                             }
 
-                            default = Some((attribute.span(), attribute.parse_args::<Expr>()?));
+                            default = Some((attr.span(), attr.parse_args::<Expr>()?));
                         }
 
                         _ => (),

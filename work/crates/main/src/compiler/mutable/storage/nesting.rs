@@ -47,6 +47,8 @@ pub(super) type Height = usize;
 pub(super) unsafe trait Layer {
     fn branching<ChildLayer: Layer, N: Node>() -> ChildCount;
 
+    fn capacity<ChildLayer: Layer, N: Node>() -> ChildCount;
+
     fn descriptor() -> &'static LayerDescriptor;
 }
 
@@ -54,6 +56,11 @@ unsafe impl Layer for () {
     #[inline(always)]
     fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
         unsafe { debug_unreachable!("An attempt to get unit layer branching value.") }
+    }
+
+    #[inline(always)]
+    fn capacity<ChildLayer: Layer, N: Node>() -> ChildCount {
+        unsafe { debug_unreachable!("An attempt to get unit layer capacity value.") }
     }
 
     #[inline(always)]
@@ -67,7 +74,12 @@ pub(super) struct BranchLayer;
 unsafe impl Layer for BranchLayer {
     #[inline(always)]
     fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
-        Branch::<ChildLayer, N>::BRANCHING
+        Branch::<ChildLayer, N>::B
+    }
+
+    #[inline(always)]
+    fn capacity<ChildLayer: Layer, N: Node>() -> ChildCount {
+        Branch::<ChildLayer, N>::CAP
     }
 
     #[inline(always)]
@@ -83,7 +95,12 @@ pub(super) struct PageLayer;
 unsafe impl Layer for PageLayer {
     #[inline(always)]
     fn branching<ChildLayer: Layer, N: Node>() -> ChildCount {
-        Page::<N>::BRANCHING
+        Page::<N>::B
+    }
+
+    #[inline(always)]
+    fn capacity<ChildLayer: Layer, N: Node>() -> ChildCount {
+        Page::<N>::CAP
     }
 
     #[inline(always)]

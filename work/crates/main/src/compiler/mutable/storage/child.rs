@@ -42,7 +42,7 @@ use crate::{
         item::{Item, ItemRef, ItemRefVariant},
         page::Page,
     },
-    lexis::{Length, TokenCount},
+    lexis::{ByteIndex, Length, TokenCount},
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
@@ -209,7 +209,9 @@ impl<N: Node> ChildRefIndex<N> {
             "ChildRefIndex index out of bounds.",
         );
 
-        let string = unsafe { page.strings.get_unchecked(self.index).assume_init_ref() };
+        let slice = unsafe { page.string.byte_slice(page.occupied, self.index) };
+
+        let string = unsafe { from_utf8_unchecked(slice) };
 
         debug_assert!(!string.is_empty(), "Empty string in Page.");
 
@@ -543,7 +545,7 @@ impl<N: Node> ChildRefIndex<N> {
 
             Some(next_ref) => {
                 debug_assert!(
-                    unsafe { next_ref.as_ref().occupied } >= Page::<N>::BRANCHING,
+                    unsafe { next_ref.as_ref().occupied } >= Page::<N>::B,
                     "Incorrect Page balance."
                 );
 
@@ -583,10 +585,7 @@ impl<N: Node> ChildRefIndex<N> {
             Some(previous_ref) => {
                 let previous_occupied = unsafe { previous_ref.as_ref().occupied };
 
-                debug_assert!(
-                    previous_occupied >= Page::<N>::BRANCHING,
-                    "Incorrect Page balance."
-                );
+                debug_assert!(previous_occupied >= Page::<N>::B, "Incorrect Page balance.");
 
                 self.item = unsafe { previous_ref.into_variant() };
                 self.index = previous_occupied - 1;
@@ -604,8 +603,9 @@ impl<N: Node> ChildRefIndex<N> {
     pub(crate) unsafe fn take_lexis(
         &mut self,
         spans: &mut Sequence<Length>,
-        strings: &mut Sequence<String>,
         tokens: &mut Sequence<N::Token>,
+        indices: &mut Sequence<ByteIndex>,
+        text: &mut String,
     ) {
         debug_assert!(
             !self.is_dangling(),
@@ -619,7 +619,7 @@ impl<N: Node> ChildRefIndex<N> {
             "ChildRefIndex index out of bounds.",
         );
 
-        page.take_lexis(spans, strings, tokens)
+        page.take_lexis(spans, tokens, indices, text);
     }
 
     // Safety:

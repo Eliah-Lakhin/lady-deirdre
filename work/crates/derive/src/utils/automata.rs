@@ -266,7 +266,7 @@ impl<C: AutomataContext> Automata<C> {
     }
 
     #[inline(always)]
-    pub(super) fn determine(&mut self, context: &mut C) {
+    pub(super) fn determinize(&mut self, context: &mut C) {
         let (deterministic, alphabet) = self.transitions.meta();
 
         if deterministic {

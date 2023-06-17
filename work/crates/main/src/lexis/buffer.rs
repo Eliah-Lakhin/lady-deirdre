@@ -40,7 +40,7 @@ use crate::{
     lexis::{
         cursor::TokenBufferCursor,
         session::{Cursor, SequentialLexisSession},
-        Chunk,
+        ByteIndex,
         ChunkRef,
         Length,
         Site,
@@ -50,7 +50,7 @@ use crate::{
         TokenCount,
         CHUNK_SIZE,
     },
-    report::debug_unreachable,
+    report::{debug_assert, debug_unreachable},
     std::*,
 };
 
@@ -111,10 +111,10 @@ use crate::{
 ///
 /// assert_eq!(token_strings, ["First", " ", "line", "\n", "Second", " ", "line", "\n"]);
 ///
-/// // An API user can turn TokenBuffer into owned iterator of Chunks.
-/// let chunks = token_buf.into_iter().collect::<Vec<Chunk<SimpleToken>>>();
+/// // An API user can iterate through the TokenBuffer Chunks.
+/// let chunks = (&token_buf).into_iter().collect::<Vec<ChunkRef<SimpleToken>>>();
 ///
-/// assert_eq!(chunks[4].string.as_str(), "Second");
+/// assert_eq!(chunks[4].string, "Second");
 /// ```
 pub struct TokenBuffer<T: Token> {
     id: Id,
@@ -122,8 +122,8 @@ pub struct TokenBuffer<T: Token> {
     pub(crate) tokens: Sequence<T>,
     pub(super) sites: Sequence<Site>,
     pub(crate) spans: Sequence<Length>,
-    pub(crate) strings: Sequence<String>,
-    pub(super) tail: String,
+    pub(crate) indices: Sequence<ByteIndex>,
+    pub(crate) text: String,
 }
 
 impl<T: Token> Debug for TokenBuffer<T> {
@@ -179,7 +179,17 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
 
     #[inline(always)]
     fn get_string(&self, chunk_ref: &Ref) -> Option<&str> {
-        self.strings.get(chunk_ref).map(|string| string.as_str())
+        let index = match chunk_ref {
+            Ref::Sequence { index } => *index,
+            _ => return None,
+        };
+
+        let inner = self.indices.inner();
+
+        let start = *inner.get(index)?;
+        let end = inner.get(index + 1).copied().unwrap_or(self.text.len());
+
+        Some(unsafe { self.text.get_unchecked(start..end) })
     }
 
     #[inline(always)]
@@ -219,23 +229,8 @@ impl<T: Token> Default for TokenBuffer<T> {
             tokens: Default::default(),
             sites: Default::default(),
             spans: Default::default(),
-            strings: Default::default(),
-            tail: String::new(),
-        }
-    }
-}
-
-impl<T: Token> IntoIterator for TokenBuffer<T> {
-    type Item = <Self::IntoIter as Iterator>::Item;
-    type IntoIter = TokenBufferIntoIter<T>;
-
-    #[inline(always)]
-    fn into_iter(self) -> Self::IntoIter {
-        Self::IntoIter {
-            site: 0,
-            tokens: self.tokens.into_vec().into_iter(),
-            spans: self.spans.into_vec().into_iter(),
-            strings: self.strings.into_vec().into_iter(),
+            indices: Default::default(),
+            text: String::new(),
         }
     }
 }
@@ -250,7 +245,8 @@ impl<'buffer, T: Token> IntoIterator for &'buffer TokenBuffer<T> {
             site: 0,
             tokens: self.tokens.inner().iter(),
             spans: self.spans.inner().iter(),
-            strings: self.strings.inner().iter(),
+            indices: self.indices.inner().iter().peekable(),
+            text: self.text.as_str(),
         }
     }
 }
@@ -271,8 +267,8 @@ impl<T: Token> TokenBuffer<T> {
             tokens: Sequence::with_capacity(capacity),
             sites: Sequence::with_capacity(capacity),
             spans: Sequence::with_capacity(capacity),
-            strings: Sequence::with_capacity(capacity),
-            tail: String::new(),
+            indices: Sequence::with_capacity(capacity),
+            text: String::with_capacity(CHUNK_SIZE * capacity),
         }
     }
 
@@ -290,16 +286,27 @@ impl<T: Token> TokenBuffer<T> {
             return;
         }
 
-        let site = match self.strings.pop() {
-            None => 0,
+        let byte;
+        let site;
 
-            Some(last) => {
-                self.tail = last;
+        match self.text.is_empty() {
+            true => {
+                byte = 0;
+                site = 0;
+            }
 
+            false => {
                 let _ = self.spans.pop();
                 let _ = self.tokens.pop();
 
-                match self.sites.pop() {
+                byte = match self.indices.pop() {
+                    Some(index) => index,
+                    // Safety: Underlying TokenBuffer collections represent
+                    //         a sequence of Chunks.
+                    None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
+                };
+
+                site = match self.sites.pop() {
                     Some(site) => site,
 
                     // Safety: Underlying TokenBuffer collections represent
@@ -309,9 +316,9 @@ impl<T: Token> TokenBuffer<T> {
             }
         };
 
-        self.tail.push_str(text);
+        self.text.push_str(text);
 
-        SequentialLexisSession::run(self, site);
+        SequentialLexisSession::run(self, byte, site);
     }
 
     /// Reserves capacity to store at least `additional` token chunks to be inserted on top of this
@@ -321,7 +328,8 @@ impl<T: Token> TokenBuffer<T> {
         self.tokens.reserve(additional);
         self.sites.reserve(additional);
         self.spans.reserve(additional);
-        self.strings.reserve(additional);
+        self.indices.reserve(additional);
+        self.text.reserve(additional * CHUNK_SIZE);
     }
 
     #[inline(always)]
@@ -336,54 +344,25 @@ impl<T: Token> TokenBuffer<T> {
 
     #[inline]
     pub(super) fn push(&mut self, token: T, from: &Cursor, to: &Cursor) {
-        let length = to.site - from.site;
+        let span = to.site - from.site;
 
-        self.length += length;
+        debug_assert!(span > 0, "Empty span.");
 
-        let string = unsafe { self.tail.get_unchecked(from.byte_index..to.byte_index) }.to_string();
+        self.length += span;
 
         let _ = self.tokens.push(token);
         let _ = self.sites.push(from.site);
-        let _ = self.spans.push(length);
-        let _ = self.strings.push(string);
+        let _ = self.spans.push(span);
+        let _ = self.indices.push(from.byte);
     }
 }
-
-pub struct TokenBufferIntoIter<T: Token> {
-    site: Site,
-    tokens: IntoIter<T>,
-    spans: IntoIter<Length>,
-    strings: IntoIter<String>,
-}
-
-impl<T: Token> Iterator for TokenBufferIntoIter<T> {
-    type Item = Chunk<T>;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        let token = self.tokens.next()?;
-        let site = self.site;
-        let length = self.spans.next()?;
-        let string = self.strings.next()?;
-
-        self.site += length;
-
-        Some(Self::Item {
-            token,
-            site,
-            length,
-            string,
-        })
-    }
-}
-
-impl<T: Token> FusedIterator for TokenBufferIntoIter<T> {}
 
 pub struct TokenBufferIter<'buffer, T: Token> {
     site: Site,
     tokens: Iter<'buffer, T>,
     spans: Iter<'buffer, Length>,
-    strings: Iter<'buffer, String>,
+    indices: Peekable<Iter<'buffer, ByteIndex>>,
+    text: &'buffer str,
 }
 
 impl<'sequence, T: Token> Iterator for TokenBufferIter<'sequence, T> {
@@ -394,7 +373,14 @@ impl<'sequence, T: Token> Iterator for TokenBufferIter<'sequence, T> {
         let token = *self.tokens.next()?;
         let site = self.site;
         let length = *self.spans.next()?;
-        let string = self.strings.next()?;
+        let start = *self.indices.next()?;
+
+        let string = match self.indices.peek() {
+            // Safety: TokenBuffer::indices are well formed.
+            None => unsafe { self.text.get_unchecked(start..) },
+            // Safety: TokenBuffer::indices are well formed.
+            Some(end) => unsafe { self.text.get_unchecked(start..**end) },
+        };
 
         self.site += length;
 

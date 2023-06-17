@@ -35,15 +35,12 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod characters;
-mod entry;
+mod automata;
+mod chars;
+mod input;
+mod opt;
 mod output;
 mod regex;
-mod rule;
-mod scope;
-mod terminal;
 mod variant;
 
-const NULL: char = '\0';
-
-pub use crate::token::entry::Token;
+pub use crate::token::input::TokenInput;

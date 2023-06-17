@@ -36,13 +36,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{
-        utils::{get_lexis_character, NULL},
-        ByteIndex,
-        Site,
-        Token,
-        TokenBuffer,
-    },
+    lexis::{ByteIndex, Site, Token, TokenBuffer},
+    report::{debug_assert, debug_assert_ne, system_panic},
     std::*,
 };
 
@@ -88,25 +83,32 @@ use crate::{
 ///     end: ByteIndex
 /// };
 ///
-/// impl<'a> LexisSession for First<'a> {
-///     fn advance(&mut self) {
-///         if self.cursor >= self.input.len() { return; }
-///         self.cursor += self.input[self.cursor..].chars().next().unwrap().len_utf8();
+/// unsafe impl<'a> LexisSession for First<'a> {
+///     fn advance(&mut self) -> u8 {
+///         if self.cursor >= self.input.len() { return 0xFF; }
+///
+///         let byte = self.input.as_bytes()[self.cursor];
+///
+///         self.cursor += 1;
+///
+///         byte
 ///     }
 ///
-///     fn character(&self) -> char {
-///         if self.cursor >= self.input.len() { return '\0'; }
-///
-///         let character = self.input[self.cursor..].chars().next().unwrap();
-///
-///         if character == '\0' { return char::REPLACEMENT_CHARACTER; }
-///
-///         character
+///     unsafe fn consume(&mut self) {
+///         // Safety: `read` behavior is similar to the consume,
+///         //         except that it does not return decoded character.
+///         let _ = unsafe { self.read() };
 ///     }
 ///
-///     fn submit(&mut self) { self.end = self.cursor; }
+///     unsafe fn read(&mut self) -> char {
+///         let ch = self.input[self.cursor..].chars().next().unwrap();
 ///
-///     fn substring(&mut self) -> &str { &self.input[self.start..self.end] }
+///         self.cursor += ch.len_utf8() - 1;
+///
+///         ch
+///     }
+///
+///     unsafe fn submit(&mut self) { self.end = self.cursor; }
 /// }
 ///
 /// impl<'a> First<'a> {
@@ -145,115 +147,100 @@ use crate::{
 /// assert_eq!(First::run::<SimpleToken>("foo bar baz"), (SimpleToken::Identifier, "foo"));
 /// assert_eq!(First::run::<SimpleToken>("123 bar baz"), (SimpleToken::Number, "123"));
 /// ```
-pub trait LexisSession {
-    /// Tells the iterator to move to the next input character.
-    ///
-    /// This function does nothing if there are no more characters in the input sequence.
-    fn advance(&mut self);
 
-    /// Returns current character of the input sequence.
-    ///
-    /// This function does not [advance](LexisSession::advance) Session's internal cursor.
-    ///
-    /// If the current character is a Null character(`'\0'`), the function returns
-    /// [replacement character](::std::char::REPLACEMENT_CHARACTER) instead.
-    ///
-    /// If there are no more characters in the input sequences(the Session has reach the end of
-    /// input) this function returns Null character.
-    fn character(&self) -> char;
+// Safety: LexisSession walks through valid and complete utf-8 sequence of bytes.
+pub unsafe trait LexisSession {
+    fn advance(&mut self) -> u8;
 
-    /// Tells the iterator that the sequence of characters scanned prior to the current
-    /// characters(excluding the current character) build up complete token.
-    ///
-    /// The Algorithm can call this function multiple times. In this case the Session will ignore
-    /// all previous "submissions" in favor to the last one.
-    ///
-    /// If the Algorithm never invokes this function, or the Algorithm never invokes
-    /// [advance](LexisSession::advance) function during the scanning session, the input sequence
-    /// considered to be lexically incorrect.
-    ///
-    /// This function does not advance Session's internal cursor.
-    fn submit(&mut self);
+    // Safety:
+    //   1. There is a start byte of utf-8 code-point just behind the current cursor.
+    //   2. End of input is not reached yet.
+    unsafe fn consume(&mut self);
 
-    /// Returns a substring of the input text from the beginning of the scanning session till the
-    /// latest [submitted](LexisSession::submit) character(excluding that submitted character).
-    ///
-    /// This function does not [advance](LexisSession::advance) Session's internal cursor.
-    fn substring(&mut self) -> &str;
+    // Safety:
+    //   1. There is a start byte of utf-8 code-point just behind the current cursor.
+    //   2. End of input is not reached yet.
+    unsafe fn read(&mut self) -> char;
+
+    // Safety: There is a utf-8 code point start byte in front of cursor, or
+    //         the cursor reached the end of input.
+    unsafe fn submit(&mut self);
 }
 
 pub(super) struct SequentialLexisSession<'code, T: Token> {
     pub(super) buffer: &'code mut TokenBuffer<T>,
-    pub(super) next_cursor: Cursor,
-    pub(super) begin_cursor: Cursor,
-    pub(super) start_cursor: Cursor,
-    pub(super) end_cursor: Cursor,
+    pub(super) begin: Cursor,
+    pub(super) end: Cursor,
+    pub(super) current: Cursor,
 }
 
-impl<'code, T: Token> LexisSession for SequentialLexisSession<'code, T> {
+unsafe impl<'code, T: Token> LexisSession for SequentialLexisSession<'code, T> {
     #[inline(always)]
-    fn advance(&mut self) {
-        self.next_cursor.advance(self.buffer);
+    fn advance(&mut self) -> u8 {
+        self.current.advance(self.buffer)
     }
 
     #[inline(always)]
-    fn character(&self) -> char {
-        self.next_cursor.character
+    unsafe fn consume(&mut self) {
+        self.current.consume(self.buffer)
     }
 
     #[inline(always)]
-    fn submit(&mut self) {
-        self.end_cursor = self.next_cursor;
+    unsafe fn read(&mut self) -> char {
+        self.current.read(self.buffer)
     }
 
     #[inline(always)]
-    fn substring(&mut self) -> &str {
-        unsafe {
-            self.buffer
-                .tail
-                .get_unchecked(self.start_cursor.byte_index..self.end_cursor.byte_index)
+    unsafe fn submit(&mut self) {
+        #[cfg(debug_assertions)]
+        if self.current.byte < self.buffer.text.len() {
+            let byte = self.buffer.text.as_bytes()[self.current.byte];
+
+            if byte & 0xC0 == 0x80 {
+                system_panic!(
+                    "Incorrect use of the LexisSession::submit function.\nA \
+                    byte in front of the current cursor is UTF-8 continuation \
+                    byte."
+                );
+            }
         }
+
+        self.end = self.current;
     }
 }
 
 impl<'code, T: Token> SequentialLexisSession<'code, T> {
     #[inline]
-    pub(super) fn run(buffer: &'code mut TokenBuffer<T>, site: Site)
+    pub(super) fn run(buffer: &'code mut TokenBuffer<T>, byte: ByteIndex, site: Site)
     where
         T: Token,
     {
-        let cursor = Cursor {
-            site,
-            byte_index: 0,
-            character: unsafe { get_lexis_character(buffer.tail.get_unchecked(0..).chars()) },
-        };
+        let cursor = Cursor { byte, site };
 
         let mut session = Self {
             buffer,
-            next_cursor: cursor,
-            begin_cursor: cursor,
-            start_cursor: cursor,
-            end_cursor: cursor,
+            begin: cursor,
+            end: cursor,
+            current: cursor,
         };
 
         loop {
             let token = T::parse(&mut session);
 
-            if session.start_cursor.site != session.end_cursor.site {
-                session
-                    .buffer
-                    .push(token, &session.start_cursor, &session.end_cursor);
+            if session.begin.byte != session.end.byte {
+                session.buffer.push(token, &session.begin, &session.end);
 
-                if session.end_cursor.character == NULL {
+                if session.end.byte == session.buffer.text.len() {
                     break;
                 }
 
-                session.reset();
+                session.begin = session.end;
+                session.current = session.end;
 
                 continue;
             }
 
-            if session.enter_mismatch_loop(token) {
+            if session.enter_mismatch_loop() {
                 break;
             }
         }
@@ -261,72 +248,134 @@ impl<'code, T: Token> SequentialLexisSession<'code, T> {
 
     // Returns true if the parsing process supposed to stop
     #[inline]
-    fn enter_mismatch_loop(&mut self, mismatch: T) -> bool
+    fn enter_mismatch_loop(&mut self) -> bool
     where
         T: Token,
     {
+        let mismatch = self.begin;
+
         loop {
-            self.start_cursor.advance(&self.buffer);
-            self.next_cursor = self.start_cursor;
-
-            if self.start_cursor.character == NULL {
-                self.buffer
-                    .push(mismatch, &self.begin_cursor, &self.start_cursor);
-
+            if self.begin.advance(self.buffer) == 0xFF {
+                self.buffer.push(T::mismatch(), &mismatch, &self.begin);
                 return true;
             }
 
+            self.begin.consume(self.buffer);
+
+            self.end = self.begin;
+            self.current = self.begin;
+
             let token = T::parse(self);
 
-            if self.start_cursor.site < self.end_cursor.site {
-                self.buffer
-                    .push(mismatch, &self.begin_cursor, &self.start_cursor);
-
-                self.buffer
-                    .push(token, &self.start_cursor, &self.end_cursor);
-
-                if self.end_cursor.character == NULL {
-                    return true;
-                }
-
-                self.reset();
-
-                return false;
+            if self.begin.byte == self.end.byte {
+                continue;
             }
-        }
-    }
 
-    #[inline(always)]
-    fn reset(&mut self) {
-        self.begin_cursor = self.end_cursor;
-        self.start_cursor = self.end_cursor;
-        self.next_cursor = self.end_cursor;
+            self.buffer.push(T::mismatch(), &mismatch, &self.begin);
+            self.buffer.push(token, &self.begin, &self.end);
+
+            if self.end.byte == self.buffer.text.len() {
+                return true;
+            }
+
+            self.begin = self.end;
+            self.current = self.end;
+
+            return false;
+        }
     }
 }
 
 #[derive(Clone, Copy)]
 pub(super) struct Cursor {
+    pub(super) byte: ByteIndex,
     pub(super) site: Site,
-    pub(super) byte_index: ByteIndex,
-    pub(super) character: char,
 }
 
 impl Cursor {
-    #[inline]
-    fn advance<T: Token>(&mut self, buffer: &TokenBuffer<T>) {
-        if self.character == NULL {
+    #[inline(always)]
+    fn advance<T: Token>(&mut self, buffer: &TokenBuffer<T>) -> u8 {
+        if self.byte == buffer.text.len() {
+            return 0xFF;
+        }
+
+        let point = *unsafe { buffer.text.as_bytes().get_unchecked(self.byte) };
+
+        if point & 0xC0 != 0x80 {
+            self.site += 1;
+        }
+
+        self.byte += 1;
+
+        point
+    }
+
+    #[inline(always)]
+    fn consume<T: Token>(&mut self, buffer: &TokenBuffer<T>) {
+        debug_assert!(
+            self.byte > 0,
+            "Incorrect use of the LexisSession::consume function.\nCurrent \
+            cursor is in the beginning of the input stream.",
+        );
+
+        let point = buffer.text.as_bytes()[self.byte - 1];
+
+        debug_assert_ne!(
+            point & 0xC0,
+            0x80,
+            "Incorrect use of the LexisSession::consume function.\nA byte \
+            before the current cursor is not a UTF-8 code point start byte.",
+        );
+
+        if point & 0x80 == 0 {
             return;
         }
 
-        self.site += 1;
-        self.byte_index += self.character.len_utf8();
-
-        if self.byte_index == buffer.tail.len() {
-            self.character = NULL;
+        if point & 0xF0 == 0xF0 {
+            self.byte += 3;
             return;
         }
 
-        self.character =
-            unsafe { get_lexis_character(buffer.tail.get_unchecked(self.byte_index..).chars()) };
+        if point & 0xE0 == 0xE0 {
+            self.byte += 2;
+            return;
+        }
+
+        if point & 0xC0 == 0xC0 {
+            self.byte += 1;
+            return;
+        }
+    }
+
+    #[inline(always)]
+    fn read<T: Token>(&mut self, buffer: &TokenBuffer<T>) -> char {
+        debug_assert!(
+            self.byte > 0,
+            "Incorrect use of the LexisSession::read function.\nCurrent cursor \
+            is in the beginning of the input stream."
+        );
+
+        let byte = self.byte - 1;
+
+        #[cfg(debug_assertions)]
+        {
+            let point = buffer.text.as_bytes()[byte];
+
+            if point & 0xC0 == 0x80 {
+                system_panic!(
+                    "Incorrect use of the LexisSession::read function.\nA byte \
+                    before the current cursor is not a UTF-8 code point start \
+                    byte."
+                )
+            }
+        }
+
+        let rest = unsafe { buffer.text.get_unchecked(byte..) };
+        let ch = unsafe { rest.chars().next().unwrap_unchecked() };
+        let len = ch.len_utf8();
+
+        self.byte += len - 1;
+
+        ch
     }
 }

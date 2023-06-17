@@ -43,9 +43,9 @@ use crate::{
         nesting::{BranchLayer, Height, PageLayer},
         page::{Page, PageList, PageRef},
         references::References,
-        utils::{capacity, Spread},
+        utils::Spread,
     },
-    lexis::{Length, Site, TokenCount},
+    lexis::{ByteIndex, Length, Site, TokenCount},
     report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
     syntax::Node,
@@ -84,8 +84,9 @@ impl<N: Node> Tree<N> {
         references: &mut References<N>,
         count: TokenCount,
         mut spans: impl Iterator<Item = Length>,
-        mut strings: impl Iterator<Item = String>,
+        mut indices: impl Iterator<Item = ByteIndex>,
         mut tokens: impl Iterator<Item = N::Token>,
+        text: &str,
     ) -> Self {
         if count == 0 {
             return Self::default();
@@ -98,6 +99,7 @@ impl<N: Node> Tree<N> {
         let mut first_page = None;
         let mut last_page = None;
         let mut layer_size = spread.layer_size();
+        let mut first_byte = 0;
 
         debug_assert_eq!(count, spread.total_items(), "Partition failure.");
 
@@ -115,9 +117,9 @@ impl<N: Node> Tree<N> {
 
             debug_assert!(span > 0, "Zero input span.");
 
-            let string = match strings.next() {
-                Some(string) => string,
-                None => unsafe { debug_unreachable!("Strings iterator exceeded.") },
+            let byte_index = match indices.next() {
+                Some(byte_index) => byte_index,
+                None => unsafe { debug_unreachable!("Indices iterator exceeded.") },
             };
 
             let token = match tokens.next() {
@@ -131,8 +133,17 @@ impl<N: Node> Tree<N> {
                 let mut new_page_ref = Page::new(spread.items);
 
                 if let Some(mut previous_page) = replace(&mut last_page, Some(new_page_ref)) {
+                    {
+                        let page = unsafe { previous_page.as_mut() };
+                        let slice = unsafe { text.get_unchecked(first_byte..byte_index) };
+
+                        page.string.append(slice);
+                    }
+
                     unsafe { PageRef::interconnect(&mut previous_page, &mut new_page_ref) };
                 }
+
+                first_byte = byte_index;
 
                 if first_page.is_none() {
                     first_page = Some(new_page_ref);
@@ -151,7 +162,7 @@ impl<N: Node> Tree<N> {
                     debug_assert!(index < page.occupied, "Partition failure.");
 
                     unsafe { *page.spans.get_unchecked_mut(index) = span };
-                    unsafe { page.strings.get_unchecked_mut(index).write(string) };
+                    unsafe { page.string.set_byte_index(index, byte_index - first_byte) };
                     unsafe { page.tokens.get_unchecked_mut(index).write(token) };
                     unsafe { *page.chunks.get_unchecked_mut(index) = reference };
                     unsafe { page.clusters.get_unchecked_mut(index).write(None) };
@@ -159,6 +170,13 @@ impl<N: Node> Tree<N> {
 
                 None => unsafe { debug_unreachable!("Missing last page.") },
             }
+        }
+
+        if let Some(last_page) = &mut last_page {
+            let page = unsafe { last_page.as_mut() };
+            let slice = unsafe { text.get_unchecked(first_byte..) };
+
+            page.string.append(slice);
         }
 
         let mut first_item = None;
@@ -507,12 +525,12 @@ impl<N: Node> Tree<N> {
 
             1 => {
                 page.occupied + insert >= remove
-                    && page.occupied + insert <= capacity(Page::<N>::BRANCHING) + remove
+                    && page.occupied + insert <= Page::<N>::CAP + remove
             }
 
             _ => {
-                page.occupied + insert >= Page::<N>::BRANCHING + remove
-                    && page.occupied + insert <= capacity(Page::<N>::BRANCHING) + remove
+                page.occupied + insert >= Page::<N>::B + remove
+                    && page.occupied + insert <= Page::<N>::CAP + remove
             }
         }
     }
@@ -521,7 +539,7 @@ impl<N: Node> Tree<N> {
     // 1. All references belong to `references` instance.
     // 2. `chunk_ref` is not dangling and refers valid data inside this instance.
     // 3. Referred Page has enough space to remove `remove` and to insert `insert` items.
-    // 4. `spans`, `strings` and `tokens` produce the same number of items equal to `insert`.
+    // 4. `spans`, `indices` and `tokens` have the same number of items equal to `insert`.
     // 5. All `spans` values are positive integers.
     pub(crate) unsafe fn write(
         &mut self,
@@ -530,8 +548,9 @@ impl<N: Node> Tree<N> {
         remove: TokenCount,
         insert: TokenCount,
         mut spans: impl Iterator<Item = Length>,
-        mut strings: impl Iterator<Item = String>,
+        mut indices: &[ByteIndex],
         mut tokens: impl Iterator<Item = N::Token>,
+        text: &str,
     ) -> (ChildRefIndex<N>, Length) {
         debug_assert!(self.height > 0, "Empty tree.");
 
@@ -562,8 +581,9 @@ impl<N: Node> Tree<N> {
                     chunk_ref.index,
                     rewrite,
                     &mut spans,
-                    &mut strings,
+                    &mut indices,
                     &mut tokens,
+                    text,
                 )
             },
 
@@ -583,8 +603,9 @@ impl<N: Node> Tree<N> {
                     chunk_ref.index + rewrite,
                     insert - rewrite,
                     &mut spans,
-                    &mut strings,
+                    &mut indices,
                     &mut tokens,
+                    text,
                 )
             };
         }
@@ -969,7 +990,7 @@ impl<N: Node> Tree<N> {
 
             let child = unsafe { self.root.as_branch_ref::<()>().as_ref().inner.children[0] };
 
-            forget(unsafe { *self.root.as_branch_ref::<()>().into_owned() });
+            let _ = unsafe { *self.root.as_branch_ref::<()>().into_owned() };
 
             self.root = child;
 

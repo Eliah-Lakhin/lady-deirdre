@@ -32,7 +32,7 @@ macro_rules! error_message (
 r#"
  !! LADY DEIRDRE INTERNAL ERROR
  !!
- !! This is bug.
+ !! This is a bug.
  !! If you see this message, please open an Issue: https://github.com/Eliah-Lakhin/lady-deirdre/issues
  !!
  !! Message: {}

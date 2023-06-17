@@ -217,15 +217,15 @@ pub trait Node: Sized + 'static {
     ///         loop {
     ///             // Analysing of the next incoming token.
     ///             match session.token(0) {
-    ///                 Some(SimpleToken::ParenOpen) => {
+    ///                 SimpleToken::ParenOpen => {
     ///                     inner.push(session.descend(PARENS_RULE));
     ///                 }
     ///
-    ///                 Some(_) => {
+    ///                 SimpleToken::EOI => break,
+    ///
+    ///                 _ => {
     ///                     inner.push(session.descend(OTHER_RULE));
     ///                 }
-    ///
-    ///                 None => break,
     ///             }
     ///         }
     ///
@@ -242,23 +242,23 @@ pub trait Node: Sized + 'static {
     ///         loop {
     ///             // Analysing of the next incoming token.
     ///             match session.token(0) {
-    ///                 Some(SimpleToken::ParenOpen) => {
+    ///                 SimpleToken::ParenOpen => {
     ///                     inner.push(session.descend(PARENS_RULE));
     ///                 }
     ///
     ///                 // Close parenthesis(")") found. Parsing process finished successfully.
-    ///                 Some(SimpleToken::ParenClose) => {
+    ///                 SimpleToken::ParenClose => {
     ///                     // Consuming this token.
     ///                     session.advance();
     ///
     ///                     return Self::Parens { inner };
     ///                 }
     ///
-    ///                 Some(_) => {
+    ///                 SimpleToken::EOI => break,
+    ///
+    ///                 _ => {
     ///                     inner.push(session.descend(OTHER_RULE));
     ///                 }
-    ///
-    ///                 None => break,
     ///             }
     ///         }
     ///
@@ -285,11 +285,11 @@ pub trait Node: Sized + 'static {
     ///         loop {
     ///             // Analysing of the next incoming token.
     ///             match session.token(0) {
-    ///                 Some(SimpleToken::ParenOpen) | Some(SimpleToken::ParenClose) | None => {
+    ///                 SimpleToken::ParenOpen | SimpleToken::ParenClose | SimpleToken::EOI => {
     ///                     break;
     ///                 }
     ///
-    ///                 Some(_) => {
+    ///                 _ => {
     ///                     // The next token is not a parenthesis token. Consuming it.
     ///                     session.advance();
     ///                 }

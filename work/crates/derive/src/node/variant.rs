@@ -39,17 +39,18 @@ use std::mem::take;
 
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
-use syn::{spanned::Spanned, AttrStyle, Error, LitStr, Result, Variant};
+use syn::{spanned::Spanned, AttrStyle, Error, LitStr, Meta, Result, Variant};
 
 use crate::{
     node::{
         constructor::Constructor,
+        globals::{GlobalVar, Globals},
         index::Index,
         input::NodeInput,
         recovery::Recovery,
-        rule::{GlobalVar, Globals, Rule},
+        rule::Rule,
     },
-    utils::{error, expect_some, Dump, SpanFacade},
+    utils::{error, expect_some, Dump, Facade},
 };
 
 pub(super) struct NodeVariant {
@@ -83,18 +84,18 @@ impl TryFrom<Variant> for NodeVariant {
         let mut description = None;
         let mut dump = Dump::None;
 
-        for attribute in take(&mut variant.attrs) {
-            match attribute.style {
+        for attr in take(&mut variant.attrs) {
+            match attr.style {
                 AttrStyle::Inner(_) => continue,
                 AttrStyle::Outer => (),
             }
 
-            let name = match attribute.path.get_ident() {
+            let name = match attr.meta.path().get_ident() {
+                Some(ident) => ident,
                 None => continue,
-                Some(name) => name,
             };
 
-            let span = attribute.span();
+            let span = attr.span();
 
             match name.to_string().as_str() {
                 "root" => {
@@ -110,7 +111,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Index attribute.",));
                     }
 
-                    index = Some(attribute.parse_args::<Index>()?);
+                    index = Some(attr.parse_args::<Index>()?);
                 }
 
                 "rule" => {
@@ -118,7 +119,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Rule attribute.",));
                     }
 
-                    rule = Some(Rule::try_from(attribute)?);
+                    rule = Some(Rule::try_from(attr)?);
                 }
 
                 "trivia" => {
@@ -126,12 +127,10 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Trivia attribute.",));
                     }
 
-                    match attribute.tokens.is_empty() {
-                        true => trivia = VariantTrivia::Empty(span),
-                        false => {
-                            trivia = VariantTrivia::Rule(Rule::try_from(attribute)?.zero_or_more())
-                        }
-                    }
+                    trivia = match &attr.meta {
+                        Meta::Path(..) => VariantTrivia::Empty(span),
+                        _ => VariantTrivia::Rule(Rule::try_from(attr)?.zero_or_more()),
+                    };
                 }
 
                 "recovery" => {
@@ -139,7 +138,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Recovery attribute.",));
                     }
 
-                    recovery = Some(attribute.parse_args::<Recovery>()?);
+                    recovery = Some(attr.parse_args::<Recovery>()?);
                 }
 
                 "constructor" => {
@@ -147,7 +146,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Constructor attribute.",));
                     }
 
-                    constructor = Some(Constructor::try_from(attribute)?);
+                    constructor = Some(Constructor::try_from(attr)?);
                 }
 
                 "parser" => {
@@ -155,7 +154,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Parser attribute.",));
                     }
 
-                    parser = Some((span, attribute.parse_args::<Ident>()?));
+                    parser = Some((span, attr.parse_args::<Ident>()?));
                 }
 
                 "secondary" => {
@@ -168,10 +167,10 @@ impl TryFrom<Variant> for NodeVariant {
 
                 "describe" => {
                     if description.is_some() {
-                        return Err(error!(span, "Duplicate Description attribute.",));
+                        return Err(error!(span, "Duplicate Describe attribute.",));
                     }
 
-                    description = Some((span, attribute.parse_args::<LitStr>()?));
+                    description = Some((span, attr.parse_args::<LitStr>()?));
                 }
 
                 "dump" => {
@@ -179,7 +178,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Dump attribute.",));
                     }
 
-                    dump = Dump::try_from(attribute)?;
+                    dump = Dump::try_from(attr)?;
                 }
 
                 _ => (),
@@ -354,10 +353,10 @@ impl TryFrom<Variant> for NodeVariant {
                 ));
             }
 
-            if let Dump::Benchmark(_) = &dump {
+            if let Dump::Meta(_) = &dump {
                 return Err(error!(
                     span,
-                    "Benchmark dump is not applicable to individual rules.",
+                    "Metadata dump is not applicable to individual rules.",
                 ));
             }
 
@@ -381,6 +380,12 @@ impl TryFrom<Variant> for NodeVariant {
                 }
             }
         }
+
+        let rule = match rule {
+            Some(rule) if root.is_some() => Some(rule.greedy()),
+            Some(rule) => Some(rule),
+            None => None,
+        };
 
         Ok(Self {
             ident,
@@ -431,9 +436,16 @@ impl NodeVariant {
             VariantTrivia::Rule(..) => true,
         };
 
-        let is_root = self.root.is_some();
+        let surround_trivia = self.root.is_some();
 
-        let body = rule.compile(input, globals, context, &recovery_var, with_trivia, is_root);
+        let body = rule.compile(
+            input,
+            globals,
+            context,
+            &recovery_var,
+            with_trivia,
+            surround_trivia,
+        );
 
         let trivia_function = match self.trivia.rule() {
             Some(trivia) if include_trivia => {
@@ -455,26 +467,6 @@ impl NodeVariant {
             false => None,
         };
 
-        let eoi = match is_root {
-            false => None,
-
-            true => Some(quote_spanned!(span=>
-                if #core::lexis::TokenCursor::token(session, 0).is_some() {
-                    site = #core::lexis::TokenCursor::site_ref(session, 0);
-                    let end = #core::lexis::TokenCursor::end_site_ref(session);
-                    #core::syntax::SyntaxSession::error(
-                        session,
-                        #core::syntax::SyntaxError {
-                            span: site..end,
-                            context: #context,
-                            expected_tokens: &#core::lexis::EMPTY_TOKEN_SET,
-                            expected_rules: &#core::syntax::EMPTY_RULE_SET,
-                        },
-                    );
-                }
-            )),
-        };
-
         let globals = match include_globals {
             false => None,
             true => Some(globals.compile(span, &input.token)),
@@ -488,7 +480,6 @@ impl NodeVariant {
                 #globals
                 #trivia_function
                 #body
-                #eoi
                 #constructor
             }
         ))

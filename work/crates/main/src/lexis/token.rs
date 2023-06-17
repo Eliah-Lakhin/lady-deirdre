@@ -69,6 +69,11 @@ pub type TokenCount = usize;
 /// #[derive(Token, Clone, Copy, PartialEq, Eq, Debug)]
 /// #[repr(u8)]
 /// enum MyToken {
+///     EOI = 0,
+///
+///     // Character sequences that don't fit this grammar.
+///     Mismatch = 1,
+///
 ///     // Exact string "FOO".
 ///     #[rule("FOO")]
 ///     Foo,
@@ -80,10 +85,6 @@ pub type TokenCount = usize;
 ///     // An unlimited non empty sequence of '_' characters.
 ///     #[rule('_'+)]
 ///     LowDashes,
-///
-///     // Character sequences that don't fit this grammar.
-///     #[mismatch]
-///     Mismatch,
 /// }
 ///
 /// let mut buf = TokenBuffer::<MyToken>::from("FOO___bar_mismatch__FOO");
@@ -109,7 +110,7 @@ pub type TokenCount = usize;
 /// An API user can implement the Token trait manually too. For example, using 3rd party lexical
 /// scanner libraries. See [`Token::new`](crate::lexis::Token::parse) function specification for
 /// details.
-pub trait Token: Copy + PartialEq + Eq + Sized + 'static {
+pub trait Token: Copy + Eq + Sized + 'static {
     /// Parses a single token from the source code text, and returns a Token instance that
     /// represents this token kind.
     ///
@@ -181,41 +182,65 @@ pub trait Token: Copy + PartialEq + Eq + Sized + 'static {
     /// #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     /// #[repr(u8)]
     /// enum NumOrWord {
-    ///     Num = 1,
-    ///     Word = 2,
-    ///     Mismatch = 0,
+    ///     EOI = 0,
+    ///     Mismatch = 1,
+    ///     Num = 2,
+    ///     Word = 3,
     /// }
     ///
     /// impl Token for NumOrWord {
     ///     fn parse(session: &mut impl LexisSession) -> Self {
-    ///         if session.character() >= 'a' && session.character() <= 'z' {
-    ///             loop {
-    ///                 session.advance();
-    ///                 if session.character() < 'a' || session.character() > 'z' { break; }
-    ///             }
+    ///         if session.advance() == 0xFF {
+    ///             return Self::Mismatch;
+    ///         }
     ///
-    ///             session.submit();
+    ///         // Safety: Because the LexisSession guarantees to provide valid
+    ///         //         UTF-8 sequence of bytes, it is OK to decode each
+    ///         //         incoming code point until the 0xFF byte reached.
+    ///         let ch = unsafe { session.read() };
+    ///
+    ///         if ch >= 'a' && ch <= 'z' {
+    ///             loop {
+    ///                 if session.advance() == 0xFF { break; }
+    ///                 let ch = unsafe { session.read() };
+    ///
+    ///                 if ch < 'a' || ch > 'z' { break; }
+    ///
+    ///                 // Safety: The scanner walks through the decoded code
+    ///                 //         points only, so each next byte is the beginning
+    ///                 //         of the next code point, or the end of input.
+    ///                 unsafe { session.submit() };
+    ///             }
     ///
     ///             return Self::Word;
     ///         }
     ///
-    ///         if session.character() == '0' {
-    ///             session.advance();
-    ///             session.submit();
+    ///         if ch == '0' {
+    ///             unsafe { session.submit() };
     ///             return Self::Num;
     ///         }
     ///
-    ///         if session.character() >= '1' && session.character() <= '9' {
+    ///         if ch >= '1' && ch <= '9' {
     ///             loop {
-    ///                 session.advance();
-    ///                 if session.character() < '0' || session.character() > '9' { break; }
+    ///                 if session.advance() == 0xFF { break; }
+    ///                 let ch = unsafe { session.read() };
+    ///
+    ///                 if ch < '0' || ch > '9' { break; }
+    ///
+    ///                 unsafe { session.submit() };
     ///             }
     ///
-    ///             session.submit();
-    ///
     ///             return Self::Num;
     ///         }
     ///
+    ///         Self::Mismatch
+    ///     }
+    ///
+    ///     fn eoi() -> Self {
+    ///         Self::EOI
+    ///     }
+    ///
+    ///     fn mismatch() -> Self {
     ///         Self::Mismatch
     ///     }
     ///
@@ -249,6 +274,10 @@ pub trait Token: Copy + PartialEq + Eq + Sized + 'static {
     /// );
     /// ```
     fn parse(session: &mut impl LexisSession) -> Self;
+
+    fn eoi() -> Self;
+
+    fn mismatch() -> Self;
 
     fn index(self) -> TokenIndex;
 

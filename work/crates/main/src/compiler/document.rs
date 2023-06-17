@@ -368,7 +368,7 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Self::Token {
         match self {
             Self::Mutable(cursor) => cursor.token(distance),
             Self::Immutable(cursor) => cursor.token(distance),

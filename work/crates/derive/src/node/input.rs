@@ -56,10 +56,11 @@ use crate::{
     node::{
         automata::{NodeAutomataImpl, Scope},
         generics::ParserGenerics,
+        globals::{GlobalVar, Globals},
         index::Index,
         recovery::Recovery,
         regex::{Regex, RegexImpl},
-        rule::{GlobalVar, Globals, Rule},
+        rule::Rule,
         token::TokenLit,
         variant::{NodeVariant, VariantTrivia},
     },
@@ -68,11 +69,11 @@ use crate::{
         expect_some,
         system_panic,
         Dump,
+        Facade,
         Map,
         PredictableCollection,
         Set,
         SetImpl,
-        SpanFacade,
     },
 };
 
@@ -103,7 +104,7 @@ impl TryFrom<DeriveInput> for NodeInput {
     type Error = Error;
 
     fn try_from(input: DeriveInput) -> Result<Self> {
-        let analysis_start = Instant::now();
+        let start = Instant::now();
 
         let ident = input.ident;
         let generics = ParserGenerics::new(input.generics);
@@ -136,25 +137,26 @@ impl TryFrom<DeriveInput> for NodeInput {
             })
             .collect::<Result<Map<Ident, NodeVariant>>>()?;
 
+        let mut inlines = Map::empty();
+
         let mut token = None;
         let mut error = None;
         let mut trivia = None;
         let mut recovery = None;
-        let mut inline_map = Map::empty();
         let mut dump = Dump::None;
 
-        for attribute in input.attrs {
-            match attribute.style {
+        for attr in input.attrs {
+            match attr.style {
                 AttrStyle::Inner(_) => continue,
                 AttrStyle::Outer => (),
             }
 
-            let name = match attribute.path.get_ident() {
+            let name = match attr.meta.path().get_ident() {
+                Some(ident) => ident,
                 None => continue,
-                Some(name) => name,
             };
 
-            let span = attribute.span();
+            let span = attr.span();
 
             match name.to_string().as_str() {
                 "token" => {
@@ -162,7 +164,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                         return Err(error!(span, "Duplicate Token attribute.",));
                     }
 
-                    token = Some(attribute.parse_args::<Type>()?);
+                    token = Some(attr.parse_args::<Type>()?);
                 }
 
                 "error" => {
@@ -170,7 +172,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                         return Err(error!(span, "Duplicate Token attribute.",));
                     }
 
-                    error = Some(attribute.parse_args::<Type>()?);
+                    error = Some(attr.parse_args::<Type>()?);
                 }
 
                 "trivia" => {
@@ -178,7 +180,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                         return Err(error!(span, "Duplicate Trivia attribute.",));
                     }
 
-                    trivia = Some(Rule::try_from(attribute)?.zero_or_more());
+                    trivia = Some(Rule::try_from(attr)?.zero_or_more());
                 }
 
                 "recovery" => {
@@ -187,7 +189,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                     }
 
                     recovery = Some({
-                        let recovery = attribute.parse_args::<Recovery>()?;
+                        let recovery = attr.parse_args::<Recovery>()?;
 
                         if recovery.is_empty() {
                             return Err(error!(
@@ -201,7 +203,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                 }
 
                 "define" => {
-                    let (name, mut regex) = attribute.parse_args_with(|input: ParseStream| {
+                    let (name, mut regex) = attr.parse_args_with(|input: ParseStream| {
                         let name = input.parse::<Ident>()?;
 
                         let _ = input.parse::<Token![=]>()?;
@@ -218,16 +220,16 @@ impl TryFrom<DeriveInput> for NodeInput {
                         ));
                     }
 
-                    if inline_map.contains_key(&name) {
+                    if inlines.contains_key(&name) {
                         return Err(error!(
                             name.span(),
                             "Inline expression with this name already exists.",
                         ));
                     }
 
-                    regex.inline(&inline_map)?;
+                    regex.inline(&inlines)?;
 
-                    let _ = inline_map.insert(name, regex);
+                    let _ = inlines.insert(name, regex);
                 }
 
                 "dump" => {
@@ -235,7 +237,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                         return Err(error!(span, "Duplicate Dump attribute.",));
                     }
 
-                    dump = Dump::try_from(attribute)?;
+                    dump = Dump::try_from(attr)?;
                 }
 
                 _ => continue,
@@ -283,12 +285,12 @@ impl TryFrom<DeriveInput> for NodeInput {
             }
 
             if let Some(rule) = &mut variant.rule {
-                rule.regex.inline(&inline_map)?;
+                rule.regex.inline(&inlines)?;
                 alphabet = alphabet.merge(rule.regex.alphabet());
             }
 
             if let Some(trivia) = variant.trivia.rule_mut() {
-                trivia.regex.inline(&inline_map)?;
+                trivia.regex.inline(&inlines)?;
                 alphabet = alphabet.merge(trivia.regex.alphabet());
             }
         }
@@ -304,7 +306,7 @@ impl TryFrom<DeriveInput> for NodeInput {
         let mut scope = Scope::default();
 
         if let Some(trivia) = &mut trivia {
-            trivia.regex.inline(&inline_map)?;
+            trivia.regex.inline(&inlines)?;
             alphabet = alphabet.merge(trivia.regex.alphabet());
             trivia.regex.expand(&alphabet);
             trivia.encode(&mut scope)?;
@@ -502,7 +504,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             automata.check_conflicts(trivia, &variants)?;
         }
 
-        let analysis_end = analysis_start.elapsed();
+        let analysis = start.elapsed();
 
         let result = Self {
             ident,
@@ -516,10 +518,10 @@ impl TryFrom<DeriveInput> for NodeInput {
             alphabet,
         };
 
-        if let Dump::Benchmark(span) = dump {
-            let build_start = Instant::now();
+        if let Dump::Meta(span) = dump {
+            let start = Instant::now();
             let output = result.to_token_stream();
-            let build_end = build_start.elapsed();
+            let build = start.elapsed();
 
             let output_string = match parse2::<File>(output.clone()) {
                 Ok(file) => ::prettyplease::unparse(&file),
@@ -528,13 +530,13 @@ impl TryFrom<DeriveInput> for NodeInput {
 
             let lines = output_string.lines().count();
 
-            let node = &result.ident;
+            let ident = &result.ident;
 
             return Err(error!(
                 span,
-                " -- Macro System Debug Dump --\n\nNode \"{node}\" benchmark \
-                results:\nAnalysis time: {analysis_end:?}.\nCode generation \
-                time: {build_end:?}.\nLines of code: {lines}.\n",
+                " -- Macro System Debug Dump --\n\nNode \"{ident}\" \
+                metadata:\nAnalysis time: {analysis:?}.\nCode generation \
+                time: {build:?}.\nLines of code: {lines}.\n",
             ));
         }
 
@@ -583,11 +585,11 @@ impl TryFrom<DeriveInput> for NodeInput {
                 Err(_) => output.to_string(),
             };
 
-            let node = &result.ident;
+            let ident = &result.ident;
 
             return Err(error!(
                 span,
-                " -- Macro System Debug Dump --\n\nNode \"{node}\" \
+                " -- Macro System Debug Dump --\n\nNode \"{ident}\" \
                 implementation code:\n\n{output_string}",
             ));
         }
@@ -750,6 +752,42 @@ impl ToTokens for NodeInput {
 
         let globals = globals.compile(span, &self.token);
 
+        let checks = self
+            .alphabet
+            .iter()
+            .map(|lit| {
+                let name = match lit {
+                    TokenLit::Ident(ident) => ident,
+                    _ => return None,
+                };
+
+                let span = name.span();
+                let core = span.face_core();
+                let panic = span.face_panic();
+
+                Some(quote_spanned!(span=>
+                    if #token::#name as u8 == #core::lexis::EOI {
+                        #panic("EOI token cannot be used explicitly.");
+                    }
+                ))
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+
+        let checks = match !checks.is_empty() && cfg!(debug_assertions) {
+            false => None,
+
+            true => Some(quote_spanned!(span=>
+                #[cfg(debug_assertions)]
+                #[allow(dead_code)]
+                const CHECK_EOI: () = {
+                    #( #checks )*
+
+                    ()
+                };
+            )),
+        };
+
         quote_spanned!(span=>
             impl #impl_generics #core::syntax::Node for #ident #type_generics
             #where_clause
@@ -766,6 +804,8 @@ impl ToTokens for NodeInput {
                     #globals
 
                     #trivia
+
+                    #checks
 
                     #( #functions )*
 

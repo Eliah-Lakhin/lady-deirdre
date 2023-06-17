@@ -47,6 +47,10 @@ use lady_deirdre::lexis::Token;
 ))]
 #[repr(u8)]
 pub enum JsonToken {
+    EOI = 0,
+
+    Mismatch = 1,
+
     #[rule("true")]
     True,
 
@@ -82,7 +86,4 @@ pub enum JsonToken {
 
     #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
     Whitespace,
-
-    #[mismatch]
-    Mismatch,
 }

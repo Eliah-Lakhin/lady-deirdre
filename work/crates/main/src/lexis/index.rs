@@ -41,6 +41,10 @@ use crate::{
 };
 
 pub type TokenIndex = u8;
+
+pub const EOI: TokenIndex = 0;
+pub const MISMATCH: TokenIndex = 1;
+
 pub static EMPTY_TOKEN_SET: TokenSet = TokenSet::empty();
 pub static FULL_TOKEN_SET: TokenSet = TokenSet::all();
 

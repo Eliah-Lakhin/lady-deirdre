@@ -680,7 +680,12 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
 
         while !chunk_ref.is_dangling() {
             unsafe {
-                chunk_ref.take_lexis(&mut buffer.spans, &mut buffer.strings, &mut buffer.tokens)
+                chunk_ref.take_lexis(
+                    &mut buffer.spans,
+                    &mut buffer.tokens,
+                    &mut buffer.indices,
+                    &mut buffer.text,
+                )
             };
 
             unsafe { chunk_ref.next() }
@@ -853,7 +858,7 @@ impl<N: Node> MutableUnit<N> {
         let mut product =
             unsafe { MutableLexisSession::run(text.len() / CHUNK_SIZE + 2, &input, tail) };
 
-        span.end += product.tail_length;
+        span.end += product.overlap;
 
         let mut skip = 0;
 
@@ -862,12 +867,24 @@ impl<N: Node> MutableUnit<N> {
                 break;
             }
 
-            if unsafe { head.same_chunk_as(&product.tail_ref) } {
+            if unsafe { head.same_chunk_as(&product.tail) } {
                 break;
             }
 
-            let product_string = match product.strings.get(skip) {
-                Some(string) => string.as_str(),
+            let product_string = match product.indices.get(skip) {
+                Some(start_byte) => {
+                    let next_index = skip + 1;
+
+                    match next_index < product.indices.len() {
+                        true => {
+                            let end_byte = unsafe { product.indices.get_unchecked(next_index) };
+
+                            unsafe { product.text.get_unchecked(*start_byte..*end_byte) }
+                        }
+
+                        false => unsafe { product.text.get_unchecked(*start_byte..) },
+                    }
+                }
                 None => break,
             };
 
@@ -893,13 +910,13 @@ impl<N: Node> MutableUnit<N> {
                 break;
             }
 
-            if unsafe { head.same_chunk_as(&product.tail_ref) } {
+            if unsafe { head.same_chunk_as(&product.tail) } {
                 break;
             }
 
-            let last = match product.tail_ref.is_dangling() {
+            let last = match product.tail.is_dangling() {
                 false => {
-                    let mut previous = product.tail_ref;
+                    let mut previous = product.tail;
 
                     unsafe { previous.back() };
 
@@ -913,8 +930,8 @@ impl<N: Node> MutableUnit<N> {
                 break;
             }
 
-            let product_string = match product.strings.last() {
-                Some(string) => string.as_str(),
+            let product_string = match product.indices.last() {
+                Some(start_byte) => unsafe { product.text.as_str().get_unchecked(*start_byte..) },
                 None => break,
             };
 
@@ -926,11 +943,14 @@ impl<N: Node> MutableUnit<N> {
                 span.end -= last_span;
 
                 let _ = product.spans.pop();
-                let _ = product.strings.pop();
+                let index = product.indices.pop();
                 let _ = product.tokens.pop();
 
+                if let Some(index) = index {
+                    unsafe { product.text.as_mut_vec().set_len(index) };
+                }
                 product.length -= last_span;
-                product.tail_ref = last;
+                product.tail = last;
 
                 continue;
             }
@@ -940,7 +960,7 @@ impl<N: Node> MutableUnit<N> {
 
         if head.is_dangling() {
             debug_assert!(
-                product.tail_ref.is_dangling(),
+                product.tail.is_dangling(),
                 "Dangling head and non-dangling tail.",
             );
 
@@ -951,8 +971,9 @@ impl<N: Node> MutableUnit<N> {
                     &mut self.references,
                     token_count,
                     product.spans.into_iter().skip(skip),
-                    product.strings.into_iter().skip(skip),
+                    product.indices.into_iter().skip(skip),
                     product.tokens.into_iter().skip(skip),
+                    product.text.as_str(),
                 )
             };
 
@@ -981,7 +1002,7 @@ impl<N: Node> MutableUnit<N> {
 
         let insert_count = product.count() - skip;
 
-        if let Some(remove_count) = unsafe { head.continuous_to(&product.tail_ref) } {
+        if let Some(remove_count) = unsafe { head.continuous_to(&product.tail) } {
             if unsafe { self.tree.is_writeable(&head, remove_count, insert_count) } {
                 let (chunk_ref, insert_span) = unsafe {
                     self.tree.write(
@@ -990,8 +1011,9 @@ impl<N: Node> MutableUnit<N> {
                         remove_count,
                         insert_count,
                         product.spans.into_iter().skip(skip),
-                        product.strings.into_iter().skip(skip),
+                        unsafe { product.indices.get_unchecked(skip..) },
                         product.tokens.into_iter().skip(skip),
+                        product.text.as_str(),
                     )
                 };
 
@@ -1029,8 +1051,9 @@ impl<N: Node> MutableUnit<N> {
                     &mut self.references,
                     insert_count,
                     product.spans.into_iter().skip(skip),
-                    product.strings.into_iter().skip(skip),
+                    product.indices.into_iter().skip(skip),
                     product.tokens.into_iter().skip(skip),
+                    product.text.as_str(),
                 )
             };
 
@@ -1262,21 +1285,28 @@ impl<T: Token> TokenBuffer<T> {
     /// let _doc = buf.into_document::<SimpleNode>();
     /// ```
     #[inline(always)]
-    pub fn into_mutable_unit<N>(self) -> MutableUnit<N>
+    pub fn into_mutable_unit<N>(mut self) -> MutableUnit<N>
     where
         N: Node<Token = T>,
     {
         let id = Id::new();
 
         let token_count = self.token_count();
-        let spans = self.spans.into_vec().into_iter();
-        let strings = self.strings.into_vec().into_iter();
-        let tokens = self.tokens.into_vec().into_iter();
-
+        let spans = take(&mut self.spans).into_vec().into_iter();
+        let indices = take(&mut self.indices).into_vec().into_iter();
+        let tokens = take(&mut self.tokens).into_vec().into_iter();
         let mut references = References::with_capacity(token_count);
 
-        let mut tree =
-            unsafe { Tree::from_chunks(&mut references, token_count, spans, strings, tokens) };
+        let mut tree = unsafe {
+            Tree::from_chunks(
+                &mut references,
+                token_count,
+                spans,
+                indices,
+                tokens,
+                self.text.as_str(),
+            )
+        };
 
         let root_cluster = MutableUnit::initial_parse(id, &mut tree, &mut references);
 

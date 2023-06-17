@@ -56,7 +56,7 @@ pub trait AutomataContext: Sized {
 
     fn copy(&mut self, automata: &Automata<Self>) -> Automata<Self> {
         let mut state_map =
-            Map::with_capacity(automata.transitions.length() + automata.finish.len() + 1);
+            Map::with_capacity(automata.transitions.len() + automata.finish.len() + 1);
 
         let start = self.gen_state();
 
@@ -101,6 +101,36 @@ pub trait AutomataContext: Sized {
     }
 
     fn union(&mut self, mut a: Automata<Self>, b: Automata<Self>) -> Automata<Self> {
+        let mut fits = true;
+
+        if let Some(a_outgoing) = a.transitions.outgoing(&a.start) {
+            if let Some(b_outgoing) = b.transitions.outgoing(&b.start) {
+                'outer: for a_out in a_outgoing {
+                    for b_out in b_outgoing {
+                        if a_out.0 == b_out.0 {
+                            fits = false;
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+
+        if fits {
+            a.transitions
+                .rename_and_merge(b.transitions, b.start, a.start);
+
+            for mut b_finish in b.finish {
+                if b_finish == b.start {
+                    b_finish = a.start;
+                }
+
+                a.finish.insert(b_finish);
+            }
+
+            return a;
+        }
+
         let start = self.gen_state();
 
         a.transitions.merge(b.transitions);
@@ -117,6 +147,40 @@ pub trait AutomataContext: Sized {
     }
 
     fn concatenate(&mut self, mut a: Automata<Self>, b: Automata<Self>) -> Automata<Self> {
+        if let Some(a_finish) = a.finish.single() {
+            let mut fits = true;
+
+            if let Some(b_outgoing) = b.transitions.outgoing(&b.start) {
+                'outer: for (b_out, _) in b_outgoing {
+                    if let Some(a_outgoing) = a.transitions.outgoing(&a_finish) {
+                        for (a_out, _) in a_outgoing {
+                            if a_out == b_out {
+                                fits = false;
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if fits {
+                a.transitions
+                    .rename_and_merge(b.transitions, b.start, a_finish);
+
+                a.finish.clear();
+
+                for mut b_finish in b.finish {
+                    if b_finish == b.start {
+                        b_finish = a_finish;
+                    }
+
+                    let _ = a.finish.insert(b_finish);
+                }
+
+                return a;
+            }
+        }
+
         for a_finish in replace(&mut a.finish, b.finish) {
             a.transitions.through_null(a_finish, b.start);
         }
@@ -156,6 +220,10 @@ pub trait AutomataContext: Sized {
     }
 
     fn optional(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
+        if inner.finish.contains(&inner.start) {
+            return inner;
+        }
+
         let start = self.gen_state();
 
         inner.transitions.through_null(start, inner.start);
@@ -170,23 +238,19 @@ pub trait AutomataContext: Sized {
 
     fn optimize(&mut self, automata: &mut Automata<Self>) {
         match self.strategy() {
-            &OptimizationStrategy::CANONICALIZE => automata.canonicalize(self),
-            &OptimizationStrategy::DETERMINE => automata.determine(self),
-            &OptimizationStrategy::NONE => (),
+            Strategy::CANONICALIZE => automata.canonicalize(self),
+            Strategy::DETERMINIZE => automata.determinize(self),
         }
     }
 
-    fn strategy(&self) -> &OptimizationStrategy {
-        static DEFAULT: OptimizationStrategy = OptimizationStrategy::CANONICALIZE;
-
-        &DEFAULT
+    fn strategy(&self) -> Strategy {
+        Strategy::CANONICALIZE
     }
 }
 
-#[derive(PartialEq, Eq)]
-pub enum OptimizationStrategy {
-    NONE,
-    DETERMINE,
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Strategy {
+    DETERMINIZE,
     CANONICALIZE,
 }
 
@@ -198,16 +262,9 @@ pub trait AutomataTerminal: Clone + Eq + Hash + 'static {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{
-        AutomataContext,
-        AutomataTerminal,
-        OptimizationStrategy,
-        Set,
-        SetImpl,
-        State,
-    };
+    use crate::utils::{AutomataContext, AutomataTerminal, Set, SetImpl, State, Strategy};
 
-    struct TestContext(State, OptimizationStrategy);
+    struct TestContext(State, Strategy);
 
     impl AutomataContext for TestContext {
         type Terminal = TestTerminal;
@@ -222,8 +279,8 @@ mod tests {
         }
 
         #[inline(always)]
-        fn strategy(&self) -> &OptimizationStrategy {
-            &self.1
+        fn strategy(&self) -> Strategy {
+            self.1
         }
     }
 
@@ -243,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_automata() {
-        let mut context = TestContext(1, OptimizationStrategy::CANONICALIZE);
+        let mut context = TestContext(1, Strategy::CANONICALIZE);
 
         let foo = context.terminal(Set::new(["foo"]));
         let bar = context.terminal(Set::new(["bar"]));

@@ -35,26 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{lexis::Site, report::debug_unreachable, std::*};
-
-pub(crate) const NULL: char = '\0';
-
-// Safety: `characters` is not empty.
-#[inline(always)]
-pub(crate) unsafe fn get_lexis_character(mut characters: Chars<'_>) -> char {
-    match characters.next() {
-        Some(character) => {
-            if character == NULL {
-                return char::REPLACEMENT_CHARACTER;
-            }
-
-            character
-        }
-
-        // Safety: Upheld by the caller.
-        None => unsafe { debug_unreachable!("Empty characters iterator.") },
-    }
-}
+use crate::lexis::Site;
 
 #[inline]
 pub(crate) fn split_left(string: &str, mut site: Site) -> &str {

@@ -35,11 +35,9 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::Span;
-use syn::{
-    parse::{Lookahead1, Parse, ParseStream, Result},
-    spanned::Spanned,
-};
+use syn::parse::{Lookahead1, Parse, ParseStream, Result};
+
+use crate::utils::system_panic;
 
 #[derive(Clone)]
 pub enum Expression<O: ExpressionOperator> {
@@ -66,23 +64,24 @@ where
     }
 }
 
-impl<O> Spanned for Expression<O>
-where
-    O: ExpressionOperator,
-    <O as ExpressionOperator>::Operand: Spanned,
-{
-    fn span(&self) -> Span {
-        match self {
-            Self::Operand(operand) => operand.span(),
-            Self::Binary(left, _, _) => left.span(),
-            Self::Unary(_, inner) => inner.span(),
-        }
-    }
-}
-
 impl<O: ExpressionOperator> Parse for Expression<O> {
     #[inline(always)]
     fn parse(input: ParseStream) -> Result<Self> {
+        if let Some(mut head) = O::head() {
+            match head.test(input, &input.lookahead1()) {
+                Applicability::Mismatch => (),
+
+                Applicability::Unary => {
+                    system_panic!("Unary operator as a head.",)
+                }
+
+                Applicability::Binary => {
+                    head.parse(input)?;
+                    return Self::binding_parse(input, head.binding_power() - 1);
+                }
+            }
+        }
+
         Self::binding_parse(input, 0)
     }
 }
@@ -101,7 +100,7 @@ impl<O: ExpressionOperator> Expression<O> {
             for mut operator in O::enumerate() {
                 let binding_power = operator.binding_power();
 
-                match operator.peek(&lookahead) {
+                match operator.test(input, &lookahead) {
                     Applicability::Mismatch => (),
 
                     Applicability::Unary => {
@@ -142,17 +141,21 @@ impl<O: ExpressionOperator> Expression<O> {
 pub trait ExpressionOperator: Sized {
     type Operand: ExpressionOperand<Self>;
 
+    fn head() -> Option<Self>;
+
     fn enumerate() -> Vec<Self>;
 
     fn binding_power(&self) -> u8;
 
-    fn peek(&self, lookahead: &Lookahead1) -> Applicability;
+    fn test(&self, input: ParseStream, lookahead: &Lookahead1) -> Applicability;
 
     fn parse(&mut self, input: ParseStream) -> Result<()>;
 }
 
 pub trait ExpressionOperand<O: ExpressionOperator> {
     fn parse(input: ParseStream) -> Result<Expression<O>>;
+
+    fn test(input: ParseStream) -> bool;
 }
 
 pub enum Applicability {

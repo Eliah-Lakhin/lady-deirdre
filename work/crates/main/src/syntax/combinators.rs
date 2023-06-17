@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Token, TokenIndex, TokenSet},
+    lexis::{Token, TokenIndex, TokenSet, EOI},
     std::*,
     syntax::SyntaxSession,
 };
@@ -124,12 +124,7 @@ impl Recovery {
         let mut stack = GroupStack::new();
 
         loop {
-            let token = match session.token(0) {
-                None => return false,
-                Some(token) => token,
-            };
-
-            let index = token.index();
+            let index = session.token(0).index();
 
             if expectations.contains(index) {
                 return true;
@@ -171,10 +166,11 @@ impl Recovery {
         'outer: loop {
             distance += 1;
 
-            let index = match session.token(distance) {
-                None => break,
-                Some(token) => token.index(),
-            };
+            let index = session.token(distance).index();
+
+            if index == EOI {
+                break;
+            }
 
             group_id = 0;
             while group_id < self.groups_len {

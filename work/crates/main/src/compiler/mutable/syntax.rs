@@ -38,7 +38,7 @@
 use crate::{
     arena::{Id, Identifiable, Ref, Repository},
     compiler::mutable::storage::{ChildRefIndex, ClusterCache, References, Tree},
-    lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
+    lexis::{Length, Site, SiteRef, Token, TokenCount, TokenCursor, TokenRef},
     report::{debug_assert, debug_assert_eq},
     std::*,
     syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, RuleIndex, SyntaxSession, ROOT_RULE},
@@ -93,14 +93,14 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Self::Token {
         if unsafe { self.next_chunk_ref.is_dangling() } {
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
         if unsafe { self.jump(distance) } {
             self.pending.lookahead_end_site = self.tree.length();
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
         self.pending.lookahead_end_site = self
@@ -108,7 +108,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
             .lookahead_end_site
             .max(self.peek_site + unsafe { *self.peek_chunk_ref.span() });
 
-        Some(unsafe { self.peek_chunk_ref.token() })
+        unsafe { self.peek_chunk_ref.token() }
     }
 
     #[inline(always)]

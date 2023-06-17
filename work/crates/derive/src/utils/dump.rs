@@ -36,17 +36,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::Span;
-use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, Result};
+use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, Meta, Result};
 
 use crate::utils::dump_kw;
 
+//todo consider improving automata displaying (maybe in pictures?)
 #[derive(Clone, Copy, Default)]
 pub enum Dump {
     #[default]
     None,
     Output(Span),
     Trivia(Span),
-    Benchmark(Span),
+    Meta(Span),
     Dry(Span),
 }
 
@@ -56,7 +57,7 @@ impl TryFrom<Attribute> for Dump {
     fn try_from(attr: Attribute) -> Result<Self> {
         let attr_span = attr.span();
 
-        if attr.tokens.is_empty() {
+        if let Meta::Path(..) = &attr.meta {
             return Ok(Self::Output(attr_span));
         }
 
@@ -75,8 +76,8 @@ impl TryFrom<Attribute> for Dump {
                 return Ok(Self::Trivia(input.parse::<dump_kw::trivia>()?.span()));
             }
 
-            if lookahead.peek(dump_kw::bench) {
-                return Ok(Self::Benchmark(input.parse::<dump_kw::bench>()?.span()));
+            if lookahead.peek(dump_kw::meta) {
+                return Ok(Self::Meta(input.parse::<dump_kw::meta>()?.span()));
             }
 
             if lookahead.peek(dump_kw::dry) {
@@ -95,7 +96,7 @@ impl Dump {
             Dump::None => None,
             Dump::Output(span) => Some(span),
             Dump::Trivia(span) => Some(span),
-            Dump::Benchmark(span) => Some(span),
+            Dump::Meta(span) => Some(span),
             Dump::Dry(span) => Some(span),
         }
     }

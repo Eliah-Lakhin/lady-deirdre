@@ -38,7 +38,7 @@
 use crate::{
     arena::{Id, Identifiable},
     compiler::{mutable::storage::ChildRefIndex, MutableUnit},
-    lexis::{Length, Site, SiteRef, SiteSpan, TokenCount, TokenCursor, TokenRef},
+    lexis::{Length, Site, SiteRef, SiteSpan, Token, TokenCount, TokenCursor, TokenRef},
     report::debug_assert,
     std::*,
     syntax::Node,
@@ -84,16 +84,16 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Self::Token {
         if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
         if unsafe { self.jump(distance) } {
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
-        Some(unsafe { self.peek_chunk_ref.token() })
+        unsafe { self.peek_chunk_ref.token() }
     }
 
     #[inline(always)]

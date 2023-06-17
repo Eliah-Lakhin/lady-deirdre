@@ -40,6 +40,7 @@ use crate::{
     std::*,
 };
 
+//todo consider removing owned version of Chunk, and to rename ChunkRef to Chunk.
 /// A Token metadata ownership object.
 ///
 /// This object holds the Token instance itself, and the metadata of the source code substring

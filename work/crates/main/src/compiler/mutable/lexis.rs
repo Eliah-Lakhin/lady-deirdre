@@ -37,67 +37,66 @@
 
 use crate::{
     compiler::mutable::storage::ChildRefIndex,
-    lexis::{
-        utils::{get_lexis_character, NULL},
-        ByteIndex,
-        Length,
-        LexisSession,
-        Site,
-        Token,
-        TokenCount,
-    },
-    report::{debug_assert, debug_unreachable},
+    lexis::{ByteIndex, Length, LexisSession, Site, Token, TokenCount, CHUNK_SIZE},
+    report::{debug_assert, debug_assert_ne, debug_unreachable, system_panic},
     std::*,
     syntax::Node,
 };
 
 pub(super) struct MutableLexisSession<'source, N: Node> {
-    input: Input<'source>,
-    product: Product<N>,
-    next_cursor: Cursor<N>,
-    begin_cursor: Cursor<N>,
-    start_cursor: Cursor<N>,
-    end_cursor: Cursor<N>,
-    submission_site: Site,
-    submission_string: String,
+    input: SessionInput<'source>,
+    last: usize,
+    output: SessionOutput<N>,
+    begin: Cursor<N>,
+    end: Cursor<N>,
+    current: Cursor<N>,
 }
 
-impl<'source, N: Node> LexisSession for MutableLexisSession<'source, N> {
+unsafe impl<'source, N: Node> LexisSession for MutableLexisSession<'source, N> {
     #[inline(always)]
-    fn advance(&mut self) {
-        self.next_cursor.advance(self.input);
+    fn advance(&mut self) -> u8 {
+        self.current.advance(self.input)
     }
 
     #[inline(always)]
-    fn character(&self) -> char {
-        self.next_cursor.character
+    unsafe fn consume(&mut self) {
+        self.current.consume(self.input)
     }
 
     #[inline(always)]
-    fn submit(&mut self) {
-        self.end_cursor = self.next_cursor;
+    unsafe fn read(&mut self) -> char {
+        self.current.read(self.input)
     }
 
-    #[inline]
-    fn substring(&mut self) -> &str {
-        if self.end_cursor.site == self.submission_site {
-            return self.submission_string.as_str();
+    #[inline(always)]
+    unsafe fn submit(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            let string = match self.current.index < self.input.len() {
+                true => Some(self.input[self.current.index]),
+
+                false => match self.current.tail.is_dangling() {
+                    true => None,
+                    false => Some(unsafe { self.current.tail.string() }),
+                },
+            };
+
+            if let Some(string) = string {
+                if self.current.byte < string.len() {
+                    let byte = string.as_bytes()[self.current.byte];
+
+                    if byte & 0xC0 == 0x80 {
+                        system_panic!(
+                            "Incorrect use of the LexisSession::submit \
+                            function.\nA byte in front of the current cursor \
+                            is UTF-8 continuation byte."
+                        );
+                    }
+                }
+            }
         }
 
-        self.submission_site = self.end_cursor.site;
-
-        self.submission_string.clear();
-
-        if self.start_cursor.site != self.end_cursor.site {
-            substring_to(
-                self.input,
-                &self.start_cursor,
-                &self.end_cursor,
-                &mut self.submission_string,
-            );
-        }
-
-        self.submission_string.as_str()
+        self.end = self.current;
     }
 }
 
@@ -111,264 +110,188 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
     #[inline]
     pub(super) unsafe fn run(
         product_capacity: TokenCount,
-        input: Input<'source>,
+        input: SessionInput<'source>,
         tail: ChildRefIndex<N>,
-    ) -> Product<N> {
-        let start_character = match input.first() {
-            Some(first) => {
-                debug_assert!(
-                    !first.is_empty(),
-                    "Internal error. Empty input first string.",
-                );
-
-                unsafe { get_lexis_character(first.chars()) }
-            }
-
-            // Safety: Upheld by 4.
-            None => unsafe { debug_unreachable!("Empty Lexer input.") },
+    ) -> SessionOutput<N> {
+        let last = match input.len().checked_sub(1) {
+            Some(last) => last,
+            None => debug_unreachable!("Empty input buffer."),
         };
 
         let cursor = Cursor {
+            index: 0,
+            byte: 0,
             site: 0,
-            input_index: 0,
-            input_byte: 0,
-            character: start_character,
-            tail_ref: tail,
-            tail_length: 0,
+            tail,
+            overlap: 0,
         };
 
         let mut session = Self {
             input,
-            product: Product {
+            last,
+            output: SessionOutput {
                 length: 0,
                 spans: Vec::with_capacity(product_capacity),
-                strings: Vec::with_capacity(product_capacity),
+                indices: Vec::with_capacity(product_capacity),
                 tokens: Vec::with_capacity(product_capacity),
-                tail_ref: tail,
-                tail_length: 0,
+                text: String::with_capacity(product_capacity * CHUNK_SIZE),
+                tail,
+                overlap: 0,
             },
-            next_cursor: cursor,
-            begin_cursor: cursor,
-            start_cursor: cursor,
-            end_cursor: cursor,
-            submission_site: 0,
-            submission_string: String::new(),
+            begin: cursor,
+            end: cursor,
+            current: cursor,
         };
 
         loop {
             let token = <N::Token as Token>::parse(&mut session);
 
-            if session.start_cursor.site != session.end_cursor.site {
-                let submission = session.get_submission();
+            if session.begin.site != session.end.site {
+                session
+                    .output
+                    .push(session.input, token, &session.begin, &session.end);
 
-                session.product.push(
-                    token,
-                    &session.start_cursor,
-                    &session.end_cursor,
-                    submission,
-                );
-
-                if session.try_finish() {
+                if session.finished() {
                     break;
                 }
+
+                session.begin = session.end;
+                session.current = session.end;
 
                 continue;
             }
 
-            if session.enter_mismatch_loop(token) {
+            if session.enter_mismatch_loop() {
                 break;
             }
         }
 
-        session.product
+        session.output
     }
 
     // Returns true if the parsing process supposed to stop
     #[inline]
-    fn enter_mismatch_loop(&mut self, mismatch: N::Token) -> bool {
+    fn enter_mismatch_loop(&mut self) -> bool {
+        let mismatch = self.begin;
+
         loop {
-            self.start_cursor.advance(self.input);
-            self.next_cursor = self.start_cursor;
-
-            if self.start_cursor.character == NULL {
-                self.product.push(
-                    mismatch,
-                    &self.begin_cursor,
-                    &self.start_cursor,
-                    self.get_rejection(),
+            if self.begin.advance(self.input) == 0xFF {
+                self.output.push(
+                    self.input,
+                    <N::Token as Token>::mismatch(),
+                    &mismatch,
+                    &self.begin,
                 );
-
                 return true;
             }
 
+            self.begin.consume(self.input);
+
+            self.end = self.begin;
+            self.current = self.begin;
+
             let token = <N::Token as Token>::parse(self);
 
-            if self.start_cursor.site < self.end_cursor.site {
-                self.product.push(
-                    mismatch,
-                    &self.begin_cursor,
-                    &self.start_cursor,
-                    self.get_rejection(),
-                );
-
-                let submission = self.get_submission();
-
-                self.product
-                    .push(token, &self.start_cursor, &self.end_cursor, submission);
-
-                return self.try_finish();
+            if self.begin.site == self.end.site {
+                continue;
             }
-        }
-    }
 
-    #[inline]
-    fn get_submission(&mut self) -> String {
-        if self.end_cursor.site != self.submission_site {
-            self.submission_site = self.end_cursor.site;
-            self.submission_string.clear();
-
-            substring_to(
+            self.output.push(
                 self.input,
-                &self.start_cursor,
-                &self.end_cursor,
-                &mut self.submission_string,
+                <N::Token as Token>::mismatch(),
+                &mismatch,
+                &self.begin,
             );
+
+            self.output.push(self.input, token, &self.begin, &self.end);
+
+            if self.finished() {
+                return true;
+            }
+
+            self.begin = self.end;
+            self.current = self.end;
+
+            return false;
         }
-
-        return self.submission_string.clone();
-    }
-
-    #[inline]
-    fn get_rejection(&self) -> String {
-        let mut rejection = String::new();
-
-        substring_to(
-            self.input,
-            &self.begin_cursor,
-            &self.start_cursor,
-            &mut rejection,
-        );
-
-        rejection
     }
 
     // Returns true if the parsing process supposed to stop
-    #[inline(always)]
-    fn try_finish(&mut self) -> bool {
-        if self.end_cursor.character == NULL {
-            return true;
+    #[inline]
+    fn finished(&mut self) -> bool {
+        if self.end.index < self.last {
+            return false;
         }
 
-        if self.end_cursor.input_byte == 0 && self.end_cursor.input_index >= self.input.len() {
-            return true;
-        }
+        if self.end.index == self.last {
+            return match self.end.tail.is_dangling() {
+                false => false,
 
-        self.reset();
+                true => {
+                    let string = *unsafe { self.input.get_unchecked(self.end.index) };
 
-        return false;
-    }
-
-    #[inline(always)]
-    fn reset(&mut self) {
-        self.begin_cursor = self.end_cursor;
-        self.start_cursor = self.end_cursor;
-        self.next_cursor = self.end_cursor;
-        self.submission_string.clear();
-    }
-}
-
-pub(super) type Input<'source> = &'source [&'source str];
-
-#[inline]
-fn substring_to<N: Node>(input: Input, from: &Cursor<N>, to: &Cursor<N>, target: &mut String) {
-    if from.input_index == to.input_index {
-        debug_assert!(
-            from.input_byte <= to.input_byte,
-            "Internal error. From cursor is ahead of To cursor.",
-        );
-
-        let string = match from.input_index < input.len() {
-            true => unsafe { *input.get_unchecked(from.input_index) },
-
-            false => match from.tail_ref.is_dangling() {
-                true => unsafe { from.tail_ref.string() },
-                false => "",
-            },
-        };
-
-        target.push_str(unsafe { string.get_unchecked(from.input_byte..to.input_byte) });
-
-        return;
-    }
-
-    let mut chunk_ref = from.tail_ref;
-
-    for index in from.input_index..=to.input_index {
-        let string = match index < input.len() {
-            true => unsafe { *input.get_unchecked(index) },
-
-            false => match chunk_ref.is_dangling() {
-                false => {
-                    let string = unsafe { from.tail_ref.string() };
-
-                    unsafe { chunk_ref.next() };
-
-                    string
+                    self.end.byte == string.len()
                 }
-                true => "",
-            },
-        };
-
-        if index == from.input_index {
-            target.push_str(unsafe { string.get_unchecked(from.input_byte..) });
-            continue;
+            };
         }
 
-        if index == to.input_index {
-            target.push_str(unsafe { string.get_unchecked(0..to.input_byte) });
-            continue;
+        if !self.end.tail.is_dangling() {
+            let string = unsafe { self.end.tail.string() };
+
+            if self.end.byte < string.len() {
+                return false;
+            }
+
+            if self.end.index > self.last {
+                unsafe { self.output.tail.next() };
+            }
         }
 
-        target.push_str(string);
+        true
     }
 }
 
-pub(super) struct Product<N: Node> {
+pub(super) type SessionInput<'source> = &'source [&'source str];
+
+pub(super) struct SessionOutput<N: Node> {
     pub(super) length: Length,
     pub(super) spans: Vec<Length>,
-    pub(super) strings: Vec<String>,
+    pub(super) indices: Vec<ByteIndex>,
     pub(super) tokens: Vec<N::Token>,
-    pub(super) tail_ref: ChildRefIndex<N>,
-    pub(super) tail_length: Length,
+    pub(super) text: String,
+    pub(super) tail: ChildRefIndex<N>,
+    pub(super) overlap: Length,
 }
 
-impl<N: Node> Product<N> {
+impl<N: Node> SessionOutput<N> {
     #[inline(always)]
     pub(super) fn count(&self) -> TokenCount {
         self.spans.len()
     }
 
     #[inline(always)]
-    fn push(&mut self, token: N::Token, from: &Cursor<N>, to: &Cursor<N>, string: String) {
+    fn push(&mut self, input: SessionInput, token: N::Token, from: &Cursor<N>, to: &Cursor<N>) {
         let span = to.site - from.site;
 
-        self.length += span;
+        debug_assert!(span > 0, "Empty span.");
 
+        self.length += span;
         self.spans.push(span);
-        self.strings.push(string);
+        self.indices.push(self.text.len());
         self.tokens.push(token);
-        self.tail_ref = to.tail_ref;
-        self.tail_length = to.tail_length;
+        self.tail = to.tail;
+        self.overlap = to.overlap;
+
+        substring_to(input, from, to, &mut self.text);
     }
 }
 
 struct Cursor<N: Node> {
+    index: usize,
+    byte: ByteIndex,
     site: Site,
-    input_index: usize,
-    input_byte: ByteIndex,
-    character: char,
-    tail_ref: ChildRefIndex<N>,
-    tail_length: Length,
+    tail: ChildRefIndex<N>,
+    overlap: Length,
 }
 
 impl<N: Node> Clone for Cursor<N> {
@@ -382,80 +305,257 @@ impl<N: Node> Copy for Cursor<N> {}
 
 impl<N: Node> Cursor<N> {
     #[inline]
-    fn advance(&mut self, input: Input) {
-        if self.character == NULL {
-            return;
-        }
-
-        self.site += 1;
-        self.input_byte += self.character.len_utf8();
-
-        match self.input_index < input.len() {
+    fn advance(&mut self, input: SessionInput) -> u8 {
+        match self.index < input.len() {
             true => {
-                let string = unsafe { *input.get_unchecked(self.input_index) };
+                let string = *unsafe { input.get_unchecked(self.index) };
 
-                if self.input_byte < string.len() {
-                    self.character = unsafe {
-                        get_lexis_character(string.get_unchecked(self.input_byte..).chars())
-                    };
+                debug_assert!(!string.is_empty(), "Empty input string.");
 
-                    return;
+                if self.byte < string.len() {
+                    let point = *unsafe { string.as_bytes().get_unchecked(self.byte) };
+
+                    if point & 0xC0 != 0x80 {
+                        self.site += 1;
+                    }
+
+                    self.byte += 1;
+
+                    return point;
                 }
 
-                self.input_index += 1;
-                self.input_byte = 0;
+                self.index += 1;
 
-                if self.input_index < input.len() {
-                    let string = unsafe { input.get_unchecked(self.input_index) };
+                if self.index < input.len() {
+                    let string = *unsafe { input.get_unchecked(self.index) };
 
                     debug_assert!(!string.is_empty(), "Empty input string.");
 
-                    self.character = unsafe { get_lexis_character(string.chars()) };
+                    let point = *unsafe { string.as_bytes().get_unchecked(0) };
 
-                    return;
+                    self.site += 1;
+                    self.byte = 1;
+
+                    return point;
                 }
 
-                if self.tail_ref.is_dangling() {
-                    self.character = NULL;
-                    return;
+                if self.tail.is_dangling() {
+                    return 0xFF;
                 }
 
-                let string = unsafe { self.tail_ref.string() };
+                let string = unsafe { self.tail.string() };
 
-                debug_assert!(!string.is_empty(), "Empty tail string.");
+                let point = *unsafe { string.as_bytes().get_unchecked(0) };
 
-                self.character = unsafe { get_lexis_character(string.chars()) };
+                self.byte = 1;
+                self.site += 1;
+                self.overlap = 1;
+
+                point
             }
 
             false => {
-                self.tail_length += 1;
-
-                let string = unsafe { self.tail_ref.string() };
-
-                if self.input_byte < string.len() {
-                    self.character = unsafe {
-                        get_lexis_character(string.get_unchecked(self.input_byte..).chars())
-                    };
-
-                    return;
+                if self.tail.is_dangling() {
+                    return 0xFF;
                 }
 
-                self.input_index += 1;
-                self.input_byte = 0;
+                let string = unsafe { self.tail.string() };
 
-                unsafe { self.tail_ref.next() }
+                if self.byte < string.len() {
+                    let point = *unsafe { string.as_bytes().get_unchecked(self.byte) };
 
-                if self.tail_ref.is_dangling() {
-                    self.character = NULL;
-                    return;
+                    if point & 0xC0 != 0x80 {
+                        self.site += 1;
+                        self.overlap += 1;
+                    }
+
+                    self.byte += 1;
+
+                    return point;
                 }
 
-                let string = unsafe { self.tail_ref.string() };
+                unsafe { self.tail.next() };
 
-                debug_assert!(!string.is_empty(), "Empty tail string.");
+                self.index += 1;
 
-                self.character = unsafe { get_lexis_character(string.chars()) };
+                if self.tail.is_dangling() {
+                    self.byte = 0;
+                    return 0xFF;
+                }
+
+                let string = unsafe { self.tail.string() };
+
+                let point = *unsafe { string.as_bytes().get_unchecked(0) };
+
+                self.byte = 1;
+                self.site += 1;
+                self.overlap += 1;
+
+                point
             }
         }
+    }
+
+    #[inline(always)]
+    fn consume(&mut self, input: SessionInput) {
+        let (byte, string) = match self.index < input.len() {
+            true => {
+                let string = *unsafe { input.get_unchecked(self.index) };
+                (&mut self.byte, string)
+            }
+            false => {
+                #[cfg(debug_assertions)]
+                if self.tail.is_dangling() {
+                    system_panic!(
+                        "Incorrect use of the LexisSession::consume \
+                        function\nEnd of input has been reached.",
+                    );
+                }
+
+                let string = unsafe { self.tail.string() };
+                (&mut self.byte, string)
+            }
+        };
+
+        debug_assert!(
+            *byte > 0,
+            "Incorrect use of the LexisSession::consume function.\nCurrent \
+            cursor is in the beginning of the input stream.",
+        );
+
+        let point = string.as_bytes()[*byte - 1];
+
+        debug_assert_ne!(
+            point & 0xC0,
+            0x80,
+            "Incorrect use of the LexisSession::consume function.\nA byte \
+            before the current cursor is not a UTF-8 code point start byte."
+        );
+
+        if point & 0x80 == 0 {
+            return;
+        }
+
+        if point & 0xF0 == 0xF0 {
+            *byte += 3;
+            return;
+        }
+
+        if point & 0xE0 == 0xE0 {
+            *byte += 2;
+            return;
+        }
+
+        if point & 0xC0 == 0xC0 {
+            *byte += 1;
+            return;
+        }
+    }
+
+    #[inline(always)]
+    fn read(&mut self, input: SessionInput) -> char {
+        let (byte, string) = match self.index < input.len() {
+            true => {
+                let string = *unsafe { input.get_unchecked(self.index) };
+                (&mut self.byte, string)
+            }
+            false => {
+                #[cfg(debug_assertions)]
+                if self.tail.is_dangling() {
+                    system_panic!(
+                        "Incorrect use of the LexisSession::read \
+                        function\nEnd of input has been reached.",
+                    );
+                }
+
+                let string = unsafe { self.tail.string() };
+                (&mut self.byte, string)
+            }
+        };
+
+        debug_assert!(
+            *byte > 0,
+            "Incorrect use of the LexisSession::read function.\nCurrent cursor \
+            is in the beginning of the input stream."
+        );
+
+        let before = *byte - 1;
+
+        #[cfg(debug_assertions)]
+        {
+            let point = string.as_bytes()[before];
+
+            if point & 0xC0 == 0x80 {
+                system_panic!(
+                    "Incorrect use of the LexisSession::read function.\nA byte \
+                    before the current cursor is not a UTF-8 code point start \
+                    byte."
+                )
+            }
+        }
+
+        let rest = unsafe { string.get_unchecked(before..) };
+        let ch = unsafe { rest.chars().next().unwrap_unchecked() };
+        let len = ch.len_utf8();
+
+        *byte += len - 1;
+
+        ch
+    }
+}
+
+#[inline]
+fn substring_to<N: Node>(
+    input: SessionInput,
+    from: &Cursor<N>,
+    to: &Cursor<N>,
+    target: &mut String,
+) {
+    if from.index == to.index {
+        debug_assert!(from.byte <= to.byte, "From cursor is ahead of To cursor.",);
+
+        let string = match from.index < input.len() {
+            true => unsafe { *input.get_unchecked(from.index) },
+
+            false => match from.tail.is_dangling() {
+                true => unsafe { from.tail.string() },
+                false => "",
+            },
+        };
+
+        target.push_str(unsafe { string.get_unchecked(from.byte..to.byte) });
+
+        return;
+    }
+
+    let mut chunk_ref = from.tail;
+
+    for index in from.index..=to.index {
+        let string = match index < input.len() {
+            true => unsafe { *input.get_unchecked(index) },
+
+            false => match chunk_ref.is_dangling() {
+                false => {
+                    let string = unsafe { chunk_ref.string() };
+
+                    unsafe { chunk_ref.next() };
+
+                    string
+                }
+                true => "",
+            },
+        };
+
+        if index == from.index {
+            target.push_str(unsafe { string.get_unchecked(from.byte..) });
+            continue;
+        }
+
+        if index == to.index {
+            target.push_str(unsafe { string.get_unchecked(0..to.byte) });
+            continue;
+        }
+
+        target.push_str(string);
     }
 }

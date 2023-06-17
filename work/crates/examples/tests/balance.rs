@@ -64,6 +64,11 @@ fn test_balance() {
     enum DebugNode {
         #[root]
         #[rule(inner: ANY*)]
+        #[recovery(
+            [$ParenOpen..$ParenClose],
+            [$BracketOpen..$BracketClose],
+            [$BraceOpen..$BraceClose],
+        )]
         Root {
             #[default(unsafe { VERSION })]
             version: usize,
@@ -247,7 +252,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "[1:15]..[1:20]: Unexpected end of input.\n\
+        "[1:15]..[1:20]: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
         [1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
     );
 
@@ -258,7 +263,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "[1:16]..[1:21]: Unexpected end of input.\n\
+        "[1:16]..[1:21]: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
         [1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
     );
 

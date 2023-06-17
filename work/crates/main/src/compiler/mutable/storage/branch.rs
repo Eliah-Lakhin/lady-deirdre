@@ -41,15 +41,15 @@ use crate::{
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::{BranchLayer, Height, Layer, LayerDescriptor, PageLayer},
         references::References,
-        utils::{array_copy_to, array_shift, capacity},
+        utils::{array_copy_to, array_shift},
+        BRANCH_B,
+        BRANCH_CAP,
     },
     lexis::Length,
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
 };
-
-const BRANCHING: ChildCount = 6;
 
 #[repr(transparent)]
 pub(super) struct Branch<ChildLayer: Layer, N: Node> {
@@ -60,12 +60,13 @@ pub(super) struct Branch<ChildLayer: Layer, N: Node> {
 pub(super) struct BranchInner<N: Node> {
     pub(super) parent: ChildRefIndex<N>,
     pub(super) occupied: ChildCount,
-    pub(super) spans: [Length; capacity(BRANCHING)],
-    pub(super) children: [ItemRefVariant<N>; capacity(BRANCHING)],
+    pub(super) spans: [Length; BRANCH_CAP],
+    pub(super) children: [ItemRefVariant<N>; BRANCH_CAP],
 }
 
 impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
-    const BRANCHING: ChildCount = BRANCHING;
+    const B: ChildCount = BRANCH_B;
+    const CAP: ChildCount = BRANCH_CAP;
 
     type Node = N;
 
@@ -76,7 +77,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
 
     #[inline(always)]
     unsafe fn copy_to(
-        &mut self,
+        &self,
         to: &mut Self,
         source: ChildCount,
         destination: ChildCount,
@@ -89,7 +90,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
 
         unsafe {
             array_copy_to(
-                &mut self.inner.spans,
+                &self.inner.spans,
                 &mut to.inner.spans,
                 source,
                 destination,
@@ -98,7 +99,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
         };
         unsafe {
             array_copy_to(
-                &mut self.inner.children,
+                &self.inner.children,
                 &mut to.inner.children,
                 source,
                 destination,
@@ -114,7 +115,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
             "An attempt to inflate from out of bounds child in Branch."
         );
         debug_assert!(
-            count + self.inner.occupied <= capacity(Self::BRANCHING),
+            count + self.inner.occupied <= Self::CAP,
             "An attempt to inflate with overflow in Branch."
         );
         debug_assert!(count > 0, "An attempt to inflate of empty range in Page.");
@@ -174,7 +175,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
 
         self.inner.occupied -= count;
 
-        self.inner.occupied >= Self::BRANCHING
+        self.inner.occupied >= Self::B
     }
 }
 
@@ -187,7 +188,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
         );
 
         debug_assert!(
-            occupied <= capacity(Self::BRANCHING),
+            occupied <= Self::CAP,
             "An attempt to create Branch with occupied value exceeding capacity."
         );
 
@@ -715,7 +716,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                 };
 
                 if first_child_occupied + next_child_occupied
-                    <= capacity(ChildLayer::branching::<GrandchildLayer, N>())
+                    <= ChildLayer::capacity::<GrandchildLayer, N>()
                 {
                     let addition = match ChildLayer::descriptor() {
                         LayerDescriptor::Branch => {
@@ -853,7 +854,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                 };
 
                 if previous_child_occupied + last_child_occupied
-                    <= capacity(ChildLayer::branching::<GrandchildLayer, N>())
+                    <= ChildLayer::capacity::<GrandchildLayer, N>()
                 {
                     let addition = match ChildLayer::descriptor() {
                         LayerDescriptor::Branch => {
@@ -898,7 +899,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                     parent.inner.occupied -= 1;
 
                     return (
-                        parent.inner.occupied >= Branch::<ChildLayer, N>::BRANCHING,
+                        parent.inner.occupied >= Branch::<ChildLayer, N>::B,
                         previous_child_variant,
                     );
                 }
@@ -1012,7 +1013,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
 
             branch.inner.spans[0] -= head_subtraction;
 
-            match branch.inner.occupied < capacity(Branch::<ChildLayer, N>::BRANCHING) {
+            match branch.inner.occupied < Branch::<ChildLayer, N>::CAP {
                 true => {
                     let branch_variant = ItemRefVariant::from_branch(this);
 
@@ -1054,27 +1055,20 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                 }
 
                 false => {
-                    let mut new_sibling_ref = Branch::new(Branch::<ChildLayer, N>::BRANCHING);
+                    let mut new_sibling_ref = Branch::new(Branch::<ChildLayer, N>::B);
                     let new_sibling_variant = unsafe { new_sibling_ref.into_variant() };
                     let transfer_length;
 
                     {
                         let new_sibling = unsafe { new_sibling_ref.as_mut() };
 
-                        unsafe {
-                            branch.copy_to(
-                                new_sibling,
-                                0,
-                                1,
-                                Branch::<ChildLayer, N>::BRANCHING - 1,
-                            )
-                        }
+                        unsafe { branch.copy_to(new_sibling, 0, 1, Branch::<ChildLayer, N>::B - 1) }
 
                         transfer_length = unsafe {
                             new_sibling.update_children(
                                 new_sibling_variant,
                                 1,
-                                Branch::<ChildLayer, N>::BRANCHING - 1,
+                                Branch::<ChildLayer, N>::B - 1,
                             )
                         };
 
@@ -1090,17 +1084,13 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                     }
 
                     unsafe {
-                        let _ = branch.deflate(0, Branch::<ChildLayer, N>::BRANCHING - 1);
+                        let _ = branch.deflate(0, Branch::<ChildLayer, N>::B - 1);
                     }
 
                     let branch_variant = unsafe { this.into_variant() };
 
                     let _ = unsafe {
-                        branch.update_children(
-                            branch_variant,
-                            0,
-                            Branch::<ChildLayer, N>::BRANCHING,
-                        )
+                        branch.update_children(branch_variant, 0, Branch::<ChildLayer, N>::B)
                     };
 
                     item_length += transfer_length;
@@ -1192,7 +1182,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                     .get_unchecked_mut(branch.inner.occupied - 1) -= tail_subtraction
             };
 
-            match branch.inner.occupied < capacity(Branch::<ChildLayer, N>::BRANCHING) {
+            match branch.inner.occupied < Branch::<ChildLayer, N>::CAP {
                 true => {
                     let parent_ref_index = ChildRefIndex {
                         item: ItemRefVariant::from_branch(this),
@@ -1235,7 +1225,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                 }
 
                 false => {
-                    let mut new_sibling_ref = Branch::new(Branch::<ChildLayer, N>::BRANCHING);
+                    let mut new_sibling_ref = Branch::new(Branch::<ChildLayer, N>::B);
                     let new_sibling_variant = unsafe { new_sibling_ref.into_variant() };
                     let transfer_length;
 
@@ -1245,9 +1235,9 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                         unsafe {
                             branch.copy_to(
                                 new_sibling,
-                                Branch::<ChildLayer, N>::BRANCHING,
+                                Branch::<ChildLayer, N>::B,
                                 0,
-                                Branch::<ChildLayer, N>::BRANCHING - 1,
+                                Branch::<ChildLayer, N>::B - 1,
                             )
                         }
 
@@ -1255,24 +1245,22 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                             new_sibling.update_children(
                                 new_sibling_variant,
                                 0,
-                                Branch::<ChildLayer, N>::BRANCHING - 1,
+                                Branch::<ChildLayer, N>::B - 1,
                             )
                         };
 
-                        new_sibling.inner.spans[Branch::<ChildLayer, N>::BRANCHING - 1] =
-                            item_length;
-                        new_sibling.inner.children[Branch::<ChildLayer, N>::BRANCHING - 1] =
-                            item_variant;
+                        new_sibling.inner.spans[Branch::<ChildLayer, N>::B - 1] = item_length;
+                        new_sibling.inner.children[Branch::<ChildLayer, N>::B - 1] = item_variant;
 
                         unsafe {
                             item_variant.set_parent::<ChildLayer>(ChildRefIndex {
                                 item: new_sibling_variant,
-                                index: Branch::<ChildLayer, N>::BRANCHING - 1,
+                                index: Branch::<ChildLayer, N>::B - 1,
                             });
                         }
                     }
 
-                    branch.inner.occupied = Branch::<ChildLayer, N>::BRANCHING;
+                    branch.inner.occupied = Branch::<ChildLayer, N>::B;
 
                     item_length += transfer_length;
                     item_variant = new_sibling_variant;

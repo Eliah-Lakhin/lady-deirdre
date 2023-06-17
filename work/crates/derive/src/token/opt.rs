@@ -35,67 +35,55 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::{Ident, TokenStream};
-use syn::LitStr;
+use syn::parse::{Parse, ParseStream};
 
-use crate::{
-    token::variant::TokenVariant,
-    utils::{system_panic, Facade},
-};
+use crate::utils::Strategy;
 
-pub(super) type RuleIndex = usize;
-pub(super) type RulePrecedence = usize;
-
-pub(super) struct RuleMeta {
-    pub(super) name: Ident,
-    index: RuleIndex,
-    constructor: Option<Ident>,
-    pub(super) description: LitStr,
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Opt {
+    Flat,
+    Deep,
 }
 
-impl From<TokenVariant> for RuleMeta {
-    #[inline]
-    fn from(variant: TokenVariant) -> Self {
-        match variant {
-            TokenVariant::Rule {
-                name,
-                index,
-                constructor,
-                description,
-                ..
-            } => Self {
-                name,
-                index,
-                constructor,
-                description,
-            },
-
-            _ => system_panic!("Non-rule variant."),
+impl Default for Opt {
+    #[inline(always)]
+    fn default() -> Self {
+        match cfg!(debug_assertions) {
+            true => Self::Flat,
+            false => Self::Deep,
         }
     }
 }
 
-impl RuleMeta {
-    pub(super) fn output(&self, facade: &Facade) -> TokenStream {
-        let index = self.index + 1;
+impl Parse for Opt {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let lookahead = input.lookahead1();
 
-        match &self.constructor {
-            None => {
-                let name = &self.name;
+        if lookahead.peek(opt_kw::flat) {
+            let _ = input.parse::<opt_kw::flat>()?;
+            return Ok(Self::Flat);
+        }
 
-                quote!(#index => Self::#name,)
-            }
+        if lookahead.peek(opt_kw::deep) {
+            let _ = input.parse::<opt_kw::deep>()?;
+            return Ok(Self::Deep);
+        }
 
-            Some(constructor) => {
-                let core = facade.core_crate();
-                let span = constructor.span();
+        return Err(lookahead.error());
+    }
+}
 
-                let constructor = quote_spanned!(span=>
-                    Self::#constructor(#core::lexis::LexisSession::substring(session))
-                );
-
-                quote!(#index => #constructor,)
-            }
+impl Opt {
+    #[inline(always)]
+    pub(super) fn into_strategy(self) -> Strategy {
+        match self {
+            Self::Flat => Strategy::DETERMINIZE,
+            Self::Deep => Strategy::CANONICALIZE,
         }
     }
+}
+
+mod opt_kw {
+    syn::custom_keyword!(flat);
+    syn::custom_keyword!(deep);
 }

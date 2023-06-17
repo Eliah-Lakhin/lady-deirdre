@@ -197,7 +197,7 @@ impl<'code, C: TokenCursor<'code>> Iterator for ChunkIterator<'code, C> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let token = self.cursor.token(0)?;
+        let token = self.cursor.token(0);
         let site = self.cursor.site(0)?;
         let length = self.cursor.length(0)?;
         let string = self.cursor.string(0)?;

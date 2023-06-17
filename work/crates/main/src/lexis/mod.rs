@@ -51,7 +51,7 @@ mod span;
 mod token;
 pub(crate) mod utils;
 
-pub(crate) const CHUNK_SIZE: Length = 3;
+pub(crate) const CHUNK_SIZE: Length = 5;
 
 pub(crate) use crate::lexis::site::SiteRefInner;
 pub use crate::lexis::{
@@ -60,7 +60,7 @@ pub use crate::lexis::{
     code::SourceCode,
     content::CodeContent,
     cursor::TokenCursor,
-    index::{TokenIndex, TokenSet, EMPTY_TOKEN_SET, FULL_TOKEN_SET},
+    index::{TokenIndex, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},
     position::{Column, Line, Position, ToPosition},
     session::LexisSession,
     simple::SimpleToken,

@@ -44,30 +44,32 @@ use crate::{
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::PageLayer,
         references::References,
-        utils::{array_copy_to, array_shift, capacity},
+        string::PageString,
+        utils::{array_copy_to, array_shift},
+        PAGE_B,
+        PAGE_CAP,
     },
-    lexis::Length,
+    lexis::{ByteIndex, Length},
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
 };
-
-const BRANCHING: ChildCount = 6;
 
 pub(super) struct Page<N: Node> {
     pub(super) parent: ChildRefIndex<N>,
     pub(super) previous: Option<PageRef<N>>,
     pub(super) next: Option<PageRef<N>>,
     pub(super) occupied: ChildCount,
-    pub(super) spans: [Length; capacity(BRANCHING)],
-    pub(super) strings: [MaybeUninit<String>; capacity(BRANCHING)],
-    pub(super) tokens: [MaybeUninit<N::Token>; capacity(BRANCHING)],
-    pub(super) chunks: [RefIndex; capacity(BRANCHING)],
-    pub(super) clusters: [MaybeUninit<Option<CacheEntry<N>>>; capacity(BRANCHING)],
+    pub(super) spans: [Length; PAGE_CAP],
+    pub(super) string: PageString,
+    pub(super) tokens: [MaybeUninit<N::Token>; PAGE_CAP],
+    pub(super) chunks: [RefIndex; PAGE_CAP],
+    pub(super) clusters: [MaybeUninit<Option<CacheEntry<N>>>; PAGE_CAP],
 }
 
 impl<N: Node> Item for Page<N> {
-    const BRANCHING: ChildCount = BRANCHING;
+    const B: ChildCount = PAGE_B;
+    const CAP: ChildCount = PAGE_CAP;
 
     type Node = N;
 
@@ -78,7 +80,7 @@ impl<N: Node> Item for Page<N> {
 
     #[inline(always)]
     unsafe fn copy_to(
-        &mut self,
+        &self,
         to: &mut Self,
         source: ChildCount,
         destination: ChildCount,
@@ -89,31 +91,24 @@ impl<N: Node> Item for Page<N> {
             "An attempt to copy non occupied data in Page.",
         );
 
-        unsafe { array_copy_to(&mut self.spans, &mut to.spans, source, destination, count) };
+        unsafe { array_copy_to(&self.spans, &mut to.spans, source, destination, count) };
 
         unsafe {
-            array_copy_to(
-                &mut self.strings,
-                &mut to.strings,
+            self.string.copy_to(
+                self.occupied,
+                &mut to.string,
+                to.occupied,
                 source,
                 destination,
                 count,
             )
-        };
+        }
 
-        unsafe { array_copy_to(&mut self.tokens, &mut to.tokens, source, destination, count) };
+        unsafe { array_copy_to(&self.tokens, &mut to.tokens, source, destination, count) };
 
-        unsafe { array_copy_to(&mut self.chunks, &mut to.chunks, source, destination, count) };
+        unsafe { array_copy_to(&self.chunks, &mut to.chunks, source, destination, count) };
 
-        unsafe {
-            array_copy_to(
-                &mut self.clusters,
-                &mut to.clusters,
-                source,
-                destination,
-                count,
-            )
-        };
+        unsafe { array_copy_to(&self.clusters, &mut to.clusters, source, destination, count) };
     }
 
     #[inline(always)]
@@ -123,18 +118,19 @@ impl<N: Node> Item for Page<N> {
             "An attempt to inflate from out of bounds child in Page."
         );
         debug_assert!(
-            count + self.occupied <= capacity(Self::BRANCHING),
+            count + self.occupied <= Self::CAP,
             "An attempt to inflate with overflow in Page."
         );
         debug_assert!(count > 0, "An attempt to inflate of empty range in Page.");
 
         if from < self.occupied {
             unsafe { array_shift(&mut self.spans, from, from + count, self.occupied - from) };
-            unsafe { array_shift(&mut self.strings, from, from + count, self.occupied - from) };
             unsafe { array_shift(&mut self.tokens, from, from + count, self.occupied - from) };
             unsafe { array_shift(&mut self.chunks, from, from + count, self.occupied - from) };
             unsafe { array_shift(&mut self.clusters, from, from + count, self.occupied - from) };
         }
+
+        unsafe { self.string.inflate(self.occupied, from, count) };
 
         self.occupied += count;
     }
@@ -151,18 +147,12 @@ impl<N: Node> Item for Page<N> {
         );
         debug_assert!(count > 0, "An attempt to deflate of empty range.");
 
+        unsafe { self.string.deflate(self.occupied, from, count) };
+
         if from + count < self.occupied {
             unsafe {
                 array_shift(
                     &mut self.spans,
-                    from + count,
-                    from,
-                    self.occupied - from - count,
-                )
-            };
-            unsafe {
-                array_shift(
-                    &mut self.strings,
                     from + count,
                     from,
                     self.occupied - from - count,
@@ -196,7 +186,7 @@ impl<N: Node> Item for Page<N> {
 
         self.occupied -= count;
 
-        self.occupied >= Self::BRANCHING
+        self.occupied >= Self::B
     }
 }
 
@@ -209,7 +199,7 @@ impl<N: Node> Page<N> {
         );
 
         debug_assert!(
-            occupied <= capacity(Self::BRANCHING),
+            occupied <= Self::CAP,
             "An attempt to create Page with occupied value exceeding capacity."
         );
 
@@ -219,7 +209,7 @@ impl<N: Node> Page<N> {
             next: None,
             occupied,
             spans: Default::default(),
-            strings: unsafe { MaybeUninit::uninit().assume_init() },
+            string: PageString::default(),
             tokens: unsafe { MaybeUninit::uninit().assume_init() },
             chunks: Default::default(),
             clusters: unsafe { MaybeUninit::uninit().assume_init() },
@@ -233,8 +223,9 @@ impl<N: Node> Page<N> {
     pub(super) fn take_lexis(
         &mut self,
         spans: &mut Sequence<Length>,
-        strings: &mut Sequence<String>,
         tokens: &mut Sequence<N::Token>,
+        indices: &mut Sequence<ByteIndex>,
+        text: &mut String,
     ) {
         for index in 0..self.occupied {
             spans.push({
@@ -242,18 +233,22 @@ impl<N: Node> Page<N> {
                 span
             });
 
-            strings.push({
-                let string = unsafe { self.strings.get_unchecked(index) };
-                unsafe { string.assume_init_read() }
-            });
-
             tokens.push({
                 let token = unsafe { self.tokens.get_unchecked(index) };
                 unsafe { token.assume_init_read() }
             });
 
+            {
+                let byte_index = unsafe { self.string.get_byte_index(index) };
+                indices.push(text.len() + byte_index);
+            }
+
             let _ = take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
         }
+
+        let string = unsafe { from_utf8_unchecked(self.string.bytes()) };
+
+        text.push_str(string);
 
         self.occupied = 0;
     }
@@ -262,10 +257,6 @@ impl<N: Node> Page<N> {
     // 1. All references belong to `references` instance.
     pub(super) unsafe fn free_subtree(mut self, references: &mut References<N>) -> ChildCount {
         for index in 0..self.occupied {
-            let string = unsafe { self.strings.get_unchecked_mut(index) };
-
-            unsafe { string.assume_init_drop() };
-
             let token = unsafe { self.tokens.get_unchecked_mut(index) };
 
             unsafe { token.assume_init_drop() };
@@ -287,10 +278,6 @@ impl<N: Node> Page<N> {
 
     pub(super) unsafe fn free(mut self) {
         for index in 0..self.occupied {
-            let string = unsafe { self.strings.get_unchecked_mut(index) };
-
-            unsafe { string.assume_init_drop() };
-
             let token = unsafe { self.tokens.get_unchecked_mut(index) };
 
             unsafe { token.assume_init_drop() };
@@ -469,6 +456,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
                 };
 
                 unsafe { left.copy_to(right_ref.as_mut(), from, 0, occupied - from) };
+                unsafe { left.string.deflate(left.occupied, from, occupied - from) };
                 left.occupied = from;
 
                 parent_split.right_span =
@@ -537,7 +525,7 @@ impl<N: Node> PageRef<N> {
     // 3. `from < self.occupied`.
     // 4. `from + count <= self.occupied.
     // 5. `count > 0`
-    // 6. `spans`, `strings` and `tokens` can produce at least `count` items.
+    // 6. `spans`, `indices` and `tokens` have at least `count` items.
     #[inline]
     pub(super) unsafe fn rewrite(
         &mut self,
@@ -545,8 +533,9 @@ impl<N: Node> PageRef<N> {
         from: ChildIndex,
         count: ChildCount,
         spans: &mut impl Iterator<Item = Length>,
-        strings: &mut impl Iterator<Item = String>,
+        indices: &mut &[ByteIndex],
         tokens: &mut impl Iterator<Item = N::Token>,
+        text: &str,
     ) -> (Length, Length) {
         let page = unsafe { self.as_mut() };
 
@@ -565,11 +554,15 @@ impl<N: Node> PageRef<N> {
 
         references.chunks.commit();
 
+        unsafe {
+            page.string
+                .rewrite(page.occupied, from, text.as_bytes(), indices, count)
+        };
+
+        *indices = unsafe { &indices[count..] };
+
         for index in from..(from + count) {
-            debug_assert!(
-                index < capacity(Page::<N>::BRANCHING),
-                "Chunk index is out of bounds.",
-            );
+            debug_assert!(index < Page::<N>::CAP, "Chunk index is out of bounds.",);
 
             let new_span = match spans.next() {
                 Some(span) => span,
@@ -578,18 +571,12 @@ impl<N: Node> PageRef<N> {
 
             debug_assert!(new_span > 0, "Zero input span.");
 
-            let new_string = match strings.next() {
-                Some(string) => string,
-                None => unsafe { debug_unreachable!("Strings iterator exceeded.") },
-            };
-
             let new_token = match tokens.next() {
                 Some(token) => token,
                 None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
             };
 
             let span = unsafe { page.spans.get_unchecked_mut(index) };
-            let string = unsafe { page.strings.get_unchecked_mut(index).assume_init_mut() };
             let token = unsafe { page.tokens.get_unchecked_mut(index).assume_init_mut() };
             let chunk_index = unsafe { *page.chunks.get_unchecked(index) };
             let cache_entry =
@@ -599,7 +586,6 @@ impl<N: Node> PageRef<N> {
             inc += new_span;
 
             *span = new_span;
-            let _ = replace(string, new_string);
             let _ = replace(token, new_token);
 
             unsafe { references.chunks.upgrade(chunk_index) };
@@ -642,7 +628,6 @@ impl<N: Node> PageRef<N> {
         for index in from..(from + count) {
             let span = unsafe { *page.spans.get_unchecked(index) };
 
-            unsafe { page.strings.get_unchecked_mut(index).assume_init_drop() };
             unsafe { page.tokens.get_unchecked_mut(index).assume_init_drop() };
 
             let chunk_index = unsafe { *page.chunks.get_unchecked(index) };
@@ -663,14 +648,6 @@ impl<N: Node> PageRef<N> {
             unsafe {
                 array_shift(
                     &mut page.spans,
-                    from + count,
-                    from,
-                    page.occupied - from - count,
-                )
-            };
-            unsafe {
-                array_shift(
-                    &mut page.strings,
                     from + count,
                     from,
                     page.occupied - from - count,
@@ -720,6 +697,7 @@ impl<N: Node> PageRef<N> {
             }
         }
 
+        unsafe { page.string.deflate(page.occupied, from, count) };
         page.occupied -= count;
 
         length
@@ -731,7 +709,7 @@ impl<N: Node> PageRef<N> {
     // 3. `from <= self.occupied`.
     // 4. `from + count <= self.occupied.
     // 5. `count > 0`
-    // 6. `spans`, `strings` and `tokens` can produce at least `count` items.
+    // 6. `spans`, `indices` and `tokens` have at least `count` items.
     #[inline]
     pub(super) unsafe fn insert(
         &mut self,
@@ -739,8 +717,9 @@ impl<N: Node> PageRef<N> {
         from: ChildIndex,
         count: ChildCount,
         spans: &mut impl Iterator<Item = Length>,
-        strings: &mut impl Iterator<Item = String>,
+        indices: &mut &[ByteIndex],
         tokens: &mut impl Iterator<Item = N::Token>,
+        text: &str,
     ) -> Length {
         let self_ref_variant = unsafe { self.into_variant() };
 
@@ -751,22 +730,24 @@ impl<N: Node> PageRef<N> {
             "An attempt to insert from non occupied child in Page."
         );
         debug_assert!(
-            from + count <= capacity(Page::<N>::BRANCHING),
+            from + count <= Page::<N>::CAP,
             "An attempt to insert with overflow in Page."
         );
         debug_assert!(count > 0, "An attempt to insert of empty range.");
 
+        unsafe { page.inflate(from, count) };
+
         unsafe {
-            page.inflate(from, count);
-        }
+            page.string
+                .rewrite(page.occupied, from, text.as_bytes(), indices, count)
+        };
+
+        *indices = unsafe { &indices[count..] };
 
         let mut length = 0;
 
         for index in from..(from + count) {
-            debug_assert!(
-                index < capacity(Page::<N>::BRANCHING),
-                "Chunk index is out of bounds.",
-            );
+            debug_assert!(index < Page::<N>::CAP, "Chunk index is out of bounds.",);
 
             let new_span = match spans.next() {
                 Some(span) => span,
@@ -775,11 +756,6 @@ impl<N: Node> PageRef<N> {
             };
 
             debug_assert!(new_span > 0, "Zero input span.");
-
-            let new_string = match strings.next() {
-                Some(string) => string,
-                None => unsafe { debug_unreachable!("Strings iterator exceeded.") },
-            };
 
             let new_token = match tokens.next() {
                 Some(token) => token,
@@ -790,10 +766,6 @@ impl<N: Node> PageRef<N> {
 
             unsafe {
                 *page.spans.get_unchecked_mut(index) = new_span;
-            }
-
-            unsafe {
-                page.strings.get_unchecked_mut(index).write(new_string);
             }
 
             unsafe {

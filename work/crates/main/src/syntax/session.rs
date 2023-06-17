@@ -140,7 +140,7 @@ where
     }
 
     #[inline(always)]
-    fn token(&mut self, distance: TokenCount) -> Option<Self::Token> {
+    fn token(&mut self, distance: TokenCount) -> Self::Token {
         self.token_cursor.token(distance)
     }
 

@@ -55,6 +55,11 @@ use crate::{lexis::Token, std::*};
 ])]
 #[repr(u8)]
 pub enum SimpleToken {
+    EOI = 0,
+
+    /// Any other token that does not fit this lexical grammar.
+    Mismatch = 1,
+
     /// A numerical literal. Either integer or a floating point(e.g. `12345` or `1234.56`).
     #[rule(NUM+ & ('.' & NUM+)?)]
     Number,
@@ -105,10 +110,6 @@ pub enum SimpleToken {
     /// [`char::is_ascii_whitespace()`](char::is_ascii_whitespace).
     #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
     Whitespace,
-
-    /// Any other token that does not fit this lexical grammar.
-    #[mismatch]
-    Mismatch,
 }
 
 impl Display for SimpleToken {

@@ -35,23 +35,20 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, BTreeSet},
-};
+use std::collections::BTreeMap;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
-use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, Result, Type};
+use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, Result};
 
 use crate::{
     node::{
         automata::{NodeAutomata, NodeAutomataImpl, Scope, Terminal},
+        globals::{GlobalVar, Globals},
         index::Index,
         input::NodeInput,
         leftmost::Leftmost,
-        recovery::Recovery,
-        regex::{Operator, Regex, RegexImpl},
+        regex::{Operand, Operator, Regex, RegexImpl},
         token::TokenLit,
         variables::VariableMap,
     },
@@ -60,11 +57,11 @@ use crate::{
         null,
         system_panic,
         AutomataContext,
+        Facade,
         Map,
         PredictableCollection,
         Set,
         SetImpl,
-        SpanFacade,
         State,
     },
 };
@@ -107,6 +104,20 @@ impl Rule {
     }
 
     #[inline]
+    pub(super) fn greedy(mut self) -> Self {
+        self.regex = Regex::Binary(
+            Box::new(self.regex),
+            Operator::Concat,
+            Box::new(Regex::Operand(Operand::Token(
+                None,
+                TokenLit::EOI(self.span),
+            ))),
+        );
+
+        self
+    }
+
+    #[inline]
     pub(super) fn encode(&mut self, scope: &mut Scope) -> Result<()> {
         self.leftmost = Some(Leftmost::from(&self.regex));
 
@@ -128,7 +139,7 @@ impl Rule {
         context: Index,
         recovery_var: &GlobalVar,
         with_trivia: bool,
-        surround: bool,
+        surround_trivia: bool,
     ) -> TokenStream {
         let automata = expect_some!(self.automata.as_ref(), "Missing automata.",);
         let variables = expect_some!(self.variables.as_ref(), "Missing variable map.",);
@@ -149,29 +160,25 @@ impl Rule {
         let init_vars = variables.init();
         let init_first;
         let init_step;
-        let finish_step;
 
         match with_trivia {
             false => {
                 init_first = None;
                 init_step = None;
-                finish_step = None;
             }
 
-            true => match surround {
+            true => match surround_trivia {
                 false => {
                     init_first = Some(quote_spanned!(span=> let mut first = true;));
                     init_step = Some(quote_spanned!(span=> match first {
                         true => first = false,
                         false => skip_trivia(session),
                     }));
-                    finish_step = None;
                 }
 
                 true => {
                     init_first = None;
                     init_step = Some(quote_spanned!(span=> skip_trivia(session);));
-                    finish_step = Some(quote_spanned!(span=> skip_trivia(session);));
                 }
             },
         }
@@ -221,8 +228,6 @@ impl Rule {
                     other => #unreachable("Unknown state {other}."),
                 }
             }
-
-            #finish_step
         )
     }
 
@@ -242,9 +247,15 @@ impl Rule {
             "Empty state transitions.",
         );
 
-        let mut covered = Set::with_capacity(input.alphabet.len());
-        let mut uncovered = input.alphabet.clone();
-        uncovered.insert(TokenLit::Other(self.span));
+        let mut stream = TokenStream::new();
+
+        let halts = automata.finish().contains(&from);
+
+        let span = self.span;
+        let core = span.face_core();
+
+        let total_alphabet_len = input.alphabet.len() + 2;
+        let mut covered = Set::with_capacity(total_alphabet_len);
 
         let mut expected_tokens = Set::with_capacity(input.alphabet.len());
         let mut expected_rules = Set::with_capacity(input.variants.len());
@@ -255,16 +266,19 @@ impl Rule {
                 Terminal::Null => null!(),
 
                 Terminal::Token(capture, lit) => {
-                    let _ = covered.insert(lit.clone());
-
-                    if !uncovered.remove(lit) {
-                        system_panic!("Duplicate uncovered token.",);
+                    if !covered.insert(lit.clone()) {
+                        system_panic!("Duplicate covered token.",);
                     }
+
+                    let transition = match lit.is_eoi() {
+                        true => None,
+                        false => Some(*to),
+                    };
 
                     let previous = by_token.insert(
                         lit.clone(),
                         Action {
-                            transition: *to,
+                            transition,
                             capture: capture.clone(),
                             descend: None,
                             insert: None,
@@ -289,16 +303,19 @@ impl Rule {
                     let matches = expect_some!(leftmost.matches(), "Unresolved leftmost matches.",);
 
                     for lit in matches {
-                        let _ = covered.insert(lit.clone());
-
-                        if !uncovered.remove(lit) {
-                            system_panic!("Duplicate uncovered token.");
+                        if !covered.insert(lit.clone()) {
+                            system_panic!("Duplicate covered token.");
                         }
+
+                        let transition = match lit.is_eoi() {
+                            true => None,
+                            false => Some(*to),
+                        };
 
                         let previous = by_token.insert(
                             lit.clone(),
                             Action {
-                                transition: *to,
+                                transition,
                                 capture: capture.clone(),
                                 descend: Some(ident.clone()),
                                 insert: None,
@@ -318,7 +335,45 @@ impl Rule {
             }
         }
 
-        let mut insert_map = Map::with_capacity(uncovered.len());
+        let expected_tokens_var;
+        let expected_rules_var;
+
+        match halts {
+            true => {
+                expected_tokens_var = GlobalVar::EmptyTokenSet.compile(span);
+                expected_rules_var = GlobalVar::EmptyRuleSet.compile(span);
+
+                let eoi = TokenLit::EOI(span);
+
+                if !by_token.contains_key(&eoi) {
+                    let _ = by_token.insert(
+                        eoi,
+                        Action {
+                            transition: None,
+                            insert: None,
+                            descend: None,
+                            capture: None,
+                        },
+                    );
+                }
+            }
+
+            false => {
+                expected_tokens_var = globals
+                    .inclusive_tokens(
+                        expected_tokens
+                            .into_iter()
+                            .map(|ident| TokenLit::Ident(ident)),
+                    )
+                    .compile(span);
+
+                expected_rules_var = globals
+                    .rules(expected_rules.into_iter().cloned())
+                    .compile(span);
+            }
+        };
+
+        let mut insert_map = Map::with_capacity(total_alphabet_len - covered.len());
 
         'outer: for (insert, to) in outgoing {
             if let Terminal::Token(_, TokenLit::Other(..)) = insert {
@@ -337,10 +392,15 @@ impl Rule {
                                 break 'outer;
                             }
 
+                            let transition = match lit.is_eoi() {
+                                true => None,
+                                false => Some(*to),
+                            };
+
                             let previous = insert_map.insert(
                                 lit.clone(),
                                 Action {
-                                    transition: *to,
+                                    transition,
                                     capture: capture.clone(),
                                     descend: None,
                                     insert: Some(insert.clone()),
@@ -371,10 +431,15 @@ impl Rule {
                                     break 'outer;
                                 }
 
+                                let transition = match lit.is_eoi() {
+                                    true => None,
+                                    false => Some(*to),
+                                };
+
                                 let previous = insert_map.insert(
                                     lit.clone(),
                                     Action {
-                                        transition: *to,
+                                        transition,
                                         capture: capture.clone(),
                                         descend: Some(ident.clone()),
                                         insert: Some(insert.clone()),
@@ -393,64 +458,12 @@ impl Rule {
         }
 
         for (lit, action) in insert_map {
-            if !uncovered.remove(&lit) {
-                system_panic!("Duplicate uncovered token.");
-            }
-
             let previous = by_token.insert(lit, action);
 
             if previous.is_some() {
                 system_panic!("Duplicate by_token entry.")
             }
         }
-
-        let mut stream = TokenStream::new();
-
-        let is_final = automata.finish().contains(&from);
-
-        let span = self.span;
-        let core = span.face_core();
-        let option = span.face_option();
-
-        let missing;
-        let expected_tokens_var;
-        let expected_rules_var;
-
-        match is_final {
-            true => {
-                missing = quote_spanned!(span=> break,);
-                expected_tokens_var = GlobalVar::EmptyTokenSet.compile(span);
-                expected_rules_var = GlobalVar::EmptyRuleSet.compile(span);
-            }
-
-            false => {
-                expected_tokens_var = globals
-                    .inclusive_tokens(
-                        expected_tokens
-                            .into_iter()
-                            .map(|ident| TokenLit::Ident(ident)),
-                    )
-                    .compile(span);
-                expected_rules_var = globals
-                    .rules(expected_rules.into_iter().cloned())
-                    .compile(span);
-
-                missing = quote_spanned!(span=> {
-                    site = #core::lexis::TokenCursor::site_ref(session, 0);
-                    #core::syntax::SyntaxSession::error(
-                        session,
-                        #core::syntax::SyntaxError {
-                            span: site..site,
-                            context: #context,
-                            expected_tokens: &#expected_tokens_var,
-                            expected_rules: &#expected_rules_var,
-                        },
-                    );
-
-                    break;
-                })
-            }
-        };
 
         let mut by_action = BTreeMap::<Action, Set<TokenLit>>::new();
 
@@ -464,20 +477,11 @@ impl Rule {
         }
 
         quote_spanned!(span=>
-            let token = match #core::lexis::TokenCursor::token(session, 0) {
-                #option::Some(token) => token,
-                #option::None => #missing
-            };
+            let token = #core::lexis::TokenCursor::token(session, 0);
         )
         .to_tokens(&mut stream);
 
         for (action, set) in by_action {
-            let to = action.transition;
-
-            let has_outgoing = automata.transitions().outgoing(&to).is_some();
-            let is_final = automata.finish().contains(&to);
-            let is_looping = from == to;
-
             let mut body = TokenStream::new();
 
             if let Some(insert) = &action.insert {
@@ -504,7 +508,7 @@ impl Rule {
                                     expected_rules: &#core::syntax::EMPTY_RULE_SET,
                                 });
                         )
-                        .to_tokens(&mut body)
+                        .to_tokens(&mut body);
                     }
 
                     Terminal::Node(capture, ident) => {
@@ -533,7 +537,7 @@ impl Rule {
                                     expected_rules: &#var,
                                 });
                         )
-                        .to_tokens(&mut body)
+                        .to_tokens(&mut body);
                     }
                 }
             }
@@ -548,10 +552,12 @@ impl Rule {
                             .to_tokens(&mut body);
                     }
 
-                    quote_spanned!(span=>
-                        #core::lexis::TokenCursor::advance(session);
-                    )
-                    .to_tokens(&mut body)
+                    if set.single() != Some(TokenLit::EOI(span)) {
+                        quote_spanned!(span=>
+                            #core::lexis::TokenCursor::advance(session);
+                        )
+                        .to_tokens(&mut body);
+                    }
                 }
 
                 Some(ident) => {
@@ -601,42 +607,53 @@ impl Rule {
                 }
             }
 
-            if has_outgoing && !is_looping {
-                quote_spanned!(span=> state = #to;).to_tokens(&mut body);
-            }
+            match action.transition {
+                None => quote_spanned!(span=> break;).to_tokens(&mut body),
 
-            match !has_outgoing && is_final {
-                true => quote_spanned!(span=> break;).to_tokens(&mut body),
-                false => quote_spanned!(span=> continue;).to_tokens(&mut body),
+                Some(to) => {
+                    let has_outgoing = automata.transitions().outgoing(&to).is_some();
+                    let is_final = automata.finish().contains(&to);
+                    let is_looping = from == to;
+
+                    if has_outgoing && !is_looping {
+                        quote_spanned!(span=> state = #to;).to_tokens(&mut body);
+                    }
+
+                    match !has_outgoing && is_final {
+                        true => quote_spanned!(span=> break;).to_tokens(&mut body),
+                        false => quote_spanned!(span=> continue;).to_tokens(&mut body),
+                    }
+                }
             }
 
             match set.single() {
-                Some(TokenLit::Ident(ident)) => {
-                    let enum_variant = TokenLit::Ident(ident).as_enum_variant(&input.token);
-
-                    quote_spanned!(span=> if token == #enum_variant {
-                        #body
-                    })
-                    .to_tokens(&mut stream)
-                }
-
-                _ => {
+                None | Some(TokenLit::Other(..)) => {
                     let pattern = Self::make_pattern(input, globals, set).compile(span);
 
                     quote_spanned!(span=> if #core::lexis::TokenSet::contains(&#pattern, token as u8) {
                         #body
                     })
-                    .to_tokens(&mut stream)
+                        .to_tokens(&mut stream);
+                }
+
+                Some(lit) => {
+                    let enum_variant =
+                        expect_some!(lit.as_enum_variant(&input.token), "Missing enum variant.",);
+
+                    quote_spanned!(span=> if token == #enum_variant {
+                        #body
+                    })
+                    .to_tokens(&mut stream);
                 }
             }
         }
 
-        match is_final {
+        match halts {
             true => {
                 quote_spanned!(span=> break;).to_tokens(&mut stream);
             }
 
-            false if !uncovered.is_empty() => {
+            false if covered.len() < total_alphabet_len => {
                 let recovery = recovery_var.compile(span);
 
                 quote_spanned!(span=>
@@ -644,17 +661,15 @@ impl Rule {
                 )
                 .to_tokens(&mut stream);
 
-                let delimiter_halt;
-
-                match delimiter {
+                let delimiter_halt = match delimiter {
                     Some(delimiter) if !covered.contains(delimiter) => {
                         let _ = covered.insert(delimiter.clone());
 
-                        delimiter_halt = Some(delimiter)
+                        Some(delimiter)
                     }
 
-                    _ => delimiter_halt = None,
-                }
+                    _ => None,
+                };
 
                 let expectations = Self::make_pattern(input, globals, covered).compile(span);
 
@@ -690,7 +705,7 @@ impl Rule {
 
                     quote_spanned!(span=>
                         if recovered {
-                            if #core::lexis::TokenCursor::token(session, 0) == #option::Some(#delimiter) {
+                            if #core::lexis::TokenCursor::token(session, 0) == #delimiter {
                                 #core::lexis::TokenCursor::advance(session);
                                 recovered = false;
                             }
@@ -717,7 +732,7 @@ impl Rule {
         let mut exclusive = false;
 
         set.retain(|lit| match lit {
-            TokenLit::Ident(..) => true,
+            TokenLit::Ident(..) | TokenLit::EOI(..) => true,
             TokenLit::Other(..) => {
                 exclusive = true;
                 false
@@ -740,221 +755,9 @@ impl Rule {
     }
 }
 
-#[derive(Default)]
-pub(super) struct Globals {
-    recoveries: BTreeMap<Recovery, String>,
-    rules: BTreeMap<BTreeSet<Index>, String>,
-    tokens: BTreeMap<TokenSet, String>,
-}
-
-impl Globals {
-    pub(super) fn compile(&self, span: Span, token_type: &Type) -> TokenStream {
-        #[inline(always)]
-        fn compare_keys(a: &str, b: &str) -> Ordering {
-            let ordering = a.len().cmp(&b.len());
-
-            if ordering.is_eq() {
-                return a.cmp(&b);
-            }
-
-            ordering
-        }
-
-        let mut stream = TokenStream::new();
-
-        let core = span.face_core();
-
-        let mut recoveries = self.recoveries.iter().collect::<Vec<_>>();
-        recoveries.sort_by(|(_, a), (_, b)| compare_keys(a, b));
-
-        let mut rules = self.rules.iter().collect::<Vec<_>>();
-        rules.sort_by(|(_, a), (_, b)| compare_keys(a, b));
-
-        let mut tokens = self.tokens.iter().collect::<Vec<_>>();
-        tokens.sort_by(|(_, a), (_, b)| compare_keys(a, b));
-
-        for (recovery, ident) in recoveries {
-            let recovery = recovery.compile(token_type);
-            let ident = Ident::new(ident, span);
-
-            quote_spanned!(span=> static #ident: #core::syntax::Recovery = #recovery;)
-                .to_tokens(&mut stream);
-        }
-
-        for (rules, ident) in rules {
-            let ident = Ident::new(ident, span);
-
-            quote_spanned!(span=>
-                static #ident: #core::syntax::RuleSet =
-                    #core::syntax::RuleSet::new(&[#(#rules),*]);
-            )
-            .to_tokens(&mut stream);
-        }
-
-        for (tokens, ident) in tokens {
-            let ident = Ident::new(ident, span);
-
-            match tokens {
-                TokenSet::Exclusive(lits) => {
-                    let set = lits.into_iter().map(|lit| {
-                        expect_some!(lit.as_enum_variant(token_type), "Non-ident token.",)
-                    });
-
-                    quote_spanned!(span=>
-                        static #ident: #core::lexis::TokenSet
-                            = #core::lexis::TokenSet::exclusive(&[#(#set as u8),*]);
-                    )
-                    .to_tokens(&mut stream);
-                }
-
-                TokenSet::Inclusive(lits) => {
-                    let set = lits.into_iter().map(|lit| {
-                        expect_some!(lit.as_enum_variant(token_type), "Non-ident token.",)
-                    });
-
-                    quote_spanned!(span=>
-                        static #ident: #core::lexis::TokenSet
-                            = #core::lexis::TokenSet::inclusive(&[#(#set as u8),*]);
-                    )
-                    .to_tokens(&mut stream);
-                }
-            }
-        }
-
-        stream
-    }
-
-    pub(super) fn recovery(&mut self, recovery: Recovery) -> GlobalVar {
-        if recovery.is_empty() {
-            return GlobalVar::UnlimitedRecovery;
-        }
-
-        if let Some(ident) = self.recoveries.get(&recovery) {
-            return GlobalVar::Static(ident.clone());
-        }
-
-        let ident = format!("RECOVERY_{}", self.recoveries.len() + 1);
-
-        let _ = self.recoveries.insert(recovery, ident.clone());
-
-        GlobalVar::Static(ident.clone())
-    }
-
-    pub(super) fn rules(&mut self, set: impl Iterator<Item = Index>) -> GlobalVar {
-        let set = set.collect::<BTreeSet<_>>();
-
-        if set.is_empty() {
-            return GlobalVar::EmptyRuleSet;
-        }
-
-        if let Some(ident) = self.rules.get(&set) {
-            return GlobalVar::Static(ident.clone());
-        }
-
-        let ident = format!("RULES_{}", self.rules.len() + 1);
-
-        let _ = self.rules.insert(set, ident.clone());
-
-        GlobalVar::Static(ident.clone())
-    }
-
-    pub(super) fn inclusive_tokens(&mut self, set: impl Iterator<Item = TokenLit>) -> GlobalVar {
-        let set = set.collect::<BTreeSet<_>>();
-
-        if set.is_empty() {
-            return GlobalVar::EmptyTokenSet;
-        }
-
-        self.tokens(TokenSet::Inclusive(set))
-    }
-
-    pub(super) fn exclusive_tokens(&mut self, set: impl Iterator<Item = TokenLit>) -> GlobalVar {
-        let set = set.collect::<BTreeSet<_>>();
-
-        if set.is_empty() {
-            return GlobalVar::FullTokenSet;
-        }
-
-        self.tokens(TokenSet::Exclusive(set))
-    }
-
-    fn tokens(&mut self, set: TokenSet) -> GlobalVar {
-        if set.is_empty() {
-            return GlobalVar::EmptyTokenSet;
-        }
-
-        if let Some(ident) = self.tokens.get(&set) {
-            return GlobalVar::Static(ident.clone());
-        }
-
-        let ident = format!("TOKENS_{}", self.tokens.len() + 1);
-
-        let _ = self.tokens.insert(set, ident.clone());
-
-        GlobalVar::Static(ident.clone())
-    }
-}
-
-pub(super) enum GlobalVar {
-    Static(String),
-    EmptyTokenSet,
-    FullTokenSet,
-    EmptyRuleSet,
-    UnlimitedRecovery,
-}
-
-impl GlobalVar {
-    #[inline]
-    fn compile(&self, span: Span) -> TokenStream {
-        match self {
-            Self::Static(string) => Ident::new(string, span).to_token_stream(),
-
-            Self::EmptyTokenSet => {
-                let core = span.face_core();
-
-                quote_spanned!(span=> #core::lexis::EMPTY_TOKEN_SET)
-            }
-
-            Self::FullTokenSet => {
-                let core = span.face_core();
-
-                quote_spanned!(span=> #core::lexis::FULL_TOKEN_SET)
-            }
-
-            Self::EmptyRuleSet => {
-                let core = span.face_core();
-
-                quote_spanned!(span=> #core::syntax::EMPTY_RULE_SET)
-            }
-
-            Self::UnlimitedRecovery => {
-                let core = span.face_core();
-
-                quote_spanned!(span=> #core::syntax::UNLIMITED_RECOVERY)
-            }
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum TokenSet {
-    Inclusive(BTreeSet<TokenLit>),
-    Exclusive(BTreeSet<TokenLit>),
-}
-
-impl TokenSet {
-    #[inline(always)]
-    fn is_empty(&self) -> bool {
-        match self {
-            Self::Inclusive(set) => set.is_empty(),
-            Self::Exclusive(set) => set.is_empty(),
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Action {
-    transition: State,
+    transition: Option<State>,
     insert: Option<Terminal>,
     descend: Option<Ident>,
     capture: Option<Ident>,

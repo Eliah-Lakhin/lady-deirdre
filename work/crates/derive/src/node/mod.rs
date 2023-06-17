@@ -38,6 +38,7 @@
 mod automata;
 mod constructor;
 mod generics;
+mod globals;
 mod index;
 mod input;
 mod leftmost;

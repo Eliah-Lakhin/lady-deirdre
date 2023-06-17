@@ -156,6 +156,23 @@ impl<N: Node> SyntaxTree for ImmutableUnit<N> {
     }
 }
 
+impl<N, S> From<S> for ImmutableUnit<N>
+where
+    N: Node,
+    S: Borrow<str>,
+{
+    #[inline(always)]
+    fn from(string: S) -> Self {
+        let mut lexis = TokenBuffer::<N::Token>::default();
+
+        lexis.append(string.borrow());
+
+        let syntax = SyntaxBuffer::new(lexis.id(), lexis.cursor(..));
+
+        Self { lexis, syntax }
+    }
+}
+
 impl<T: Token> TokenBuffer<T> {
     #[inline(always)]
     pub fn into_immutable_unit<N>(mut self) -> ImmutableUnit<N>

@@ -41,7 +41,7 @@ use syn::{
     GenericParam,
     Generics,
     Lifetime,
-    LifetimeDef,
+    LifetimeParam,
 };
 
 pub(super) struct ParserGenerics {
@@ -73,7 +73,7 @@ impl ParserGenerics {
 
         func.params.insert(
             0,
-            GenericParam::Lifetime(LifetimeDef {
+            GenericParam::Lifetime(LifetimeParam {
                 attrs: Vec::new(),
                 lifetime: code.clone(),
                 colon_token: None,

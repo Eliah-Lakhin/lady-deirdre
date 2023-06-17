@@ -38,295 +38,408 @@
 use proc_macro2::{Ident, Span};
 use syn::{
     parse::{Lookahead1, ParseStream},
-    spanned::Spanned,
-    Error,
-    LitChar,
     LitStr,
     Result,
 };
 
 use crate::{
-    token::{characters::CharacterSet, scope::Scope, NULL},
+    token::{
+        automata::{Scope, Terminal, TokenAutomata},
+        chars::{CharSet, Class},
+        input,
+        input::{Alphabet, InlineMap, VariantMap},
+    },
     utils::{
         dump_kw,
+        error,
+        expect_some,
         system_panic,
         Applicability,
-        Automata,
         AutomataContext,
         Expression,
         ExpressionOperand,
         ExpressionOperator,
-        Map,
-        OptimizationStrategy,
+        PredictableCollection,
+        Set,
         SetImpl,
+        Strategy,
     },
 };
 
 pub(super) type Regex = Expression<Operator>;
 
 impl RegexImpl for Regex {
-    fn inline(&mut self, inline_map: &InlineMap) -> Result<()> {
-        match self {
-            Self::Operand(Operand::Inline { name }) => {
-                match inline_map.get(&name.to_string()) {
-                    None => {
-                        return Err(Error::new(
-                            name.span(),
-                            "Unknown inline expression.\nEach inline expression name is \
-                            case-sensitive and should be defined before use.\nTo define an inline \
-                            expression use #[define(name = <expression>)] attribute on the derived \
-                            type.",
-                        ));
-                    }
-
-                    Some(inline) => {
-                        *self = inline.clone();
-                    }
-                };
-            }
-
-            Self::Operand(Operand::Dump { inner, .. }) => {
-                inner.inline(inline_map)?;
-            }
-
-            Self::Binary(left, _, right) => {
-                left.inline(inline_map)?;
-                right.inline(inline_map)?;
-            }
-
-            Self::Unary(_, inner) => inner.inline(inline_map)?,
-
-            _ => (),
-        }
-
-        Ok(())
-    }
-
-    fn alphabet(&self) -> CharacterSet {
-        match self {
-            Self::Operand(Operand::Inclusion { character_set }) => character_set.clone(),
-            Self::Operand(Operand::Dump { inner, .. }) => inner.alphabet(),
-            Self::Binary(left, _, right) => left.alphabet().merge(right.alphabet()),
-            Self::Unary(_, inner) => inner.alphabet(),
-            _ => CharacterSet::default(),
-        }
-    }
-
     fn name(&self) -> Option<String> {
-        return match self {
-            Self::Operand(Operand::Inclusion { character_set }) => {
-                match character_set.inner().single() {
-                    None => None,
-                    Some(ch) => Some(ch.to_string()),
-                }
+        match self {
+            Self::Operand(Operand::Class(_, Class::Char(ch)))
+                if !ch.is_ascii_control() && *ch != ' ' =>
+            {
+                Some(String::from(*ch))
             }
 
-            Self::Operand(Operand::Dump { inner, .. }) => inner.name(),
+            Self::Operand(Operand::Dump(_, inner)) => inner.name(),
+
+            Self::Operand(_) => None,
 
             Self::Binary(left, Operator::Concat, right) => {
                 let mut left = left.name()?;
                 let right = right.name()?;
 
-                left.push_str(right.as_str());
+                left += right.as_str();
 
                 Some(left)
             }
 
-            _ => None,
-        };
+            Self::Binary(_, _, _) => None,
+
+            Self::Unary(_, _) => None,
+        }
     }
 
-    fn encode(&self, scope: &mut Scope) -> Result<Automata<Scope>> {
-        Ok(match self {
-            Self::Operand(Operand::Any) => scope.any(),
+    fn alphabet(&self) -> Alphabet {
+        match self {
+            Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
 
-            Self::Operand(Operand::Inline { .. }) => system_panic!("Unresolved inline."),
+            Self::Operand(Operand::Dump(_, inner)) => inner.alphabet(),
 
-            Self::Operand(Operand::Dump { span, inner }) => {
-                scope.set_strategy(OptimizationStrategy::CANONICALIZE);
+            Self::Operand(Operand::Class(_, Class::Char(ch))) => Set::new([*ch]),
 
-                let inner = inner.encode(scope)?;
+            Self::Operand(Operand::Class(_, _)) => Set::empty(),
 
-                return Err(Error::new(
-                    *span,
-                    format!(
-                        "This expression is a subject for debugging.\n\nState machine transitions \
-                        are:\n{:#}",
-                        inner,
-                    ),
+            Self::Operand(Operand::Exclusion(set)) => set
+                .classes
+                .clone()
+                .into_iter()
+                .filter_map(|class| match class {
+                    Class::Char(ch) => Some(ch),
+                    _ => None,
+                })
+                .collect(),
+
+            Self::Binary(left, _, right) => left.alphabet().merge(right.alphabet()),
+
+            Self::Unary(_, inner) => inner.alphabet(),
+        }
+    }
+
+    fn expand(&mut self, alphabet: &Alphabet) {
+        match self {
+            Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
+
+            Self::Operand(Operand::Dump(_, inner)) => inner.expand(alphabet),
+
+            Self::Operand(Operand::Exclusion(set)) => {
+                let mut alphabet = alphabet.clone();
+
+                let mut upper = true;
+                let mut lower = true;
+                let mut num = true;
+                let mut space = true;
+
+                for exclusion in &set.classes {
+                    match exclusion {
+                        Class::Char(ch) => {
+                            let _ = alphabet.remove(ch);
+                        }
+
+                        Class::Upper => {
+                            alphabet.retain(|ch| !Class::Upper.includes(ch));
+                            upper = false;
+                        }
+
+                        Class::Lower => {
+                            alphabet.retain(|ch| !Class::Lower.includes(ch));
+                            lower = false;
+                        }
+
+                        Class::Num => {
+                            alphabet.retain(|ch| !Class::Num.includes(ch));
+                            num = false;
+                        }
+
+                        Class::Space => {
+                            alphabet.retain(|ch| !Class::Space.includes(ch));
+                            space = false;
+                        }
+
+                        Class::Other => {
+                            system_panic!("Exclusion contains Other class.");
+                        }
+                    }
+                }
+
+                let mut generics = Vec::with_capacity(4);
+
+                if upper {
+                    generics.push(Class::Upper);
+                }
+
+                if lower {
+                    generics.push(Class::Lower);
+                }
+
+                if num {
+                    generics.push(Class::Num);
+                }
+
+                if space {
+                    generics.push(Class::Space);
+                }
+
+                let regex = alphabet
+                    .into_iter()
+                    .map(|ch| Class::Char(ch))
+                    .chain(generics)
+                    .fold(
+                        Self::Operand(Operand::Class(set.span, Class::Other)),
+                        |left, right| {
+                            let right = Self::Operand(Operand::Class(set.span, right));
+
+                            Self::Binary(Box::new(left), Operator::Union, Box::new(right))
+                        },
+                    );
+
+                *self = regex;
+            }
+
+            Self::Operand(Operand::Class(span, class)) => {
+                fn expand_class(span: Span, class: Class, alphabet: &Alphabet) -> Regex {
+                    alphabet
+                        .iter()
+                        .filter_map(|ch| match class.includes(ch) {
+                            false => None,
+                            true => Some(Class::Char(*ch)),
+                        })
+                        .fold(
+                            Regex::Operand(Operand::Class(span, class)),
+                            |left, right| {
+                                let right = Regex::Operand(Operand::Class(span, right));
+
+                                Regex::Binary(Box::new(left), Operator::Union, Box::new(right))
+                            },
+                        )
+                }
+
+                match class {
+                    Class::Char(_) => (),
+                    Class::Upper => *self = expand_class(*span, Class::Upper, alphabet),
+                    Class::Lower => *self = expand_class(*span, Class::Lower, alphabet),
+                    Class::Num => *self = expand_class(*span, Class::Num, alphabet),
+                    Class::Space => *self = expand_class(*span, Class::Space, alphabet),
+                    Class::Other => system_panic!("Explicit Other class."),
+                }
+            }
+
+            Self::Binary(left, _, right) => {
+                left.expand(alphabet);
+                right.expand(alphabet);
+            }
+
+            Self::Unary(_, inner) => inner.expand(alphabet),
+        }
+    }
+
+    fn inline(&mut self, inline_map: &InlineMap, variant_map: &VariantMap) -> Result<()> {
+        match self {
+            Self::Operand(Operand::Unresolved(ident)) if variant_map.contains_key(ident) => {
+                return Err(error!(
+                    ident.span(),
+                    "\"{ident}\" refers enum variant.\nRule references not \
+                    allowed in the lexis grammar.",
                 ));
             }
 
-            Self::Operand(Operand::Inclusion { character_set }) => {
-                character_set.clone().into_inclusion(scope)
+            Self::Operand(Operand::Unresolved(ident)) if inline_map.contains_key(ident) => {
+                let mut inline = expect_some!(inline_map.get(ident), "Missing inline.",).clone();
+
+                inline.set_span(ident.span());
+
+                *self = inline;
             }
 
-            Self::Operand(Operand::Exclusion { character_set }) => {
-                character_set.clone().into_exclusion(scope)?
+            Self::Operand(Operand::Unresolved(ident)) => {
+                if ident == "alpha" {
+                    return Err(error!(
+                        ident.span(),
+                        "Unknown inline expression \"{ident}\". Maybe you \
+                        mean ${ident} - a class of all alphabetic \
+                        characters?\nOtherwise, annotate enum type with \
+                        #[define({ident} = ...)] attribute to introduce \
+                        corresponding inline expression.",
+                    ));
+                }
+
+                if ident == "alphanum" {
+                    return Err(error!(
+                        ident.span(),
+                        "Unknown inline expression \"{ident}\". Maybe you \
+                        mean ${ident} - a class of all alphabetic and numeric \
+                        characters?\nOtherwise, annotate enum type with \
+                        #[define({ident} = ...)] attribute to introduce \
+                        corresponding inline expression.",
+                    ));
+                }
+
+                if ident == "upper" {
+                    return Err(error!(
+                        ident.span(),
+                        "Unknown inline expression \"{ident}\". Maybe you \
+                        mean ${ident} - a class of all upper-cased alphabetic \
+                        characters?\nOtherwise, annotate enum type with \
+                        #[define({ident} = ...)] attribute to introduce \
+                        corresponding inline expression.",
+                    ));
+                }
+
+                if ident == "lower" {
+                    return Err(error!(
+                        ident.span(),
+                        "Unknown inline expression \"{ident}\". Maybe you \
+                        mean ${ident} - a class of all lower-cased alphabetic \
+                        characters?\nOtherwise, annotate enum type with \
+                        #[define({ident} = ...)] attribute to introduce \
+                        corresponding inline expression.",
+                    ));
+                }
+
+                if ident == "num" {
+                    return Err(error!(
+                        ident.span(),
+                        "Unknown inline expression \"{ident}\". Maybe you \
+                        mean ${ident} - a class of all numeric \
+                        characters?\nOtherwise, annotate enum type with \
+                        #[define({ident} = ...)] attribute to introduce \
+                        corresponding inline expression.",
+                    ));
+                }
+
+                if ident == "space" {
+                    return Err(error!(
+                        ident.span(),
+                        "Unknown inline expression \"{ident}\". Maybe you \
+                        mean ${ident} - a class of all whitespace \
+                        characters?\nOtherwise, annotate enum type with \
+                        #[define({ident} = ...)] attribute to introduce \
+                        corresponding inline expression.",
+                    ));
+                }
+
+                return Err(error!(
+                    ident.span(),
+                    "Unknown inline expression \"{ident}\".\nAnnotate \
+                    enum type with #[define({ident} = ...)] attribute to \
+                    introduce corresponding inline expression.",
+                ));
             }
 
-            Self::Binary(left, Operator::Concat, right) => {
+            Self::Operand(Operand::Dump(_, inner)) => {
+                inner.inline(inline_map, variant_map)?;
+            }
+
+            Self::Operand(Operand::Class(_, _)) => (),
+
+            Self::Operand(Operand::Exclusion(_)) => (),
+
+            Self::Binary(left, _, right) => {
+                left.inline(inline_map, variant_map)?;
+                right.inline(inline_map, variant_map)?;
+            }
+
+            Self::Unary(_, inner) => {
+                inner.inline(inline_map, variant_map)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn set_span(&mut self, span: Span) {
+        match self {
+            Self::Operand(Operand::Unresolved(ident)) => {
+                ident.set_span(span);
+            }
+
+            Self::Operand(Operand::Dump(_, inner)) => {
+                inner.set_span(span);
+            }
+
+            Self::Operand(Operand::Class(op_span, _)) => {
+                *op_span = span;
+            }
+
+            Self::Operand(Operand::Exclusion(set)) => set.span = span,
+
+            Self::Binary(left, _, right) => {
+                left.set_span(span);
+                right.set_span(span);
+            }
+
+            Self::Unary(_, inner) => {
+                inner.set_span(span);
+            }
+        }
+    }
+
+    fn encode(&self, scope: &mut Scope) -> Result<TokenAutomata> {
+        match self {
+            Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
+
+            Self::Operand(Operand::Exclusion(_)) => system_panic!("Unresolved exclusion."),
+
+            Self::Operand(Operand::Class(_, class)) => {
+                Ok(scope.terminal(Set::new([Terminal::Class(*class)])))
+            }
+
+            Self::Operand(Operand::Dump(span, inner)) => {
+                scope.set_strategy(Strategy::CANONICALIZE);
+
+                let automata = inner.encode(scope)?;
+
+                Err(error!(
+                    *span,
+                    " -- Macro System Debug Dump --\n\nThis expression is a \
+                    subject for debugging.\nState machine transitions \
+                    are:\n{automata:#}\n",
+                ))
+            }
+
+            Self::Binary(left, op, right) => {
                 let left = left.encode(scope)?;
                 let right = right.encode(scope)?;
 
-                scope.concatenate(left, right)
+                match op {
+                    Operator::Union => Ok(scope.union(left, right)),
+                    Operator::Concat => Ok(scope.concatenate(left, right)),
+                    _ => system_panic!("Unsupported Binary operator."),
+                }
             }
 
-            Self::Binary(left, Operator::Union, right) => {
-                let left = left.encode(scope)?;
-                let right = right.encode(scope)?;
-
-                scope.union(left, right)
-            }
-
-            Self::Unary(Operator::ZeroOrMore, inner) => {
+            Self::Unary(op, inner) => {
                 let inner = inner.encode(scope)?;
 
-                scope.repeat_zero(inner)
+                match op {
+                    Operator::OneOrMore => Ok(scope.repeat_one(inner)),
+                    Operator::ZeroOrMore => Ok(scope.repeat_zero(inner)),
+                    Operator::Optional => Ok(scope.optional(inner)),
+                    _ => system_panic!("Unsupported Unary operator."),
+                }
             }
-
-            Self::Unary(Operator::OneOrMore, inner) => {
-                let inner = inner.encode(scope)?;
-
-                scope.repeat_one(inner)
-            }
-
-            Self::Unary(Operator::Optional, inner) => {
-                let inner = inner.encode(scope)?;
-
-                scope.optional(inner)
-            }
-
-            _ => system_panic!("Unsupported operation."),
-        })
+        }
     }
 }
 
 pub(super) trait RegexImpl {
-    fn inline(&mut self, inline_map: &InlineMap) -> Result<()>;
-
-    fn alphabet(&self) -> CharacterSet;
-
     fn name(&self) -> Option<String>;
 
-    fn encode(&self, scope: &mut Scope) -> Result<Automata<Scope>>;
-}
+    fn alphabet(&self) -> Alphabet;
 
-pub(super) type InlineMap = Map<String, Regex>;
+    fn expand(&mut self, alphabet: &Alphabet);
 
-#[derive(Clone)]
-pub(super) enum Operand {
-    Any,
-    Inline { name: Ident },
-    Dump { span: Span, inner: Box<Regex> },
-    Inclusion { character_set: CharacterSet },
-    Exclusion { character_set: CharacterSet },
-}
+    fn inline(&mut self, inline_map: &InlineMap, variant_map: &VariantMap) -> Result<()>;
 
-impl ExpressionOperand<Operator> for Operand {
-    fn parse(input: ParseStream) -> Result<Regex> {
-        let lookahead = input.lookahead1();
+    fn set_span(&mut self, span: Span);
 
-        if lookahead.peek(syn::LitChar) {
-            let literal = input.parse::<LitChar>()?;
-
-            if literal.value() == NULL {
-                return Err(Error::new(literal.span(), "Null characters forbidden."));
-            }
-
-            return Ok(Expression::Operand(Operand::Inclusion {
-                character_set: CharacterSet::from(literal),
-            }));
-        }
-
-        if lookahead.peek(syn::LitStr) {
-            let literal = input.parse::<LitStr>()?;
-            let string = literal.value();
-
-            return string
-                .chars()
-                .try_fold(None, |accumulator, character| {
-                    if character == NULL {
-                        return Err(Error::new(literal.span(), "Null characters forbidden."));
-                    }
-
-                    let right = Expression::Operand(Operand::Inclusion {
-                        character_set: CharacterSet::from(LitChar::new(character, literal.span())),
-                    });
-
-                    Ok(Some(match accumulator {
-                        None => right,
-                        Some(left) => {
-                            Expression::Binary(Box::new(left), Operator::Concat, Box::new(right))
-                        }
-                    }))
-                })?
-                .ok_or_else(|| Error::new(literal.span(), "Empty strings are forbidden."));
-        }
-
-        if lookahead.peek(Token![.]) {
-            let _ = input.parse::<Token![.]>()?;
-
-            return Ok(Expression::Operand(Operand::Any));
-        }
-
-        if lookahead.peek(syn::token::Bracket) {
-            let content;
-
-            bracketed!(content in input);
-
-            let character_set = content.parse::<CharacterSet>()?;
-
-            return Ok(Expression::Operand(Operand::Inclusion { character_set }));
-        }
-
-        if lookahead.peek(Token![^]) {
-            let _ = input.parse::<Token![^]>()?;
-
-            let content;
-
-            bracketed!(content in input);
-
-            let character_set = content.parse::<CharacterSet>()?;
-
-            return Ok(Expression::Operand(Operand::Exclusion { character_set }));
-        }
-
-        if lookahead.peek(dump_kw::dump) {
-            let _ = input.parse::<dump_kw::dump>()?;
-
-            let content;
-            parenthesized!(content in input);
-
-            let span = content.span();
-            let inner = content.parse::<Regex>()?;
-
-            if !content.is_empty() {
-                return Err(content.error("Unexpected expression end."));
-            }
-
-            return Ok(Regex::Operand(Operand::Dump {
-                span,
-                inner: Box::new(inner),
-            }));
-        }
-
-        if lookahead.peek(syn::Ident) {
-            let identifier = input.parse::<Ident>()?;
-
-            return Ok(Expression::Operand(Operand::Inline { name: identifier }));
-        }
-
-        if lookahead.peek(syn::token::Paren) {
-            let content;
-
-            parenthesized!(content in input);
-
-            return content.parse::<Regex>();
-        }
-
-        Err(lookahead.error())
-    }
+    fn encode(&self, scope: &mut Scope) -> Result<TokenAutomata>;
 }
 
 #[derive(Clone, Copy)]
@@ -340,6 +453,11 @@ pub(super) enum Operator {
 
 impl ExpressionOperator for Operator {
     type Operand = Operand;
+
+    #[inline]
+    fn head() -> Option<Self> {
+        Some(Self::Union)
+    }
 
     #[inline]
     fn enumerate() -> Vec<Self> {
@@ -358,10 +476,11 @@ impl ExpressionOperator for Operator {
     }
 
     #[inline]
-    fn peek(&self, lookahead: &Lookahead1) -> Applicability {
+    fn test(&self, input: ParseStream, lookahead: &Lookahead1) -> Applicability {
         match self {
             Self::Union if lookahead.peek(Token![|]) => Applicability::Binary,
             Self::Concat if lookahead.peek(Token![&]) => Applicability::Binary,
+            Self::Concat if Operand::test(input) => Applicability::Binary,
             Self::OneOrMore if lookahead.peek(Token![+]) => Applicability::Unary,
             Self::ZeroOrMore if lookahead.peek(Token![*]) => Applicability::Unary,
             Self::Optional if lookahead.peek(Token![?]) => Applicability::Unary,
@@ -374,12 +493,150 @@ impl ExpressionOperator for Operator {
     fn parse(&mut self, input: ParseStream) -> Result<()> {
         match self {
             Self::Union => drop(input.parse::<Token![|]>()?),
-            Self::Concat => drop(input.parse::<Token![&]>()?),
+            Self::Concat => {
+                if input.peek(Token![&]) {
+                    drop(input.parse::<Token![&]>()?)
+                }
+            }
             Self::OneOrMore => drop(input.parse::<Token![+]>()?),
             Self::ZeroOrMore => drop(input.parse::<Token![*]>()?),
             Self::Optional => drop(input.parse::<Token![?]>()?),
         };
 
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub(super) enum Operand {
+    Unresolved(Ident),
+    Dump(Span, Box<Regex>),
+    Class(Span, Class),
+    Exclusion(CharSet),
+}
+
+impl ExpressionOperand<Operator> for Operand {
+    fn parse(input: ParseStream) -> Result<Regex> {
+        let lookahead = input.lookahead1();
+
+        if CharSet::peek(&lookahead) {
+            let set = input.parse::<CharSet>()?;
+
+            let expr = expect_some!(set.into_expr(), "Empty CharSet.",);
+
+            return Ok(expr);
+        }
+
+        if lookahead.peek(syn::LitStr) {
+            let lit = input.parse::<LitStr>()?;
+            let string = lit.value();
+            let span = lit.span();
+
+            return string
+                .chars()
+                .fold(None, |accumulator, ch| {
+                    let right = Regex::Operand(Operand::Class(span, Class::Char(ch)));
+
+                    Some(match accumulator {
+                        None => right,
+                        Some(left) => {
+                            Regex::Binary(Box::new(left), Operator::Concat, Box::new(right))
+                        }
+                    })
+                })
+                .ok_or_else(|| error!(lit.span(), "Empty strings forbidden.",));
+        }
+
+        if lookahead.peek(Token![.]) {
+            return Ok(Regex::Operand(Operand::Exclusion(CharSet::empty(
+                input.parse::<Token![.]>()?.span,
+            ))));
+        }
+
+        if lookahead.peek(syn::token::Bracket) {
+            let set = CharSet::parse_brackets(input)?;
+
+            let expr = expect_some!(set.into_expr(), "Empty CharSet.",);
+
+            return Ok(expr);
+        }
+
+        if lookahead.peek(Token![^]) {
+            let _ = input.parse::<Token![^]>()?;
+            let set = CharSet::parse_brackets(input)?;
+
+            return Ok(Regex::Operand(Operand::Exclusion(set)));
+        }
+
+        if lookahead.peek(dump_kw::dump) {
+            let _ = input.parse::<dump_kw::dump>()?;
+
+            let content;
+            parenthesized!(content in input);
+
+            let span = content.span();
+            let inner = content.parse::<Regex>()?;
+
+            if !content.is_empty() {
+                return Err(content.error("Unexpected expression end."));
+            }
+
+            return Ok(Regex::Operand(Operand::Dump(span, Box::new(inner))));
+        }
+
+        if lookahead.peek(syn::Ident) {
+            let ident = input.parse::<Ident>()?;
+
+            return Ok(Regex::Operand(Operand::Unresolved(ident)));
+        }
+
+        if lookahead.peek(syn::token::Paren) {
+            let content;
+
+            parenthesized!(content in input);
+
+            return content.parse::<Regex>();
+        }
+
+        Err(lookahead.error())
+    }
+
+    fn test(input: ParseStream) -> bool {
+        if {
+            let lookahead = input.lookahead1();
+            CharSet::peek(&lookahead)
+        } {
+            return true;
+        }
+
+        if input.peek(syn::LitStr) {
+            return true;
+        }
+
+        if input.peek(Token![.]) {
+            return true;
+        }
+
+        if input.peek(syn::token::Bracket) {
+            return true;
+        }
+
+        if input.peek(Token![^]) {
+            return true;
+        }
+
+        if input.peek(dump_kw::dump) {
+            return true;
+        }
+
+        if input.peek(syn::Ident) {
+            return true;
+        }
+
+        if input.peek(syn::token::Paren) {
+            return true;
+        }
+
+        false
     }
 }

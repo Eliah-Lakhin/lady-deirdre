@@ -46,7 +46,7 @@ use syn::{Error, Result};
 
 use crate::{
     node::automata::{NodeAutomata, Terminal},
-    utils::{error, expect_some, Map, PredictableCollection, Set, SetImpl, SpanFacade, State},
+    utils::{error, expect_some, Facade, Map, PredictableCollection, Set, SetImpl, State},
 };
 
 #[derive(Default)]

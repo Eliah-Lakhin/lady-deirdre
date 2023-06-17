@@ -64,10 +64,10 @@ use crate::{
         ExpressionOperand,
         ExpressionOperator,
         Map,
-        OptimizationStrategy,
         PredictableCollection,
         Set,
         SetImpl,
+        Strategy,
     },
 };
 
@@ -367,7 +367,7 @@ impl RegexImpl for Regex {
 
             Self::Operand(Operand::Dump(span, inner)) => {
                 let leftmost = Leftmost::from(inner);
-                scope.set_strategy(OptimizationStrategy::CANONICALIZE);
+                scope.set_strategy(Strategy::CANONICALIZE);
                 let mut automata = inner.encode(scope)?;
 
                 automata.merge_captures(scope)?;
@@ -467,19 +467,6 @@ impl Default for Operand {
     #[inline(always)]
     fn default() -> Self {
         Self::Unresolved(None, Ident::new("_", Span::call_site()))
-    }
-}
-
-impl OperandSpan for Operand {
-    #[inline(always)]
-    fn span(&self) -> Span {
-        match self {
-            Self::Unresolved(_, name) => name.span(),
-            Self::Dump(span, _) => *span,
-            Self::Token(_, token) => token.span(),
-            Self::Rule(_, name) => name.span(),
-            Self::Exclusion(_, span, _) => *span,
-        }
     }
 }
 
@@ -590,21 +577,21 @@ impl ExpressionOperand<Operator> for Operand {
             return Ok(Regex::Operand(Operand::Unresolved(None, ident)));
         }
 
-        if input.peek(Token![$]) {
+        if lookahead.peek(Token![$]) {
             return Ok(Regex::Operand(Operand::Token(
                 None,
                 input.parse::<TokenLit>()?,
             )));
         }
 
-        if input.peek(Token![^]) {
+        if lookahead.peek(Token![^]) {
             let _ = input.parse::<Token![^]>()?;
             let (span, set) = parse_token_lit_set(input)?;
 
             return Ok(Regex::Operand(Operand::Exclusion(None, span, set)));
         }
 
-        if input.peek(Token![.]) {
+        if lookahead.peek(Token![.]) {
             let span = input.parse::<Token![.]>()?.span;
 
             return Ok(Regex::Operand(Operand::Exclusion(None, span, Set::empty())));
@@ -625,10 +612,34 @@ impl ExpressionOperand<Operator> for Operand {
 
         Err(lookahead.error())
     }
-}
 
-pub(super) trait OperandSpan {
-    fn span(&self) -> Span;
+    fn test(input: ParseStream) -> bool {
+        if input.peek(dump_kw::dump) {
+            return true;
+        }
+
+        if input.peek(syn::Ident) {
+            return true;
+        }
+
+        if input.peek(Token![$]) {
+            return true;
+        }
+
+        if input.peek(Token![^]) {
+            return true;
+        }
+
+        if input.peek(Token![.]) {
+            return true;
+        }
+
+        if input.peek(syn::token::Paren) {
+            return true;
+        }
+
+        false
+    }
 }
 
 #[derive(Clone)]
@@ -642,6 +653,11 @@ pub(super) enum Operator {
 
 impl ExpressionOperator for Operator {
     type Operand = Operand;
+
+    #[inline]
+    fn head() -> Option<Self> {
+        Some(Self::Union)
+    }
 
     #[inline]
     fn enumerate() -> Vec<Self> {
@@ -666,10 +682,11 @@ impl ExpressionOperator for Operator {
     }
 
     #[inline]
-    fn peek(&self, lookahead: &Lookahead1) -> Applicability {
+    fn test(&self, input: ParseStream, lookahead: &Lookahead1) -> Applicability {
         match self {
             Self::Union if lookahead.peek(Token![|]) => Applicability::Binary,
             Self::Concat if lookahead.peek(Token![&]) => Applicability::Binary,
+            Self::Concat if Operand::test(input) => Applicability::Binary,
             Self::Optional if lookahead.peek(Token![?]) => Applicability::Unary,
             Self::OneOrMore(..) if lookahead.peek(Token![+]) => Applicability::Unary,
             Self::ZeroOrMore(..) if lookahead.peek(Token![*]) => Applicability::Unary,
@@ -683,7 +700,11 @@ impl ExpressionOperator for Operator {
         match self {
             Self::Union => drop(input.parse::<Token![|]>()?),
 
-            Self::Concat => drop(input.parse::<Token![&]>()?),
+            Self::Concat => {
+                if input.peek(Token![&]) {
+                    drop(input.parse::<Token![&]>()?)
+                }
+            }
 
             Self::Optional => drop(input.parse::<Token![?]>()?),
 

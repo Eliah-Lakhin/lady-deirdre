@@ -89,7 +89,7 @@ use crate::{
 /// let mut cursor = buf.cursor(4..5);
 ///
 /// // Looking ahead from the beginning.
-/// assert_eq!(cursor.token(0).unwrap(), SimpleToken::Identifier);
+/// assert_eq!(cursor.token(0), SimpleToken::Identifier);
 /// assert_eq!(cursor.site(0).unwrap(), 1); // Token "foo" starts from Site 1.
 /// assert_eq!(cursor.string(0).unwrap(), "foo");
 /// assert_eq!(cursor.string(1).unwrap(), " ");
@@ -154,7 +154,7 @@ pub trait TokenCursor<'code>: Identifiable {
     /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
     /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
     /// distance to gain the best performance.
-    fn token(&mut self, distance: TokenCount) -> Option<Self::Token>;
+    fn token(&mut self, distance: TokenCount) -> Self::Token;
 
     /// Looks ahead of the [Token](crate::lexis::Token)'s start [Site](crate::lexis::Site) in front
     /// of the TokenCursor inner Site.
@@ -295,20 +295,20 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
     }
 
     #[inline]
-    fn token(&mut self, mut distance: TokenCount) -> Option<Self::Token> {
+    fn token(&mut self, mut distance: TokenCount) -> Self::Token {
         distance += self.next;
 
         if distance >= self.buffer.token_count() {
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
         let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
 
         if peek_site > self.end_site {
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
-        Some(*unsafe { self.buffer.tokens.inner().get_unchecked(distance) })
+        *unsafe { self.buffer.tokens.inner().get_unchecked(distance) }
     }
 
     #[inline]
@@ -359,7 +359,13 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
             return None;
         }
 
-        Some(unsafe { self.buffer.strings.inner().get_unchecked(distance).as_str() })
+        let inner = self.buffer.indices.inner();
+        let text = self.buffer.text.as_str();
+
+        let start = *unsafe { inner.get_unchecked(distance) };
+        let end = inner.get(distance + 1).copied().unwrap_or(text.len());
+
+        Some(unsafe { text.get_unchecked(start..end) })
     }
 
     #[inline]

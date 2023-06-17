@@ -35,253 +35,222 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::{
+    mem::take,
+    time::{Duration, Instant},
+};
+
 use convert_case::{Case, Casing};
-use proc_macro2::Ident;
-use syn::{spanned::Spanned, AttrStyle, Error, ExprLit, Lit, LitStr, Result, Variant};
+use proc_macro2::{Ident, Span};
+use syn::{
+    spanned::Spanned,
+    AttrStyle,
+    Error,
+    Expr,
+    ExprLit,
+    Lit,
+    LitInt,
+    LitStr,
+    Result,
+    Variant,
+};
 
 use crate::{
     token::{
-        regex::{InlineMap, Regex, RegexImpl},
-        rule::{RuleIndex, RulePrecedence},
+        automata::TokenAutomata,
+        regex::{Regex, RegexImpl},
     },
-    utils::system_panic,
+    utils::error,
 };
 
-pub(super) enum TokenVariant {
-    Rule {
-        name: Ident,
-        index: RuleIndex,
-        precedence: Option<RulePrecedence>,
-        constructor: Option<Ident>,
-        expression: Regex,
-        description: LitStr,
-    },
-    Mismatch {
-        name: Ident,
-        description: LitStr,
-    },
-    Other,
+pub(super) type TokenIndex = u8;
+
+pub(super) const EOI: TokenIndex = 0;
+pub(super) const MISMATCH: TokenIndex = 1;
+
+pub(super) struct TokenVariant {
+    pub(super) ident: Ident,
+    pub(super) index: Option<u8>,
+    pub(super) rule: Option<(Span, Regex)>,
+    pub(super) automata: Option<TokenAutomata>,
+    pub(super) constructor: Option<Ident>,
+    pub(super) priority: isize,
+    pub(super) description: LitStr,
+    pub(super) time: Duration,
 }
 
-impl TokenVariant {
-    pub(super) fn from_variant(
-        variant: Variant,
-        index: RuleIndex,
-        inline_map: &InlineMap,
-    ) -> Result<Self> {
-        let name = variant.ident;
+impl TryFrom<Variant> for TokenVariant {
+    type Error = Error;
 
-        if !variant.fields.is_empty() {
-            return Err(Error::new(
-                variant.fields.span(),
-                "Variants with fields not allowed.",
-            ));
-        }
+    fn try_from(mut variant: Variant) -> Result<Self> {
+        let ident = variant.ident.clone();
 
-        let mut precedence = None;
+        let index = match take(&mut variant.discriminant) {
+            None => None,
+
+            Some((_, expr)) => match expr {
+                Expr::Lit(ExprLit { lit, .. }) => match lit {
+                    Lit::Byte(lit) => Some(lit.value()),
+                    Lit::Int(lit) => Some(lit.base10_parse::<u8>()?),
+
+                    other => {
+                        return Err(error!(
+                            other.span(),
+                            "Expected integer literal that represents byte value.",
+                        ));
+                    }
+                },
+
+                other => {
+                    return Err(error!(
+                        other.span(),
+                        "Expected integer literal that represents byte value.",
+                    ));
+                }
+            },
+        };
+
+        let mut rule = None;
         let mut constructor = None;
-        let mut mismatch = false;
-        let mut expression = None;
         let mut description = None;
+        let mut priority = None;
+        let mut time = Duration::default();
 
-        for attribute in variant.attrs {
-            match attribute.style {
+        for attr in take(&mut variant.attrs) {
+            match attr.style {
                 AttrStyle::Inner(_) => continue,
                 AttrStyle::Outer => (),
             }
 
-            let name = match attribute.path.get_ident() {
+            let name = match attr.meta.path().get_ident() {
+                Some(ident) => ident,
                 None => continue,
-                Some(name) => name,
             };
 
+            let span = attr.span();
+
             match name.to_string().as_str() {
-                "precedence" => {
-                    if precedence.is_some() {
-                        return Err(Error::new(name.span(), "Duplicate Precedence attribute."));
+                "rule" => {
+                    if rule.is_some() {
+                        return Err(error!(span, "Duplicate Rule attribute.",));
                     }
 
-                    if mismatch {
-                        return Err(Error::new(
-                            name.span(),
-                            "Mismatch rules cannot have precedence.",
-                        ));
-                    }
-
-                    let expression = attribute.parse_args::<ExprLit>()?;
-
-                    match expression.lit {
-                        Lit::Int(literal) => {
-                            let value = literal.base10_parse::<usize>()?;
-
-                            if value == 0 {
-                                return Err(Error::new(
-                                    literal.span(),
-                                    "Rule precedence value must be positive. Default \
-                                    precedence is \"1\".",
-                                ));
-                            }
-
-                            precedence = Some(value);
-                        }
-
-                        other => {
-                            return Err(Error::new(
-                                other.span(),
-                                "Expected usize numeric literal.",
-                            ));
-                        }
-                    }
+                    let start = Instant::now();
+                    rule = Some((span, attr.parse_args::<Regex>()?));
+                    time += start.elapsed();
                 }
 
                 "constructor" => {
                     if constructor.is_some() {
-                        return Err(Error::new(
-                            attribute.span(),
-                            "Duplicate Constructor attribute.",
-                        ));
+                        return Err(error!(span, "Duplicate Constructor attribute.",));
                     }
 
-                    constructor = Some(attribute.parse_args::<Ident>()?);
-                }
-
-                "mismatch" => {
-                    if mismatch {
-                        return Err(Error::new(name.span(), "Duplicate Mismatch attribute."));
-                    }
-
-                    if expression.is_some() {
-                        return Err(Error::new(
-                            name.span(),
-                            "Explicit rules cannot serve as a mismatch fallback.",
-                        ));
-                    }
-
-                    if precedence.is_some() {
-                        return Err(Error::new(
-                            name.span(),
-                            "Variants with precedence cannot be labeled as a mismatch fallback.",
-                        ));
-                    }
-
-                    if !attribute.tokens.is_empty() {
-                        return Err(Error::new(name.span(), "Unexpected attribute parameters."));
-                    }
-
-                    mismatch = true;
-                }
-
-                "rule" => {
-                    if expression.is_some() {
-                        return Err(Error::new(name.span(), "Duplicate Rule attribute."));
-                    }
-
-                    if mismatch {
-                        return Err(Error::new(
-                            name.span(),
-                            "Mismatch token variant cannot have an explicit rule.",
-                        ));
-                    }
-
-                    let mut regex = attribute.parse_args::<Regex>()?;
-
-                    regex.inline(inline_map)?;
-
-                    expression = Some(regex);
+                    constructor = Some(attr.parse_args::<Ident>()?);
                 }
 
                 "describe" => {
                     if description.is_some() {
-                        return Err(Error::new(name.span(), "Duplicate Describe attribute."));
+                        return Err(error!(span, "Duplicate Describe attribute.",));
                     }
 
-                    description = Some(attribute.parse_args::<LitStr>()?);
+                    description = Some(attr.parse_args::<LitStr>()?);
+                }
+
+                "priority" => {
+                    if priority.is_some() {
+                        return Err(error!(span, "Duplicate Priority attribute.",));
+                    }
+
+                    priority = Some((span, attr.parse_args::<LitInt>()?.base10_parse::<isize>()?));
+                }
+
+                "dump" => {
+                    return Err(error!(span, "Dump attribute is not applicable here.",));
                 }
 
                 _ => continue,
             }
         }
 
-        match expression {
+        match index {
+            Some(EOI) => {
+                if let Some((span, _)) = &rule {
+                    return Err(error!(
+                        *span,
+                        "Variant with index {EOI} may not have explicit \
+                        rule.\nThis variant is reserved to indicate the end \
+                        of input.",
+                    ));
+                }
+            }
+
+            Some(MISMATCH) => {
+                if let Some((span, _)) = &rule {
+                    return Err(error!(
+                        *span,
+                        "Variant with index {MISMATCH} may not have explicit \
+                        rule.\nThis variant serves as a fallback token where \
+                        the lexer sinks mismatched text sequences.",
+                    ));
+                }
+            }
+
+            _ => (),
+        }
+
+        if let Some(ident) = &constructor {
+            if rule.is_none() {
+                return Err(error!(
+                    ident.span(),
+                    "Constructor attribute is not applicable to unparseable \
+                    variants.\nTo make the variant parsable annotate this \
+                    variant with #[rule(...)] attribute.",
+                ));
+            }
+        }
+
+        let description = match description {
+            Some(lit) => lit,
+
             None => {
-                if let Some(name) = constructor {
-                    return Err(Error::new(
-                        name.span(),
-                        "Constructor attributes cannot be defined on the non-parsable \
-                        variants.\nTo make the variant parsable label it with \
-                        #[rule(<expression>)] attribute.",
+                let name = match rule.as_ref().map(|(_, regex)| regex.name()).flatten() {
+                    None => format!(
+                        "<{}>",
+                        ident.to_string().to_case(Case::Title).to_lowercase()
+                    ),
+                    Some(rule) => rule,
+                };
+
+                LitStr::new(&name, ident.span())
+            }
+        };
+
+        let priority = match priority {
+            None => 0,
+
+            Some((span, priority)) => {
+                if rule.is_none() {
+                    return Err(error!(
+                        span,
+                        "Priority attribute is not applicable to unparseable \
+                        variants.\nTo make the variant parsable annotate this \
+                        variant with #[rule(...)] attribute.",
                     ));
                 }
 
-                Ok(match mismatch {
-                    true => {
-                        let description = description.unwrap_or_else(|| {
-                            LitStr::new(
-                                &format!(
-                                    "<{}>",
-                                    name.to_string().to_case(Case::Title).to_lowercase()
-                                ),
-                                name.span(),
-                            )
-                        });
-
-                        Self::Mismatch { name, description }
-                    }
-
-                    false => {
-                        if let Some(description) = description {
-                            return Err(Error::new(
-                                description.span(),
-                                "Constructor attributes cannot be defined on the non-parsable \
-                                variants.\nTo make the variant parsable label it with \
-                                #[rule(<expression>)] attribute.",
-                            ));
-                        }
-
-                        Self::Other
-                    }
-                })
+                priority
             }
+        };
 
-            Some(expression) => {
-                let description = description
-                    .or_else(|| {
-                        expression
-                            .name()
-                            .map(|string| LitStr::new(&string, name.span()))
-                    })
-                    .unwrap_or_else(|| {
-                        LitStr::new(
-                            &format!("<{}>", name.to_string().to_case(Case::Title).to_lowercase()),
-                            name.span(),
-                        )
-                    });
-
-                Ok(Self::Rule {
-                    name,
-                    index,
-                    precedence,
-                    constructor,
-                    expression,
-                    description,
-                })
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn rule_name(&self) -> &Ident {
-        match self {
-            TokenVariant::Rule { name, .. } => name,
-            _ => system_panic!("Non-rule variant."),
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn rule_precedence(&self) -> RulePrecedence {
-        match self {
-            TokenVariant::Rule { precedence, .. } => precedence.clone().unwrap_or(1),
-            _ => system_panic!("Non-rule variant."),
-        }
+        Ok(Self {
+            ident,
+            index,
+            rule,
+            automata: None,
+            constructor,
+            priority,
+            description,
+            time,
+        })
     }
 }

@@ -49,7 +49,7 @@ use syn::{
 
 use crate::{
     node::token::TokenLit,
-    utils::{error, expect_some, system_panic, SpanFacade},
+    utils::{error, expect_some, system_panic, Facade},
 };
 
 #[derive(Clone)]
@@ -181,18 +181,18 @@ impl Recovery {
                 let lit = expect_some!(self.unexpected.iter().next(), "Empty set.",);
 
                 let ident = expect_some!(
-                    lit.as_enum_variant(token_type),
-                    "Non-ident Unexpected token.",
+                    lit.as_token_index(token_type),
+                    "Unfiltered Unexpected token.",
                 );
 
-                Some(quote_spanned!(span=> .unexpected(#ident as u8)))
+                Some(quote_spanned!(span=> .unexpected(#ident)))
             }
 
             _ => {
                 let set = self.unexpected.iter().map(|lit| {
                     let ident = expect_some!(
-                        lit.as_enum_variant(token_type),
-                        "Non-ident Unexpected token.",
+                        lit.as_token_index(token_type),
+                        "Unfiltered Unexpected token.",
                     );
 
                     let span = ident.span();
@@ -207,13 +207,10 @@ impl Recovery {
         };
 
         let groups = self.groups.iter().map(|(open, close)| {
-            let open = expect_some!(open.as_enum_variant(token_type), "Non-ident Open token.",);
-            let close = expect_some!(close.as_enum_variant(token_type), "Non-ident Close token.",);
+            let open = expect_some!(open.as_token_index(token_type), "Unfiltered Open token.",);
+            let close = expect_some!(close.as_token_index(token_type), "Unfiltered Close token.",);
 
-            quote_spanned!(span=>
-                #open as u8,
-                #close as u8
-            )
+            quote_spanned!(span=> #open, #close)
         });
 
         quote_spanned!(span=>

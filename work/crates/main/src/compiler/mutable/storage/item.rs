@@ -42,7 +42,6 @@ use crate::{
         nesting::{BranchLayer, Layer, LayerDescriptor},
         page::PageRef,
         references::References,
-        utils::capacity,
     },
     lexis::Length,
     report::debug_assert,
@@ -51,7 +50,8 @@ use crate::{
 };
 
 pub(super) trait Item: Sized {
-    const BRANCHING: ChildCount;
+    const B: ChildCount;
+    const CAP: ChildCount;
 
     type Node: Node;
 
@@ -61,7 +61,7 @@ pub(super) trait Item: Sized {
     // 1. `self` data within `source..(source + count)` range is occupied.
     // 2. `destination..(destination + count)` range is withing the `to` data capacity.
     unsafe fn copy_to(
-        &mut self,
+        &self,
         to: &mut Self,
         source: ChildCount,
         destination: ChildCount,
@@ -165,7 +165,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
-        if left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING) {
+        if left_occupied + right_occupied <= <Self::Item as Item>::CAP {
             let span_addition = unsafe { ItemRef::merge_to_left(left_ref, right_ref, references) };
 
             unsafe { left_ref.parent_mut().inc_span_right(span_addition) };
@@ -173,7 +173,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
             return (true, None);
         }
 
-        let transfer_length = match right_occupied < <Self::Item as Item>::BRANCHING {
+        let transfer_length = match right_occupied < <Self::Item as Item>::B {
             false => 0,
 
             true => unsafe { ItemRef::balance_to_right(left_ref, right_ref, references) },
@@ -210,7 +210,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
-        if left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING) {
+        if left_occupied + right_occupied <= <Self::Item as Item>::CAP {
             let span_addition = unsafe { ItemRef::merge_to_right(left_ref, right_ref, references) };
 
             unsafe { right_ref.parent_mut().inc_span_left(span_addition) };
@@ -218,7 +218,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
             return (true, None);
         }
 
-        let transfer_length = match left_occupied < <Self::Item as Item>::BRANCHING {
+        let transfer_length = match left_occupied < <Self::Item as Item>::B {
             false => 0,
 
             true => unsafe { ItemRef::balance_to_left(left_ref, right_ref, references) },
@@ -253,18 +253,18 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
-        if left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING) {
+        if left_occupied + right_occupied <= <Self::Item as Item>::CAP {
             let _ = unsafe { ItemRef::merge_to_left(left_ref, right_ref, references) };
 
             return None;
         }
 
-        if left_occupied < <Self::Item as Item>::BRANCHING {
+        if left_occupied < <Self::Item as Item>::B {
             let difference = unsafe { ItemRef::balance_to_left(left_ref, right_ref, references) };
 
             left_length += difference;
             right_length -= difference;
-        } else if right_occupied < <Self::Item as Item>::BRANCHING {
+        } else if right_occupied < <Self::Item as Item>::B {
             let difference = unsafe { ItemRef::balance_to_right(left_ref, right_ref, references) };
 
             left_length -= difference;
@@ -318,7 +318,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         debug_assert!(
-            left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING),
+            left_occupied + right_occupied <= <Self::Item as Item>::CAP,
             "Merge failure.",
         );
 
@@ -326,11 +326,11 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         unsafe {
             right_ref
-                .as_mut()
+                .as_ref()
                 .copy_to(left_ref.as_mut(), 0, left_occupied, right_occupied)
         };
 
-        forget(*unsafe { right_ref.into_owned() });
+        let _ = *unsafe { right_ref.into_owned() };
 
         let difference =
             unsafe { left_ref.update_children(references, left_occupied, right_occupied) };
@@ -355,7 +355,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         debug_assert!(
-            left_occupied + right_occupied <= capacity(<Self::Item as Item>::BRANCHING),
+            left_occupied + right_occupied <= <Self::Item as Item>::CAP,
             "Merge failure.",
         );
 
@@ -363,11 +363,11 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         unsafe {
             left_ref
-                .as_mut()
+                .as_ref()
                 .copy_to(right_ref.as_mut(), 0, 0, left_occupied)
         };
 
-        forget(*unsafe { left_ref.into_owned() });
+        let _ = *unsafe { left_ref.into_owned() };
 
         let difference = unsafe { right_ref.update_children(references, 0, left_occupied) };
 
@@ -395,24 +395,21 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         debug_assert!(
-            left_occupied + right_occupied > capacity(<Self::Item as Item>::BRANCHING),
+            left_occupied + right_occupied > <Self::Item as Item>::CAP,
             "Balance failure.",
         );
 
+        debug_assert!(left_occupied < <Self::Item as Item>::B, "Balance failure.",);
+
         debug_assert!(
-            left_occupied < <Self::Item as Item>::BRANCHING,
+            right_occupied >= <Self::Item as Item>::B,
             "Balance failure.",
         );
 
-        debug_assert!(
-            right_occupied >= <Self::Item as Item>::BRANCHING,
-            "Balance failure.",
-        );
-
-        let transfer_count = <Self::Item as Item>::BRANCHING - left_occupied;
+        let transfer_count = <Self::Item as Item>::B - left_occupied;
 
         debug_assert!(
-            right_occupied - <Self::Item as Item>::BRANCHING >= transfer_count,
+            right_occupied - <Self::Item as Item>::B >= transfer_count,
             "Balance failure.",
         );
 
@@ -420,7 +417,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         unsafe {
             right_ref
-                .as_mut()
+                .as_ref()
                 .copy_to(left_ref.as_mut(), 0, left_occupied, transfer_count)
         };
 
@@ -456,36 +453,27 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         debug_assert!(
-            left_occupied + right_occupied > capacity(<Self::Item as Item>::BRANCHING),
+            left_occupied + right_occupied > <Self::Item as Item>::CAP,
             "Balance failure.",
         );
 
-        debug_assert!(
-            left_occupied >= <Self::Item as Item>::BRANCHING,
-            "Balance failure.",
-        );
+        debug_assert!(left_occupied >= <Self::Item as Item>::B, "Balance failure.",);
+
+        debug_assert!(right_occupied < <Self::Item as Item>::B, "Balance failure.",);
+
+        let transfer_count = <Self::Item as Item>::B - right_occupied;
+
+        debug_assert!(left_occupied >= <Self::Item as Item>::B, "Balance failure.",);
 
         debug_assert!(
-            right_occupied < <Self::Item as Item>::BRANCHING,
-            "Balance failure.",
-        );
-
-        let transfer_count = <Self::Item as Item>::BRANCHING - right_occupied;
-
-        debug_assert!(
-            left_occupied >= <Self::Item as Item>::BRANCHING,
-            "Balance failure.",
-        );
-
-        debug_assert!(
-            left_occupied - <Self::Item as Item>::BRANCHING >= transfer_count,
+            left_occupied - <Self::Item as Item>::B >= transfer_count,
             "Balance failure.",
         );
 
         unsafe { right_ref.as_mut().inflate(0, transfer_count) };
 
         unsafe {
-            left_ref.as_mut().copy_to(
+            left_ref.as_ref().copy_to(
                 right_ref.as_mut(),
                 left_occupied - transfer_count,
                 0,
@@ -507,7 +495,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
             right_ref.update_children(
                 references,
                 transfer_count,
-                <Self::Item as Item>::BRANCHING - transfer_count,
+                <Self::Item as Item>::B - transfer_count,
             )
         };
 

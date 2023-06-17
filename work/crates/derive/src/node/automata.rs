@@ -55,9 +55,9 @@ use crate::{
         AutomataContext,
         AutomataTerminal,
         Map,
-        OptimizationStrategy,
         PredictableCollection,
         State,
+        Strategy,
     },
 };
 
@@ -254,7 +254,7 @@ impl NodeAutomataImpl for NodeAutomata {
         }
 
         let mut view = OutgoingView { map: Map::empty() };
-        let mut concurrency = Map::with_capacity(self.transitions().length());
+        let mut concurrency = Map::with_capacity(self.transitions().len());
 
         for (from, through, _) in self.transitions() {
             match through {
@@ -348,7 +348,7 @@ impl NodeAutomataImpl for NodeAutomata {
 
         let delimiter = delimiter?;
 
-        if let TokenLit::Other(..) = delimiter {
+        if delimiter.is_other() {
             return None;
         }
 
@@ -461,7 +461,7 @@ impl Terminal {
 
 pub(super) struct Scope {
     state: State,
-    strategy: OptimizationStrategy,
+    strategy: Strategy,
 }
 
 impl Default for Scope {
@@ -469,7 +469,7 @@ impl Default for Scope {
     fn default() -> Self {
         Self {
             state: 1,
-            strategy: OptimizationStrategy::CANONICALIZE,
+            strategy: Strategy::CANONICALIZE,
         }
     }
 }
@@ -487,14 +487,14 @@ impl AutomataContext for Scope {
     }
 
     #[inline(always)]
-    fn strategy(&self) -> &OptimizationStrategy {
-        &self.strategy
+    fn strategy(&self) -> Strategy {
+        self.strategy
     }
 }
 
 impl Scope {
     #[inline(always)]
-    pub fn set_strategy(&mut self, strategy: OptimizationStrategy) {
+    pub fn set_strategy(&mut self, strategy: Strategy) {
         self.strategy = strategy;
     }
 }

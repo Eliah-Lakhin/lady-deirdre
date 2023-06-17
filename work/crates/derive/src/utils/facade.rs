@@ -38,47 +38,27 @@
 use proc_macro2::TokenStream;
 use syn::spanned::Spanned;
 
-pub struct Facade {
-    core_crate: TokenStream,
-    option: TokenStream,
-}
-
-impl Facade {
-    pub fn new() -> Self {
-        let core_crate = quote! {
-            ::lady_deirdre
-        };
-
-        #[cfg(feature = "std")]
-        let option = quote! {
-            ::std::option::Option
-        };
-        #[cfg(not(feature = "std"))]
-        let option = quote! {
-            ::core::option::Option
-        };
-
-        Self { core_crate, option }
-    }
-
-    #[inline(always)]
-    pub fn core_crate(&self) -> &TokenStream {
-        &self.core_crate
-    }
-
-    #[inline(always)]
-    pub fn option(&self) -> &TokenStream {
-        &self.option
-    }
-}
-
-//todo merge with Facade
-pub trait SpanFacade: Spanned {
+pub trait Facade: Spanned {
     #[inline(always)]
     fn face_core(&self) -> TokenStream {
         let span = self.span();
 
         quote_spanned!(span=> ::lady_deirdre)
+    }
+
+    #[inline(always)]
+    fn face_string(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::string::String)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::alloc::string::String)
+        }
     }
 
     #[inline(always)]
@@ -140,6 +120,21 @@ pub trait SpanFacade: Spanned {
             quote_spanned!(span=> ::core::unreachable!)
         }
     }
+
+    #[inline(always)]
+    fn face_panic(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::panic!)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::core::panic!)
+        }
+    }
 }
 
-impl<S: Spanned> SpanFacade for S {}
+impl<S: Spanned> Facade for S {}

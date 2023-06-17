@@ -55,7 +55,7 @@ pub(super) struct Spread {
 impl Spread {
     #[inline(always)]
     pub(super) const fn new<I: Item>(total: ChildCount) -> Spread {
-        if total <= capacity(I::BRANCHING) {
+        if total <= I::CAP {
             return Spread {
                 head: 1,
                 tail: 0,
@@ -64,10 +64,10 @@ impl Spread {
             };
         }
 
-        let branch_count = total / I::BRANCHING;
-        let reminder = total - branch_count * I::BRANCHING;
+        let branch_count = total / I::B;
+        let reminder = total - branch_count * I::B;
         let reminder_spread = reminder / branch_count;
-        let items = I::BRANCHING + reminder_spread;
+        let items = I::B + reminder_spread;
         let tail = reminder - reminder_spread * branch_count;
 
         Spread {
@@ -127,28 +127,52 @@ pub(super) const fn capacity(branching: ChildCount) -> ChildCount {
 
 //Safety:
 // 1. `from` and `to` are two distinct arrays.
-// 2. The `from` data within `source..(source + count)` range is within N bounds.
-// 3. The `to` data within `destination..(destination + count)` range is is within N bounds.
+// 2. `source..(source + count)` is within `from` bounds.
+// 3. `destination..(destination + count)` is within `to` bounds.
 #[inline(always)]
 pub(super) unsafe fn array_copy_to<const N: usize, T: Sized>(
-    from: &mut [T; N],
+    from: &[T; N],
     to: &mut [T; N],
     source: ChildCount,
     destination: ChildCount,
     count: ChildCount,
 ) {
-    debug_assert_ne!(
-        from.as_mut_ptr(),
-        to.as_mut_ptr(),
-        "Array copy overlapping."
-    );
+    debug_assert_ne!(from.as_ptr(), to.as_mut_ptr(), "Array copy overlapping.");
     debug_assert!(source + count <= N, "Source range exceeds capacity.");
     debug_assert!(
         destination + count <= N,
         "Destination range exceeds capacity.",
     );
 
-    let from = unsafe { from.as_mut_ptr().offset(source as isize) };
+    let from = unsafe { from.as_ptr().offset(source as isize) };
+    let to = unsafe { to.as_mut_ptr().offset(destination as isize) };
+
+    unsafe { copy_nonoverlapping(from, to, count) };
+}
+
+//Safety:
+// 1. `from` and `to` are two distinct arrays.
+// 2. `source..(source + count)` is within `from` bounds.
+// 3. `destination..(destination + count)` is within `to` bounds.
+#[inline(always)]
+pub(super) unsafe fn slice_copy_to<T: Sized>(
+    from: &[T],
+    to: &mut [T],
+    source: ChildCount,
+    destination: ChildCount,
+    count: ChildCount,
+) {
+    debug_assert_ne!(from.as_ptr(), to.as_mut_ptr(), "Slice copy overlapping.");
+    debug_assert!(
+        source + count <= from.len(),
+        "Source range exceeds capacity."
+    );
+    debug_assert!(
+        destination + count <= to.len(),
+        "Destination range exceeds capacity.",
+    );
+
+    let from = unsafe { from.as_ptr().offset(source as isize) };
     let to = unsafe { to.as_mut_ptr().offset(destination as isize) };
 
     unsafe { copy_nonoverlapping(from, to, count) };
@@ -170,6 +194,31 @@ pub(super) unsafe fn array_shift<const N: usize, T: Sized>(
     debug_assert!(count > 0, "Empty shift range.");
 
     let array_ptr = array.as_mut_ptr();
+    let source = unsafe { array_ptr.offset(from as isize) };
+    let destination = unsafe { array_ptr.offset(to as isize) };
+
+    match from + count <= to || to + count <= from {
+        false => unsafe { copy(source, destination, count) },
+        true => unsafe { copy_nonoverlapping(source, destination, count) },
+    }
+}
+
+//Safety:
+// 1. `from + count <= slice.len()`.
+// 1. `from + to <= slice.len()`.
+// 2. `count > 0`.
+#[inline(always)]
+pub(super) unsafe fn slice_shift<T: Sized>(
+    slice: &mut [T],
+    from: ChildCount,
+    to: ChildCount,
+    count: ChildCount,
+) {
+    debug_assert!(from + count <= slice.len(), "Shift with overflow.");
+    debug_assert!(to + count <= slice.len(), "Shift with overflow.");
+    debug_assert!(count > 0, "Empty shift range.");
+
+    let array_ptr = slice.as_mut_ptr();
     let source = unsafe { array_ptr.offset(from as isize) };
     let destination = unsafe { array_ptr.offset(to as isize) };
 

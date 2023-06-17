@@ -35,23 +35,30 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::collections::BTreeMap;
+
 use crate::utils::{
-    transitions::{Closure, Transitions},
+    transitions::{Closure, ClosureCache, Transitions},
     Automata,
     AutomataContext,
+    AutomataTerminal,
     Map,
     PredictableCollection,
     Set,
     State,
 };
 
+const CACHE_THRESHOLD: usize = 10000;
+const PENDING_THRESHOLD: usize = 1000;
+
 pub(super) struct Deterministic<'a, C: AutomataContext> {
     context: &'a mut C,
     original: &'a Transitions<C::Terminal>,
     alphabet: &'a Set<C::Terminal>,
-    pending: Vec<(State, Closure)>,
+    pending: Pending,
     registered: Map<Closure, State>,
     transitions: Transitions<C::Terminal>,
+    cache: Option<(usize, ClosureCache<'a, C::Terminal>)>,
 }
 
 impl<'a, C: AutomataContext> Deterministic<'a, C> {
@@ -65,11 +72,22 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
         let mut start_closure = Closure::default();
 
         for start in start {
-            start_closure.of_null(transitions, *start);
+            start_closure.of(transitions, *start, &C::Terminal::null(), &mut None);
         }
 
-        let pending = Vec::with_capacity(transitions.length());
-        let registered = Map::with_capacity(transitions.length());
+        let capacity = transitions.len();
+
+        let pending = match capacity >= PENDING_THRESHOLD {
+            true => Pending::Map(BTreeMap::new()),
+            false => Pending::Vec(Vec::with_capacity(capacity)),
+        };
+
+        let registered = Map::with_capacity(capacity);
+
+        let cache = match capacity >= CACHE_THRESHOLD {
+            true => Some((alphabet.capacity(), Map::with_capacity(capacity))),
+            false => None,
+        };
 
         let mut deterministic = Self {
             context,
@@ -78,6 +96,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             pending,
             registered,
             transitions: Transitions::default(),
+            cache,
         };
 
         let start = deterministic.force_push(start_closure);
@@ -106,7 +125,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
     }
 
     fn pop(&mut self) -> bool {
-        let (from, closure) = match self.pending.pop() {
+        let (closure, from) = match self.pending.pop() {
             None => return false,
             Some(pair) => pair,
         };
@@ -117,7 +136,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             let mut target = Closure::default();
 
             for state in closure.into_iter().cloned() {
-                target.of(&self.original, state, symbol);
+                target.of(&self.original, state, symbol, &mut self.cache);
             }
 
             if target.is_empty() {
@@ -137,10 +156,8 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             return *state;
         }
 
-        for (state, pending) in self.pending.iter() {
-            if pending == &closure {
-                return *state;
-            }
+        if let Some(state) = self.pending.get(&closure) {
+            return state;
         }
 
         self.force_push(closure)
@@ -150,7 +167,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
     fn force_push(&mut self, closure: Closure) -> State {
         match closure.state() {
             Some(state) => {
-                self.pending.push((state, closure));
+                self.pending.push(closure, state);
 
                 state
             }
@@ -158,10 +175,52 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             None => {
                 let state = self.context.gen_state();
 
-                self.pending.push((state, closure));
+                self.pending.push(closure, state);
 
                 state
             }
+        }
+    }
+}
+
+enum Pending {
+    Vec(Vec<(Closure, State)>),
+    Map(BTreeMap<Closure, State>),
+}
+
+impl Pending {
+    #[inline(always)]
+    fn push(&mut self, closure: Closure, state: State) {
+        match self {
+            Self::Vec(pending) => pending.push((closure, state)),
+            Self::Map(pending) => {
+                let _ = pending.insert(closure, state);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn pop(&mut self) -> Option<(Closure, State)> {
+        match self {
+            Self::Vec(pending) => pending.pop(),
+            Self::Map(pending) => pending.pop_last(),
+        }
+    }
+
+    #[inline(always)]
+    fn get(&self, closure: &Closure) -> Option<State> {
+        match self {
+            Self::Vec(pending) => {
+                for (pending, state) in pending {
+                    if pending == closure {
+                        return Some(*state);
+                    }
+                }
+
+                None
+            }
+
+            Self::Map(pending) => pending.get(closure).copied(),
         }
     }
 }

@@ -67,14 +67,14 @@ proc-macro = true
 version = "1.0"
 
 [dependencies.syn]
-version = "1.0"
+version = "2.0"
 features = ["default", "full", "extra-traits"]
 
 [dependencies.quote]
 version = "1.0"
 
 [dependencies.prettyplease]
-version = "0.1"
+version = "0.2"
 
 [dependencies.convert_case]
 version = "0.6"

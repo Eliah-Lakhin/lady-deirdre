@@ -51,10 +51,10 @@ pub(crate) use report::{error, error_message, expect_some, null, system_panic};
 
 pub use crate::utils::{
     automata::Automata,
-    context::{AutomataContext, AutomataTerminal, OptimizationStrategy, State},
+    context::{AutomataContext, AutomataTerminal, State, Strategy},
     dump::Dump,
     expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::{Facade, SpanFacade},
+    facade::Facade,
     map::{Map, MapImpl},
     predictable::PredictableCollection,
     set::{Set, SetImpl},
@@ -64,7 +64,7 @@ pub use crate::utils::{
 pub mod dump_kw {
     syn::custom_keyword!(output);
     syn::custom_keyword!(trivia);
-    syn::custom_keyword!(bench);
+    syn::custom_keyword!(meta);
     syn::custom_keyword!(dry);
     syn::custom_keyword!(dump);
 }

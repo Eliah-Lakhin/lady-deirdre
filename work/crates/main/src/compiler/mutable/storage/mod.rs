@@ -42,6 +42,7 @@ mod item;
 mod nesting;
 mod page;
 mod references;
+mod string;
 mod tree;
 mod utils;
 
@@ -51,6 +52,15 @@ pub(crate) use crate::compiler::mutable::storage::{
     references::References,
     tree::Tree,
 };
+use crate::{compiler::mutable::storage::utils::capacity, lexis::CHUNK_SIZE};
+
+const BRANCH_B: usize = 6;
+const BRANCH_CAP: usize = capacity(BRANCH_B);
+
+const PAGE_B: usize = 16;
+const PAGE_CAP: usize = capacity(PAGE_B);
+
+const STRING_INLINE: usize = PAGE_CAP * CHUNK_SIZE;
 
 #[cfg(test)]
 mod tests {
@@ -623,13 +633,15 @@ mod tests {
         let count = range.end() - range.start() + 1;
 
         let mut spans = Vec::with_capacity(count);
-        let mut strings = Vec::with_capacity(count);
+        let mut indices = Vec::with_capacity(count);
         let mut tokens = Vec::with_capacity(count);
+        let mut text = String::with_capacity(count);
 
         for index in range {
             spans.push(1);
-            strings.push(index.to_string());
-            tokens.push(TestToken::Nothing((index % 0xFF) as u8));
+            indices.push(text.len());
+            tokens.push(TestToken(index));
+            text.push_str(index.to_string().as_str());
         }
 
         unsafe {
@@ -637,8 +649,9 @@ mod tests {
                 references,
                 count,
                 spans.into_iter(),
-                strings.into_iter(),
+                indices.into_iter(),
                 tokens.into_iter(),
+                text.as_str(),
             )
         }
     }
@@ -648,7 +661,7 @@ mod tests {
         fn check_page(page_variant: &ItemRefVariant<TestNode>, outer_span: Length) {
             let page = unsafe { page_variant.as_page_ref().as_ref() };
 
-            assert!(page.occupied >= Page::<TestNode>::BRANCHING);
+            assert!(page.occupied >= Page::<TestNode>::B);
 
             assert!(!page.parent.is_dangling());
 
@@ -670,7 +683,7 @@ mod tests {
         ) {
             let branch = unsafe { branch_variant.as_branch_ref::<()>().as_ref() };
 
-            assert!(branch.inner.occupied >= Branch::<(), TestNode>::BRANCHING);
+            assert!(branch.inner.occupied >= Branch::<(), TestNode>::B);
 
             assert!(!branch.inner.parent.is_dangling());
 
@@ -788,7 +801,7 @@ mod tests {
                     unsafe { first.string() },
                     format!("{}", index + start).as_str(),
                 );
-                assert_eq!(unsafe { first.token() }, &TestToken(index + start));
+                assert_eq!(unsafe { first.token() }, TestToken(index + start));
 
                 assert_eq!(*unsafe { last.span() }, 1);
                 assert_eq!(
@@ -797,7 +810,7 @@ mod tests {
                 );
                 assert_eq!(
                     unsafe { last.token() },
-                    &TestToken(tree.length + start - index - 1),
+                    TestToken(tree.length + start - index - 1),
                 );
 
                 unsafe { first.next() };
@@ -845,13 +858,18 @@ mod tests {
     }
 
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-    #[repr(u8)]
-    enum TestToken {
-        Nothing(u8),
-    }
+    struct TestToken(usize);
 
     impl Token for TestToken {
         fn parse(_session: &mut impl LexisSession) -> Self {
+            unimplemented!()
+        }
+
+        fn eoi() -> Self {
+            unimplemented!()
+        }
+
+        fn mismatch() -> Self {
             unimplemented!()
         }
 
@@ -880,7 +898,13 @@ mod tests {
                     let mut list = formatter.debug_list();
 
                     for index in 0..page.occupied {
-                        let string = unsafe { page.strings[index].assume_init_ref() };
+                        let string = match from_utf8(unsafe {
+                            page.string.byte_slice(page.occupied, index)
+                        }) {
+                            Ok(string) => string,
+
+                            Err(_) => unreachable!("Bad Unicode sequence."),
+                        };
 
                         list.entry(&format_args!("{}", string));
                     }

@@ -49,10 +49,13 @@ use syn::{
     Type,
 };
 
+use crate::utils::Facade;
+
 #[derive(Clone)]
 pub(super) enum TokenLit {
     Ident(Ident),
     Other(Span),
+    EOI(Span),
 }
 
 impl Display for TokenLit {
@@ -61,6 +64,7 @@ impl Display for TokenLit {
         match self {
             Self::Ident(ident) => formatter.write_fmt(format_args!("${ident}")),
             Self::Other(..) => formatter.write_str("$_"),
+            Self::EOI(..) => formatter.write_str("$"),
         }
     }
 }
@@ -72,7 +76,7 @@ impl Hash for TokenLit {
 
         match self {
             Self::Ident(ident) => ident.hash(state),
-            Self::Other(..) => (),
+            Self::Other(..) | Self::EOI(..) => (),
         }
     }
 }
@@ -83,6 +87,7 @@ impl PartialEq for TokenLit {
         match (self, other) {
             (Self::Ident(this), Self::Ident(other)) => this.eq(other),
             (Self::Other(..), Self::Other(..)) => true,
+            (Self::EOI(..), Self::EOI(..)) => true,
             _ => false,
         }
     }
@@ -101,8 +106,10 @@ impl Ord for TokenLit {
         match (self, other) {
             (Self::Ident(this), Self::Ident(other)) => this.cmp(other),
             (Self::Other(..), Self::Other(..)) => Ordering::Equal,
+            (Self::EOI(..), Self::EOI(..)) => Ordering::Equal,
             (Self::Ident(..), ..) => Ordering::Less,
-            (Self::Other(..), ..) => Ordering::Greater,
+            (Self::Other(..), ..) => Ordering::Less,
+            (Self::EOI(..), ..) => Ordering::Greater,
         }
     }
 }
@@ -122,6 +129,7 @@ impl TokenLit {
         match self {
             Self::Ident(ident) => ident.span(),
             Self::Other(span) => *span,
+            Self::EOI(span) => *span,
         }
     }
 
@@ -130,15 +138,47 @@ impl TokenLit {
         match self {
             Self::Ident(ident) => ident.set_span(span),
             Self::Other(other) => *other = span,
+            Self::EOI(other) => *other = span,
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn is_eoi(&self) -> bool {
+        match self {
+            Self::EOI(..) => true,
+            _ => false,
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn is_other(&self) -> bool {
+        match self {
+            Self::Other(..) => true,
+            _ => false,
         }
     }
 
     pub(super) fn as_enum_variant(&self, token_type: &Type) -> Option<TokenStream> {
-        let ident = match self {
-            Self::Ident(ident) => ident,
-            Self::Other(..) => return None,
-        };
+        match self {
+            Self::Ident(ident) => Some(quote_spanned!(ident.span()=> #token_type::#ident)),
+            Self::EOI(span) => {
+                let core = span.face_core();
 
-        Some(quote_spanned!(ident.span()=> #token_type::#ident))
+                Some(quote_spanned!(*span=> <#token_type as #core::lexis::Token>::eoi()))
+            }
+            _ => None,
+        }
+    }
+
+    pub(super) fn as_token_index(&self, token_type: &Type) -> Option<TokenStream> {
+        match self {
+            Self::Ident(ident) => Some(quote_spanned!(ident.span()=> #token_type::#ident as u8)),
+            Self::EOI(span) => {
+                let core = span.face_core();
+
+                Some(quote_spanned!(*span=> #core::lexis::EOI))
+            }
+            _ => None,
+        }
     }
 }
