@@ -50,6 +50,7 @@ use syn::{
     File,
     Result,
     Type,
+    Visibility,
 };
 
 use crate::{
@@ -81,6 +82,7 @@ pub(super) type VariantMap = Map<Ident, NodeVariant>;
 
 pub struct NodeInput {
     pub(super) ident: Ident,
+    pub(super) vis: Visibility,
     pub(super) generics: ParserGenerics,
     pub(super) token: Type,
     pub(super) error: Type,
@@ -107,6 +109,7 @@ impl TryFrom<DeriveInput> for NodeInput {
         let start = Instant::now();
 
         let ident = input.ident;
+        let vis = input.vis;
         let generics = ParserGenerics::new(input.generics);
 
         let data = match input.data {
@@ -317,26 +320,6 @@ impl TryFrom<DeriveInput> for NodeInput {
         let mut pending = Vec::with_capacity(variants.len() * 2 + 1);
 
         for (_, variant) in &mut variants {
-            match &mut variant.rule {
-                None => continue,
-                Some(rule) => {
-                    rule.regex.expand(&alphabet);
-                    rule.encode(&mut scope)?;
-
-                    if let Some(constructor) = &variant.constructor {
-                        let variables =
-                            expect_some!(rule.variables.as_ref(), "Missing variable map.",);
-
-                        constructor.fits(variables)?;
-                    }
-                }
-            }
-
-            if let Some(trivia) = variant.trivia.rule_mut() {
-                trivia.regex.expand(&alphabet);
-                trivia.encode(&mut scope)?;
-            }
-
             if let Some(index) = &variant.index {
                 if let Some(previous) = index_map.insert(index.key(), variant.ident.clone()) {
                     return Err(error!(
@@ -358,6 +341,26 @@ impl TryFrom<DeriveInput> for NodeInput {
 
                 let _ = pending.push(variant.ident.clone());
             }
+
+            match &mut variant.rule {
+                None => continue,
+                Some(rule) => {
+                    rule.regex.expand(&alphabet);
+                    rule.encode(&mut scope)?;
+
+                    if let Some(constructor) = &variant.constructor {
+                        let variables =
+                            expect_some!(rule.variables.as_ref(), "Missing variable map.",);
+
+                        constructor.fits(variables)?;
+                    }
+                }
+            }
+
+            if let Some(trivia) = variant.trivia.rule_mut() {
+                trivia.regex.expand(&alphabet);
+                trivia.encode(&mut scope)?;
+            }
         }
 
         if let Some(trivia) = &trivia {
@@ -375,15 +378,16 @@ impl TryFrom<DeriveInput> for NodeInput {
             }
 
             let variant = expect_some!(variants.get(&ident), "Missing variant.",);
-            let rule = expect_some!(variant.rule.as_ref(), "Missing rule",);
 
-            for reference in rule.regex.refs(false, &variants)? {
-                pending.push(reference);
-            }
-
-            if let Some(trivia) = variant.trivia.rule() {
-                for reference in trivia.regex.refs(true, &variants)? {
+            if let Some(rule) = variant.rule.as_ref() {
+                for reference in rule.regex.refs(false, &variants)? {
                     pending.push(reference);
+                }
+
+                if let Some(trivia) = variant.trivia.rule() {
+                    for reference in trivia.regex.refs(true, &variants)? {
+                        pending.push(reference);
+                    }
                 }
             }
 
@@ -543,6 +547,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
         let result = Self {
             ident,
+            vis,
             generics,
             token,
             error,
@@ -693,6 +698,7 @@ impl ToTokens for NodeInput {
         }
 
         let ident = &self.ident;
+        let vis = &self.vis;
         let span = ident.span();
         let core = span.face_core();
         let option = span.face_option();
@@ -743,7 +749,7 @@ impl ToTokens for NodeInput {
                 let span = name.span();
                 let core = span.face_core();
                 indices.push(quote_spanned!(span=>
-                    const #name: #core::syntax::RuleIndex = #index;
+                    #vis const #name: #core::syntax::RuleIndex = #index;
                 ))
             }
 

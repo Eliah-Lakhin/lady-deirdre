@@ -159,6 +159,15 @@ impl Recovery {
     const GROUPS_LIMIT: usize = 4;
 
     #[inline(always)]
+    pub(super) fn empty(span: Span) -> Self {
+        Self {
+            span,
+            groups: Default::default(),
+            unexpected: Default::default(),
+        }
+    }
+
+    #[inline(always)]
     pub(super) fn span(&self) -> Span {
         self.span
     }

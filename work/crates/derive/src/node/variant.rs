@@ -138,7 +138,10 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Recovery attribute.",));
                     }
 
-                    recovery = Some(attr.parse_args::<Recovery>()?);
+                    recovery = match &attr.meta {
+                        Meta::Path(..) => Some(Recovery::empty(span)),
+                        _ => Some(attr.parse_args::<Recovery>()?),
+                    };
                 }
 
                 "constructor" => {
