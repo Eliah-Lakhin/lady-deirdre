@@ -40,20 +40,22 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
 use syn::{
+    ext::IdentExt,
     parse::{Parse, ParseStream},
     LitInt,
     Result,
 };
 
-use crate::utils::error;
+use crate::utils::{error, system_panic};
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) enum Index {
     Generated(Span, u16),
     Overridden(Span, u16),
+    Named(Ident, Option<u16>),
 }
 
 impl PartialEq for Index {
@@ -88,15 +90,45 @@ impl PartialOrd for Index {
 
 impl Parse for Index {
     fn parse(input: ParseStream) -> Result<Self> {
-        let index = input.parse::<LitInt>()?;
-        let span = index.span();
-        let index = index.base10_parse::<u16>()?;
+        let lookahead = input.lookahead1();
 
-        if index == 0 {
-            return Err(error!(span, "Zero index reserved for the Root rule.",));
+        if lookahead.peek(LitInt) {
+            let index = input.parse::<LitInt>()?;
+            let span = index.span();
+            let index = index.base10_parse::<u16>()?;
+
+            if index == 0 {
+                return Err(error!(span, "Zero index reserved for the Root rule.",));
+            }
+
+            return Ok(Index::Overridden(span, index));
         }
 
-        Ok(Index::Overridden(span, index))
+        if lookahead.peek(Ident::peek_any) {
+            let name = input.parse::<Ident>()?;
+
+            let index = match input.peek(Token![=]) {
+                false => None,
+
+                true => {
+                    let _ = input.parse::<Token![=]>();
+
+                    let index = input.parse::<LitInt>()?;
+                    let span = index.span();
+                    let index = index.base10_parse::<u16>()?;
+
+                    if index == 0 {
+                        return Err(error!(span, "Zero index reserved for the Root rule.",));
+                    }
+
+                    Some(index)
+                }
+            };
+
+            return Ok(Index::Named(name, index));
+        }
+
+        Err(lookahead.error())
     }
 }
 
@@ -105,6 +137,14 @@ impl ToTokens for Index {
         match self {
             Index::Generated(span, index) => quote_spanned!(*span=> #index).to_tokens(tokens),
             Index::Overridden(span, index) => quote_spanned!(*span=> #index).to_tokens(tokens),
+            Index::Named(name, index) => {
+                let span = name.span();
+
+                match index {
+                    None => quote_spanned!(span=> Self::#name).to_tokens(tokens),
+                    Some(index) => quote_spanned!(span=> #index).to_tokens(tokens),
+                }
+            }
         }
     }
 }
@@ -115,6 +155,22 @@ impl Index {
         match self {
             Self::Generated(_, index) => *index,
             Self::Overridden(_, index) => *index,
+            Self::Named(name, index) => match index {
+                Some(index) => *index,
+                None => system_panic!("Unset index {name}.",),
+            },
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn key(&self) -> String {
+        match self {
+            Self::Generated(_, index) => index.to_string(),
+            Self::Overridden(_, index) => index.to_string(),
+            Self::Named(name, index) => match index {
+                None => name.to_string(),
+                Some(index) => index.to_string(),
+            },
         }
     }
 }

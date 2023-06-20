@@ -337,8 +337,8 @@ impl TryFrom<DeriveInput> for NodeInput {
                 trivia.encode(&mut scope)?;
             }
 
-            if let Some(index) = variant.index {
-                if let Some(previous) = index_map.insert(index.get(), variant.ident.clone()) {
+            if let Some(index) = &variant.index {
+                if let Some(previous) = index_map.insert(index.key(), variant.ident.clone()) {
                     return Err(error!(
                         index.span(),
                         "Rule \"{previous}\" has the same index.\nRule indices \
@@ -346,7 +346,16 @@ impl TryFrom<DeriveInput> for NodeInput {
                     ));
                 }
 
-                let _ = indices.insert(index.get());
+                match index {
+                    Index::Generated(_, index)
+                    | Index::Overridden(_, index)
+                    | Index::Named(_, Some(index)) => {
+                        let _ = indices.insert(*index);
+                    }
+
+                    _ => (),
+                }
+
                 let _ = pending.push(variant.ident.clone());
             }
         }
@@ -378,9 +387,29 @@ impl TryFrom<DeriveInput> for NodeInput {
                 }
             }
 
-            if variant.index.is_some() {
-                let _ = visited.insert(ident);
-                continue;
+            match &variant.index {
+                None => (),
+
+                Some(Index::Named(name, index)) => {
+                    if variants.contains_key(name) {
+                        return Err(error!(
+                            name.span(),
+                            "This index name already used as a Variant \
+                            name.\nIndex names must be unique in the \
+                            type namespace.",
+                        ));
+                    }
+
+                    if index.is_some() {
+                        let _ = visited.insert(ident);
+                        continue;
+                    }
+                }
+
+                _ => {
+                    let _ = visited.insert(ident);
+                    continue;
+                }
             }
 
             while !indices.insert(next_index) {
@@ -389,7 +418,13 @@ impl TryFrom<DeriveInput> for NodeInput {
 
             let variant = expect_some!(variants.get_mut(&ident), "Missing variant.",);
 
-            variant.index = Some(Index::Generated(ident.span(), next_index));
+            match &mut variant.index {
+                Some(Index::Named(_, index @ None)) => *index = Some(next_index),
+
+                index @ None => *index = Some(Index::Generated(ident.span(), next_index)),
+
+                _ => system_panic!("Inconsistent indices."),
+            }
 
             let _ = visited.insert(ident);
         }
@@ -558,7 +593,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             let output = result.compile_skip_function(
                 &mut globals,
                 trivia,
-                Index::Generated(span, 0),
+                &Index::Generated(span, 0),
                 true,
                 false,
             );
@@ -598,7 +633,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             match variant.dump {
                 Dump::Trivia(span) => {
                     let trivia = expect_some!(variant.trivia.rule(), "Missing trivia rule.",);
-                    let context = expect_some!(variant.index, "Missing rule index.",);
+                    let context = expect_some!(variant.index.as_ref(), "Missing rule index.",);
 
                     let mut globals = Globals::default();
 
@@ -676,16 +711,17 @@ impl ToTokens for NodeInput {
             Some(trivia) => Some(self.compile_skip_function(
                 &mut globals,
                 trivia,
-                Index::Generated(span, 0),
+                &Index::Generated(span, 0),
                 false,
                 true,
             )),
         };
 
+        let mut indices = Vec::with_capacity(self.variants.len());
         let mut functions = Vec::with_capacity(self.variants.len());
         let mut cases = Vec::with_capacity(self.variants.len());
 
-        let mut indices = self
+        let mut by_index = self
             .variants
             .values()
             .map(|variant| match &variant.index {
@@ -695,19 +731,27 @@ impl ToTokens for NodeInput {
             .flatten()
             .collect::<Vec<_>>();
 
-        indices.sort_by_key(|(index, _)| *index);
+        by_index.sort_by_key(|(index, _)| *index);
 
-        for (_, ident) in indices {
+        for (_, ident) in by_index {
             let variant = match self.variants.get(&ident) {
                 None => continue,
                 Some(variant) => variant,
             };
 
+            if let Some(Index::Named(name, Some(index))) = &variant.index {
+                let span = name.span();
+                let core = span.face_core();
+                indices.push(quote_spanned!(span=>
+                    const #name: #core::syntax::RuleIndex = #index;
+                ))
+            }
+
             if variant.rule.is_none() {
                 continue;
             }
 
-            let index = expect_some!(variant.index, "Parsable rule without index.",);
+            let index = expect_some!(variant.index.as_ref(), "Parsable rule without index.",);
 
             if let Some(parser) = &variant.parser {
                 let span = parser.span();
@@ -737,7 +781,7 @@ impl ToTokens for NodeInput {
                     Some(description) => description,
                 };
 
-                let index = expect_some!(variant.index, "Description without index",);
+                let index = expect_some!(variant.index.as_ref(), "Description without index",);
 
                 Some((index, description))
             })
@@ -773,6 +817,17 @@ impl ToTokens for NodeInput {
             })
             .flatten()
             .collect::<Vec<_>>();
+
+        let indices = match indices.is_empty() {
+            true => None,
+            false => Some(quote_spanned!(span=>
+                impl #ident #type_generics #where_clause {
+                #(
+                    #indices
+                )*
+                }
+            )),
+        };
 
         let checks = match !checks.is_empty() && cfg!(debug_assertions) {
             false => None,
@@ -826,6 +881,8 @@ impl ToTokens for NodeInput {
                     }
                 }
             }
+
+            #indices
         )
         .to_tokens(tokens)
     }
@@ -852,7 +909,7 @@ impl NodeInput {
         &self,
         globals: &mut Globals,
         trivia: &Rule,
-        context: Index,
+        context: &Index,
         include_globals: bool,
         allow_warnings: bool,
     ) -> TokenStream {

@@ -136,7 +136,7 @@ impl Rule {
         &self,
         input: &NodeInput,
         globals: &mut Globals,
-        context: Index,
+        context: &Index,
         recovery_var: &GlobalVar,
         with_trivia: bool,
         surround_trivia: bool,
@@ -235,7 +235,7 @@ impl Rule {
         &self,
         input: &NodeInput,
         globals: &mut Globals,
-        context: Index,
+        context: &Index,
         automata: &NodeAutomata,
         variables: &VariableMap,
         delimiter: Option<&TokenLit>,
@@ -524,7 +524,7 @@ impl Rule {
                             "Missing parsable variant index.",
                         );
 
-                        let var = globals.rules([*index].into_iter()).compile(span);
+                        let var = globals.rules([index.clone()].into_iter()).compile(span);
 
                         quote_spanned!(span=>
                             site = #core::lexis::TokenCursor::site_ref(session, 0);

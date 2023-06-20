@@ -413,7 +413,7 @@ impl NodeVariant {
         allow_warnings: bool,
     ) -> Option<TokenStream> {
         let rule = self.rule.as_ref()?;
-        let context = expect_some!(self.index, "Parsable variant without index.",);
+        let context = expect_some!(self.index.as_ref(), "Parsable variant without index.",);
         let constructor = expect_some!(
             self.constructor.as_ref(),
             "Parsable variant without constructor.",

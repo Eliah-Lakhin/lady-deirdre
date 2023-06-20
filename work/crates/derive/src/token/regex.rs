@@ -46,7 +46,6 @@ use crate::{
     token::{
         automata::{Scope, Terminal, TokenAutomata},
         chars::{CharSet, Class},
-        input,
         input::{Alphabet, InlineMap, VariantMap},
     },
     utils::{
