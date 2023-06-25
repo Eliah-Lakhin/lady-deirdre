@@ -21,24 +21,10 @@ use crate::std::*;
 /// assert_ne!(id_a, Id::nil());
 ///
 /// ```
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Id {
     inner: u64,
-}
-
-impl Ord for Id {
-    #[inline(always)]
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.inner.cmp(&other.inner)
-    }
-}
-
-impl PartialOrd for Id {
-    #[inline(always)]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl Debug for Id {

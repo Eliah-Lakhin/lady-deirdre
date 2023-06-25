@@ -141,7 +141,7 @@ impl<N: Node + Debug> Debug for Cluster<N> {
 ///
 /// For details on the Weak references framework design see [Arena](crate::arena) module
 /// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ClusterRef {
     /// An [identifier](crate::arena::Id) of the [SyntaxTree](crate::syntax::SyntaxTree) instance
     /// this weakly referred Cluster belongs to.

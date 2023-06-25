@@ -328,7 +328,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
 ///
 /// For details on the Weak references framework design see [Arena](crate::arena) module
 /// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TokenRef {
     /// An [identifier](crate::arena::Id) of the [SourceCode](crate::lexis::SourceCode) instance
     /// this weakly referred Token belongs to.

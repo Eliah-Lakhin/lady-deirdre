@@ -29,7 +29,7 @@ pub type RefVersion = usize;
 ///
 /// See [module documentation](crate::arena) for details on how to avoid this problem in the end
 /// API design.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Ref {
     /// Indicates invalid reference.
     ///
