@@ -81,28 +81,28 @@ impl Parse for CharSet {
 
             if lookahead.peek(char_kw::upper) {
                 return Ok(Self {
-                    span: input.parse::<char_kw::alpha>()?.span,
+                    span: input.parse::<char_kw::upper>()?.span,
                     classes: Set::new([Class::Upper]),
                 });
             }
 
             if lookahead.peek(char_kw::lower) {
                 return Ok(Self {
-                    span: input.parse::<char_kw::alpha>()?.span,
+                    span: input.parse::<char_kw::lower>()?.span,
                     classes: Set::new([Class::Lower]),
                 });
             }
 
             if lookahead.peek(char_kw::num) {
                 return Ok(Self {
-                    span: input.parse::<char_kw::alpha>()?.span,
+                    span: input.parse::<char_kw::num>()?.span,
                     classes: Set::new([Class::Num]),
                 });
             }
 
             if lookahead.peek(char_kw::space) {
                 return Ok(Self {
-                    span: input.parse::<char_kw::alpha>()?.span,
+                    span: input.parse::<char_kw::space>()?.span,
                     classes: Set::new([Class::Space]),
                 });
             }
