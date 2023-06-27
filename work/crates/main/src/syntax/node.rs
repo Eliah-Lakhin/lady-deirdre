@@ -494,7 +494,13 @@ impl NodeRef {
 
         match tree.get_cluster(&self.cluster_ref) {
             None => false,
-            Some(cluster) => cluster.nodes.contains(&self.node_ref),
+            Some(cluster) => {
+                if let Ref::Primary = &self.node_ref {
+                    return true;
+                }
+
+                cluster.nodes.contains(&self.node_ref)
+            }
         }
     }
 }
