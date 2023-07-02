@@ -39,7 +39,7 @@ use std::collections::BTreeMap;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
-use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, Result};
+use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitStr, Result};
 
 use crate::{
     node::{
@@ -140,6 +140,7 @@ impl Rule {
         recovery_var: &GlobalVar,
         with_trivia: bool,
         surround_trivia: bool,
+        output_comments: bool,
     ) -> TokenStream {
         let automata = expect_some!(self.automata.as_ref(), "Missing automata.",);
         let variables = expect_some!(self.variables.as_ref(), "Missing variable map.",);
@@ -196,6 +197,7 @@ impl Rule {
                     &variables,
                     delimiter,
                     recovery_var,
+                    output_comments,
                     *from,
                 );
 
@@ -240,6 +242,7 @@ impl Rule {
         variables: &VariableMap,
         delimiter: Option<&TokenLit>,
         recovery_var: &GlobalVar,
+        output_comments: bool,
         from: State,
     ) -> TokenStream {
         let outgoing = expect_some!(
@@ -571,7 +574,21 @@ impl Rule {
                                 "Missing parsable variant index.",
                             );
 
-                            quote_spanned!(span=> #core::syntax::SyntaxSession::descend(session, #index))
+                            match output_comments {
+                                true => {
+                                    let comment = LitStr::new(&format!(" {}", ident), ident.span());
+
+                                    quote_spanned!(span=> #core::syntax::SyntaxSession::descend(
+                                        session,
+                                        #[doc = #comment]
+                                        #index,
+                                    ))
+                                }
+
+                                false => {
+                                    quote_spanned!(span=> #core::syntax::SyntaxSession::descend(session, #index))
+                                }
+                            }
                         }
 
                         true => match &variant.parser {

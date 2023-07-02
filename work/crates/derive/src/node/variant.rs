@@ -413,6 +413,7 @@ impl NodeVariant {
         globals: &mut Globals,
         include_trivia: bool,
         include_globals: bool,
+        output_comments: bool,
         allow_warnings: bool,
     ) -> Option<TokenStream> {
         let rule = self.rule.as_ref()?;
@@ -448,12 +449,18 @@ impl NodeVariant {
             &recovery_var,
             with_trivia,
             surround_trivia,
+            output_comments,
         );
 
         let trivia_function = match self.trivia.rule() {
-            Some(trivia) if include_trivia => {
-                Some(input.compile_skip_function(globals, trivia, context, false, allow_warnings))
-            }
+            Some(trivia) if include_trivia => Some(input.compile_skip_function(
+                globals,
+                trivia,
+                context,
+                false,
+                output_comments,
+                allow_warnings,
+            )),
             _ => None,
         };
 

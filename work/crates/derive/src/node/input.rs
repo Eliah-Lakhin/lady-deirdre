@@ -600,6 +600,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                 trivia,
                 &Index::Generated(span, 0),
                 true,
+                true,
                 false,
             );
 
@@ -642,8 +643,14 @@ impl TryFrom<DeriveInput> for NodeInput {
 
                     let mut globals = Globals::default();
 
-                    let output =
-                        result.compile_skip_function(&mut globals, trivia, context, true, false);
+                    let output = result.compile_skip_function(
+                        &mut globals,
+                        trivia,
+                        context,
+                        true,
+                        true,
+                        false,
+                    );
 
                     let output_string = match parse2::<File>(output.clone()) {
                         Ok(file) => ::prettyplease::unparse(&file),
@@ -664,7 +671,14 @@ impl TryFrom<DeriveInput> for NodeInput {
                     let mut globals = Globals::default();
 
                     let output = expect_some!(
-                        variant.compile_parser_function(&result, &mut globals, false, true, false),
+                        variant.compile_parser_function(
+                            &result,
+                            &mut globals,
+                            false,
+                            true,
+                            true,
+                            false
+                        ),
                         "Parser function generation failure.",
                     );
 
@@ -697,6 +711,12 @@ impl ToTokens for NodeInput {
             return;
         }
 
+        let output_comments = match self.dump {
+            Dump::None => false,
+            Dump::Dry(..) => return,
+            _ => true,
+        };
+
         let ident = &self.ident;
         let vis = &self.vis;
         let span = ident.span();
@@ -719,6 +739,7 @@ impl ToTokens for NodeInput {
                 trivia,
                 &Index::Generated(span, 0),
                 false,
+                output_comments,
                 true,
             )),
         };
@@ -767,7 +788,14 @@ impl ToTokens for NodeInput {
             }
 
             let function = expect_some!(
-                variant.compile_parser_function(self, &mut globals, true, false, true),
+                variant.compile_parser_function(
+                    self,
+                    &mut globals,
+                    true,
+                    false,
+                    output_comments,
+                    true,
+                ),
                 "Parsable non-overridden rule without generated parser.",
             );
 
@@ -917,6 +945,7 @@ impl NodeInput {
         trivia: &Rule,
         context: &Index,
         include_globals: bool,
+        output_comments: bool,
         allow_warnings: bool,
     ) -> TokenStream {
         let span = trivia.span;
@@ -928,6 +957,7 @@ impl NodeInput {
             &GlobalVar::UnlimitedRecovery,
             false,
             false,
+            output_comments,
         );
         let (impl_generics, _, where_clause) = self.generics.func.split_for_impl();
         let code = &self.generics.code;
