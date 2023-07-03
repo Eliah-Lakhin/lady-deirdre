@@ -47,7 +47,17 @@ use syn::LitByte;
 
 use crate::{
     token::{automata::Terminal, chars::Class, TokenInput},
-    utils::{expect_some, null, system_panic, Facade, PredictableCollection, Set, SetImpl, State},
+    utils::{
+        expect_some,
+        null,
+        system_panic,
+        Dump,
+        Facade,
+        PredictableCollection,
+        Set,
+        SetImpl,
+        State,
+    },
 };
 
 pub(super) struct Output<'a> {
@@ -127,7 +137,14 @@ impl<'a> Output<'a> {
         let base = take(&mut self.ascii)
             .into_iter()
             .map(|(to, set)| {
-                let pattern = Self::pattern(set);
+                let pattern = match self.input.dump {
+                    Dump::Output(..) => {
+                        Self::pattern(set.into_iter().map(|byte| byte as char).collect())
+                    }
+
+                    _ => Self::pattern(set),
+                };
+
                 let handle = self.handle(to, false);
 
                 quote!(#pattern => #handle)
@@ -143,13 +160,23 @@ impl<'a> Output<'a> {
         match base.is_empty() {
             true => self.transitions.push(quote!(#from => #fallback)),
 
-            false => self.transitions.push(quote!(#from => match byte {
-                #(
-                #base
-                )*
+            false => match self.input.dump {
+                Dump::Output(..) => self.transitions.push(quote!(#from => match byte as char {
+                    #(
+                    #base
+                    )*
 
-                _ => #fallback
-            })),
+                    _ => #fallback
+                })),
+
+                _ => self.transitions.push(quote!(#from => match byte {
+                    #(
+                    #base
+                    )*
+
+                    _ => #fallback
+                })),
+            },
         }
 
         if !self.handled.insert(self.from) {
