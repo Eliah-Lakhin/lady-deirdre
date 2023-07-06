@@ -56,7 +56,7 @@ pub(crate) const CHUNK_SIZE: Length = 5;
 pub(crate) use crate::lexis::site::SiteRefInner;
 pub use crate::lexis::{
     buffer::TokenBuffer,
-    chunks::{Chunk, ChunkRef},
+    chunks::Chunk,
     code::SourceCode,
     content::CodeContent,
     cursor::TokenCursor,

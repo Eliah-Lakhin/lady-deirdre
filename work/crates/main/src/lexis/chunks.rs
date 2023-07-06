@@ -36,39 +36,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Length, Site, Token},
+    lexis::{Length, Site, SiteSpan, Token},
     std::*,
 };
-
-//todo consider removing owned version of Chunk, and to rename ChunkRef to Chunk.
-/// A Token metadata ownership object.
-///
-/// This object holds the Token instance itself, and the metadata of the source code substring
-/// this token belongs to.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Chunk<T: Token> {
-    /// Token instance.
-    ///
-    /// This instance is supposed to describe lexical kind of the "token", and possible additional
-    /// generic semantic metadata inside this instance.
-    pub token: T,
-
-    /// Token's substring absolute UTF-8 character offset inside the source code text.
-    pub site: Site,
-
-    /// Token's substring UTF-8 characters count.
-    pub length: Length,
-
-    /// Token's original substring inside the source code text.
-    pub string: String,
-}
 
 /// A Token metadata borrow object.
 ///
 /// This object borrows reference into the Token instance, and the metadata of the source code
 /// substring this token belongs to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct ChunkRef<'source, T: Token> {
+pub struct Chunk<'source, T: Token> {
     /// Token instance reference.
     ///
     /// This instance is supposed to describe lexical kind of the "token", and possible additional
@@ -85,20 +62,19 @@ pub struct ChunkRef<'source, T: Token> {
     pub string: &'source str,
 }
 
-impl<'source, T: Token> ChunkRef<'source, T> {
-    /// Turns reference object into owned [Chunk] instance.
-    ///
-    /// This operation clones both the Token instance and the Token's substring.
+impl<'source, T: Token> Chunk<'source, T> {
     #[inline(always)]
-    pub fn to_owned(&self) -> Chunk<T>
-    where
-        T: Clone,
-    {
-        Chunk {
-            token: self.token.clone(),
-            site: self.site,
-            length: self.length,
-            string: self.string.to_string(),
-        }
+    pub fn start(&self) -> Site {
+        self.site
+    }
+
+    #[inline(always)]
+    pub fn end(&self) -> Site {
+        self.site + self.length
+    }
+
+    #[inline(always)]
+    pub fn span(&self) -> SiteSpan {
+        self.start()..self.end()
     }
 }

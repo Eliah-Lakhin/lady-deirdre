@@ -41,7 +41,7 @@ pub use lady_deirdre_derive::Token;
 
 use crate::{
     arena::{Id, Identifiable, Ref},
-    lexis::{ChunkRef, Length, LexisSession, Site, SiteRef, SourceCode, TokenIndex},
+    lexis::{Chunk, Length, LexisSession, Site, SiteRef, SourceCode, TokenIndex},
     std::*,
 };
 
@@ -64,7 +64,7 @@ pub type TokenCount = usize;
 /// grammar directly on enum variants through the macros attributes.
 ///
 /// ```rust
-/// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, ChunkRef};
+/// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, Chunk};
 ///
 /// #[derive(Token, Clone, Copy, PartialEq, Eq, Debug)]
 /// #[repr(u8)]
@@ -90,7 +90,7 @@ pub type TokenCount = usize;
 /// let mut buf = TokenBuffer::<MyToken>::from("FOO___bar_mismatch__FOO");
 ///
 /// assert_eq!(
-///     buf.chunks(..).map(|chunk: ChunkRef<'_, MyToken>| chunk.token).collect::<Vec<_>>(),
+///     buf.chunks(..).map(|chunk: Chunk<'_, MyToken>| chunk.token).collect::<Vec<_>>(),
 ///     vec![
 ///         MyToken::Foo,
 ///         MyToken::LowDashes,
@@ -175,7 +175,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
     ///     TokenIndex,
     ///     CodeContent,
     ///     LexisSession,
-    ///     ChunkRef,
+    ///     Chunk,
     /// };
     ///
     /// // Represents integer numbers or lower case alphabetic words.
@@ -263,7 +263,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
     /// assert_eq!(
     ///     buf
     ///         .chunks(..)
-    ///         .map(|chunk_ref: ChunkRef<NumOrWord>| chunk_ref.token)
+    ///         .map(|chunk: Chunk<NumOrWord>| chunk.token)
     ///         .collect::<Vec<_>>(),
     ///     vec![
     ///         NumOrWord::Word,
@@ -404,7 +404,7 @@ impl TokenRef {
         code.get_token(&self.chunk_ref)
     }
 
-    /// Returns a [ChunkRef](crate::lexis::ChunkRef) overall token metadata object of the weakly
+    /// Returns a [Chunk](crate::lexis::Chunk) overall token metadata object of the weakly
     /// referred token of specified [SourceCode](crate::lexis::SourceCode).
     ///
     /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
@@ -417,7 +417,7 @@ impl TokenRef {
     pub fn chunk<'code, T: Token>(
         &self,
         code: &'code impl SourceCode<Token = T>,
-    ) -> Option<ChunkRef<'code, T>> {
+    ) -> Option<Chunk<'code, T>> {
         if self.id != code.id() {
             return None;
         }
@@ -427,7 +427,7 @@ impl TokenRef {
         let length = code.get_length(&self.chunk_ref)?;
         let string = code.get_string(&self.chunk_ref)?;
 
-        Some(ChunkRef {
+        Some(Chunk {
             token,
             site,
             length,

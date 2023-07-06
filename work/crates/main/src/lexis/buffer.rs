@@ -41,7 +41,7 @@ use crate::{
         cursor::TokenBufferCursor,
         session::{Cursor, SequentialLexisSession},
         ByteIndex,
-        ChunkRef,
+        Chunk,
         Length,
         Site,
         SourceCode,
@@ -79,7 +79,7 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     lexis::{TokenBuffer, SimpleToken, SourceCode, ChunkRef, Chunk},
+///     lexis::{TokenBuffer, SimpleToken, SourceCode, Chunk},
 ///     syntax::{SyntaxBuffer, SimpleNode, Node},
 /// };
 ///
@@ -106,13 +106,13 @@ use crate::{
 /// // TokenBuffer is traversable structure of Chunk references.
 /// let token_strings = (&token_buf)
 ///     .into_iter()
-///     .map(|chunk_ref: ChunkRef<SimpleToken>| chunk_ref.string)
+///     .map(|chunk: Chunk<SimpleToken>| chunk.string)
 ///     .collect::<Vec<&str>>();
 ///
 /// assert_eq!(token_strings, ["First", " ", "line", "\n", "Second", " ", "line", "\n"]);
 ///
 /// // An API user can iterate through the TokenBuffer Chunks.
-/// let chunks = (&token_buf).into_iter().collect::<Vec<ChunkRef<SimpleToken>>>();
+/// let chunks = (&token_buf).into_iter().collect::<Vec<Chunk<SimpleToken>>>();
 ///
 /// assert_eq!(chunks[4].string, "Second");
 /// ```
@@ -366,7 +366,7 @@ pub struct TokenBufferIter<'buffer, T: Token> {
 }
 
 impl<'sequence, T: Token> Iterator for TokenBufferIter<'sequence, T> {
-    type Item = ChunkRef<'sequence, T>;
+    type Item = Chunk<'sequence, T>;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {

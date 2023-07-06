@@ -166,17 +166,17 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API function. To iterate through the spanned chunks an API user
     /// encouraged to use a higher-level [CodeContent::chunks](crate::lexis::CodeContent::chunks)
     /// function instead that returns a more convenient iterator over the
-    /// [ChunkRef](crate::lexis::ChunkRef) objects.
+    /// [Chunk](crate::lexis::Chunk) objects.
     ///
     /// ```rust
-    /// use lady_deirdre::lexis::{TokenBuffer, CodeContent, SimpleToken, TokenCursor, ChunkRef};
+    /// use lady_deirdre::lexis::{TokenBuffer, CodeContent, SimpleToken, TokenCursor, Chunk};
     ///
     /// let buf = TokenBuffer::<SimpleToken>::from("foo bar baz");
     ///
     /// assert_eq!(
     ///     buf
     ///         .chunks(3..5)
-    ///         .map(|chunk_ref: ChunkRef<'_, SimpleToken>| chunk_ref.string.to_string())
+    ///         .map(|chunk: Chunk<'_, SimpleToken>| chunk.string.to_string())
     ///         .collect::<Vec<_>>(),
     ///     vec!["foo", " ", "bar"],
     /// );

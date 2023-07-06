@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    lexis::{ByteIndex, ChunkRef, Site, SiteSpan, SourceCode, ToSpan, TokenCursor},
+    lexis::{ByteIndex, Chunk, Site, SiteSpan, SourceCode, ToSpan, TokenCursor},
     std::*,
 };
 
@@ -49,16 +49,16 @@ use crate::{
 /// The interface provides three high-level helper functions to access the source code lecical
 /// structure:
 ///  - A [chunks](CodeContent::chunks) function that returns an iterator over the
-///    [ChunkRef](crate::lexis::ChunkRef) token metadata objects "touched" by specified
+///    [Chunk](crate::lexis::Chunk) token metadata objects "touched" by specified
 ///    [Span](crate::lexis::ToSpan).
 ///  - A [chars](CodeContent::chars) function that returns an iterator over Unicode characters
 ///    of the source code text in specified Span.
 ///  - A [substring](CodeContent::substring) that returns a clone of the source code substring
 ///    in specified Span.
 pub trait CodeContent: SourceCode {
-    /// An iterator over the [ChunkRef](crate::lexis::ChunkRef) token metadata objects "touched"
+    /// An iterator over the [Chunk](crate::lexis::Chunk) token metadata objects "touched"
     /// by specified [Span](crate::lexis::ToSpan),
-    type ChunkIterator<'code>: Iterator<Item = ChunkRef<'code, <Self as SourceCode>::Token>>
+    type ChunkIterator<'code>: Iterator<Item = Chunk<'code, <Self as SourceCode>::Token>>
         + FusedIterator
         + Identifiable
         + 'code
@@ -71,14 +71,14 @@ pub trait CodeContent: SourceCode {
     where
         Self: 'code;
 
-    /// Returns an iterator over the [ChunkRef](crate::lexis::ChunkRef) token metadata objects "touched"
+    /// Returns an iterator over the [Chunk](crate::lexis::Chunk) token metadata objects "touched"
     /// by specified `span`.
     ///
     /// Span "touching" means such tokens that their substring characters lie inside, intersect
     /// with, or adjacent to this [Span](crate::lexis::ToSpan) object.
     ///
     /// ```rust
-    /// use lady_deirdre::lexis::{TokenBuffer, CodeContent, SimpleToken, ChunkRef};
+    /// use lady_deirdre::lexis::{TokenBuffer, CodeContent, SimpleToken, Chunk};
     ///
     /// let buf = TokenBuffer::<SimpleToken>::from("foo bar baz");
     ///
@@ -88,7 +88,7 @@ pub trait CodeContent: SourceCode {
     ///         // Third identifier token "bar" covered by `4..7` span.
     ///         // Fourth whitespace token " " is adjacent to site 7.
     ///         .chunks(4..7)
-    ///         .map(|chunk_ref: ChunkRef<'_, SimpleToken>| (chunk_ref.token, chunk_ref.string))
+    ///         .map(|chunk: Chunk<'_, SimpleToken>| (chunk.token, chunk.string))
     ///         .collect::<Vec<_>>(),
     ///     vec![
     ///         (SimpleToken::Whitespace, " "),
@@ -103,7 +103,7 @@ pub trait CodeContent: SourceCode {
     /// [span](crate::lexis::ToSpan).
     ///
     /// ```rust
-    /// use lady_deirdre::lexis::{TokenBuffer, CodeContent, SimpleToken, ChunkRef};
+    /// use lady_deirdre::lexis::{TokenBuffer, CodeContent, SimpleToken};
     ///
     /// let buf = TokenBuffer::<SimpleToken>::from("foo bar baz");
     ///
@@ -193,7 +193,7 @@ impl<'code, C: TokenCursor<'code>> Identifiable for ChunkIterator<'code, C> {
 }
 
 impl<'code, C: TokenCursor<'code>> Iterator for ChunkIterator<'code, C> {
-    type Item = ChunkRef<'code, <C as TokenCursor<'code>>::Token>;
+    type Item = Chunk<'code, <C as TokenCursor<'code>>::Token>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

@@ -56,7 +56,7 @@ use crate::{
 /// This is a low-level API that provides access features to the subset of the source code tokens
 /// sequence. For a higher-level iteration access you can use a
 /// [`CodeContent::chunks`](crate::lexis::CodeContent::chunks) function instead that returns a more
-/// convenient [Iterator](::std::iter::iterator) over the [ChunkRef](crate::lexis::ChunkRef)
+/// convenient [Iterator](::std::iter::iterator) over the [Chunk](crate::lexis::Chunk)
 /// objects.
 ///
 /// TokenCursor is the main access gate to the [SourceCode](crate::lexis::SourceCode) underlying
