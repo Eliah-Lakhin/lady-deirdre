@@ -43,5 +43,5 @@ mod unit;
 pub use crate::compiler::{
     immutable::ImmutableUnit,
     mutable::unit::MutableUnit,
-    unit::CompilationUnit,
+    unit::{CompilationUnit, Lexis, Syntax},
 };

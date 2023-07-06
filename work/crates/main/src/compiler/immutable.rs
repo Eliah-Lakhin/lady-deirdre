@@ -36,11 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
-    compiler::CompilationUnit,
-    lexis::{Length, Site, SiteRefSpan, SourceCode, ToSpan, Token, TokenBuffer, TokenCount},
+    arena::{Id, Identifiable},
+    compiler::{CompilationUnit, Lexis, Syntax},
+    lexis::{SourceCode, Token, TokenBuffer},
     std::*,
-    syntax::{Cluster, ClusterRef, Node, SyntaxBuffer, SyntaxTree},
+    syntax::{Node, SyntaxBuffer},
 };
 
 pub struct ImmutableUnit<N: Node> {
@@ -66,93 +66,26 @@ impl<N: Node> Debug for ImmutableUnit<N> {
     }
 }
 
-impl<N: Node> SourceCode for ImmutableUnit<N> {
-    type Token = N::Token;
-
-    type Cursor<'code> = <TokenBuffer<N::Token> as SourceCode>::Cursor<'code>;
+impl<N: Node> Lexis for ImmutableUnit<N> {
+    type Lexis = TokenBuffer<N::Token>;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
-        self.lexis.contains_chunk(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
-        self.lexis.get_token(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn get_site(&self, chunk_ref: &Ref) -> Option<Site> {
-        self.lexis.get_site(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn get_string(&self, chunk_ref: &Ref) -> Option<&str> {
-        self.lexis.get_string(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn get_length(&self, chunk_ref: &Ref) -> Option<Length> {
-        self.lexis.get_length(chunk_ref)
-    }
-
-    #[inline(always)]
-    fn cursor(&self, span: impl ToSpan) -> Self::Cursor<'_> {
-        self.lexis.cursor(span)
-    }
-
-    #[inline(always)]
-    fn length(&self) -> Length {
-        self.lexis.length()
-    }
-
-    #[inline(always)]
-    fn token_count(&self) -> TokenCount {
-        self.lexis.token_count()
+    fn lexis(&self) -> &Self::Lexis {
+        &self.lexis
     }
 }
 
-impl<N: Node> SyntaxTree for ImmutableUnit<N> {
-    type Node = N;
+impl<N: Node> Syntax for ImmutableUnit<N> {
+    type Syntax = SyntaxBuffer<N>;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> ClusterRef {
-        self.syntax.cover(span)
+    fn syntax(&self) -> &Self::Syntax {
+        &self.syntax
     }
 
     #[inline(always)]
-    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
-        self.syntax.contains_cluster(cluster_ref)
-    }
-
-    #[inline(always)]
-    fn get_cluster(&self, cluster_ref: &Ref) -> Option<&Cluster<Self::Node>> {
-        self.syntax.get_cluster(cluster_ref)
-    }
-
-    #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>> {
-        self.syntax.get_cluster_mut(cluster_ref)
-    }
-
-    #[inline(always)]
-    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
-        self.syntax.get_cluster_span(cluster_ref)
-    }
-
-    #[inline(always)]
-    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
-        self.syntax.get_previous_cluster(cluster_ref)
-    }
-
-    #[inline(always)]
-    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
-        self.syntax.get_next_cluster(cluster_ref)
-    }
-
-    #[inline(always)]
-    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
-        self.syntax.remove_cluster(cluster_ref)
+    fn syntax_mut(&mut self) -> &mut Self::Syntax {
+        &mut self.syntax
     }
 }
 

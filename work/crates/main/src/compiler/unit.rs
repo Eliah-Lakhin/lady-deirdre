@@ -36,10 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    arena::{Identifiable, Ref},
     compiler::{ImmutableUnit, MutableUnit},
-    lexis::{SourceCode, TokenBuffer},
+    lexis::{Length, Site, SiteRefSpan, SourceCode, ToSpan, TokenBuffer, TokenCount},
     std::*,
-    syntax::{Node, SyntaxTree},
+    syntax::{Cluster, ClusterRef, Node, SyntaxTree},
     Document,
 };
 
@@ -80,5 +81,110 @@ pub trait CompilationUnit:
         Self: Sized,
     {
         self.into_token_buffer().into_immutable_unit()
+    }
+}
+
+pub trait Lexis: Identifiable {
+    type Lexis: SourceCode;
+
+    fn lexis(&self) -> &Self::Lexis;
+}
+
+impl<F: Lexis> SourceCode for F {
+    type Token = <F::Lexis as SourceCode>::Token;
+
+    type Cursor<'code> = <F::Lexis as SourceCode>::Cursor<'code>
+        where Self: 'code;
+
+    #[inline(always)]
+    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
+        self.lexis().contains_chunk(chunk_ref)
+    }
+
+    #[inline(always)]
+    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
+        self.lexis().get_token(chunk_ref)
+    }
+
+    #[inline(always)]
+    fn get_site(&self, chunk_ref: &Ref) -> Option<Site> {
+        self.lexis().get_site(chunk_ref)
+    }
+
+    #[inline(always)]
+    fn get_string(&self, chunk_ref: &Ref) -> Option<&str> {
+        self.lexis().get_string(chunk_ref)
+    }
+
+    #[inline(always)]
+    fn get_length(&self, chunk_ref: &Ref) -> Option<Length> {
+        self.lexis().get_length(chunk_ref)
+    }
+
+    #[inline(always)]
+    fn cursor(&self, span: impl ToSpan) -> Self::Cursor<'_> {
+        self.lexis().cursor(span)
+    }
+
+    #[inline(always)]
+    fn length(&self) -> Length {
+        self.lexis().length()
+    }
+
+    #[inline(always)]
+    fn token_count(&self) -> TokenCount {
+        self.lexis().token_count()
+    }
+}
+
+pub trait Syntax: Identifiable {
+    type Syntax: SyntaxTree;
+
+    fn syntax(&self) -> &Self::Syntax;
+
+    fn syntax_mut(&mut self) -> &mut Self::Syntax;
+}
+
+impl<F: Syntax> SyntaxTree for F {
+    type Node = <F::Syntax as SyntaxTree>::Node;
+
+    #[inline(always)]
+    fn cover(&self, span: impl ToSpan) -> ClusterRef {
+        self.syntax().cover(span)
+    }
+
+    #[inline(always)]
+    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
+        self.syntax().contains_cluster(cluster_ref)
+    }
+
+    #[inline(always)]
+    fn get_cluster(&self, cluster_ref: &Ref) -> Option<&Cluster<Self::Node>> {
+        self.syntax().get_cluster(cluster_ref)
+    }
+
+    #[inline(always)]
+    fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>> {
+        self.syntax_mut().get_cluster_mut(cluster_ref)
+    }
+
+    #[inline(always)]
+    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
+        self.syntax().get_cluster_span(cluster_ref)
+    }
+
+    #[inline(always)]
+    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
+        self.syntax().get_previous_cluster(cluster_ref)
+    }
+
+    #[inline(always)]
+    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
+        self.syntax().get_next_cluster(cluster_ref)
+    }
+
+    #[inline(always)]
+    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
+        self.syntax_mut().remove_cluster(cluster_ref)
     }
 }
