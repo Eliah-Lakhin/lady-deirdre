@@ -199,14 +199,10 @@ impl Recovery {
 
             _ => {
                 let set = self.unexpected.iter().map(|lit| {
-                    let ident = expect_some!(
+                    expect_some!(
                         lit.as_token_index(token_type),
                         "Unfiltered Unexpected token.",
-                    );
-
-                    let span = ident.span();
-
-                    quote_spanned!(span=> #ident as u8)
+                    )
                 });
 
                 Some(quote_spanned!(span=>
