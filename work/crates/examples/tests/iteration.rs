@@ -106,12 +106,20 @@ fn test_chunk_iterator() {
         assert!(!cursor.token_ref(2).is_valid_ref(&code));
         assert!(matches!(cursor.string(2), None));
 
-        assert!(cursor.advance());
+        cursor.skip(1);
         assert!(cursor.advance());
 
         assert_eq!(cursor.site_ref(0).to_site(&code).unwrap(), 10);
         assert!(!cursor.token_ref(0).is_valid_ref(&code));
         assert!(matches!(cursor.string(0), None));
+
+        cursor.skip(1);
+
+        assert_eq!(cursor.site_ref(0).to_site(&code).unwrap(), 10);
+        assert!(!cursor.token_ref(0).is_valid_ref(&code));
+        assert!(matches!(cursor.string(0), None));
+
+        assert!(!cursor.advance());
     }
 }
 

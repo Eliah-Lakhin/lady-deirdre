@@ -84,6 +84,23 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     }
 
     #[inline(always)]
+    fn skip(&mut self, mut distance: TokenCount) {
+        if distance == self.peek_distance {
+            self.next_chunk_ref = self.peek_chunk_ref;
+            self.peek_distance = 0;
+            return;
+        }
+
+        while distance > 0 {
+            distance -= 1;
+
+            if !self.advance() {
+                break;
+            }
+        }
+    }
+
+    #[inline(always)]
     fn token(&mut self, distance: TokenCount) -> Self::Token {
         if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
             return <Self::Token as Token>::eoi();

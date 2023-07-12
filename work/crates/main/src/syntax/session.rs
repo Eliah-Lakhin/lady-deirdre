@@ -140,6 +140,11 @@ where
     }
 
     #[inline(always)]
+    fn skip(&mut self, distance: TokenCount) {
+        self.token_cursor.skip(distance)
+    }
+
+    #[inline(always)]
     fn token(&mut self, distance: TokenCount) -> Self::Token {
         self.token_cursor.token(distance)
     }

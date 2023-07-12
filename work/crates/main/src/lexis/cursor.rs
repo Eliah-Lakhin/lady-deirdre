@@ -140,6 +140,8 @@ pub trait TokenCursor<'code>: Identifiable {
     /// Otherwise this function does nothing and returns `false`.
     fn advance(&mut self) -> bool;
 
+    fn skip(&mut self, distance: TokenCount);
+
     /// Looks ahead of the [Token](crate::lexis::Token) in front of the TokenCursor inner
     /// [Site](crate::lexis::Site).
     ///
@@ -292,6 +294,11 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
         self.next += 1;
 
         true
+    }
+
+    #[inline(always)]
+    fn skip(&mut self, mut distance: TokenCount) {
+        self.next = (self.next + distance).min(self.buffer.token_count());
     }
 
     #[inline]

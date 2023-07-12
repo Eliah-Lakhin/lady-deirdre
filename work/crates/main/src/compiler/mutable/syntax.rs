@@ -93,6 +93,28 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
+    fn skip(&mut self, mut distance: TokenCount) {
+        if distance == 0 {
+            return;
+        }
+
+        if distance == self.peek_distance {
+            self.next_chunk_ref = self.peek_chunk_ref;
+            self.peek_distance = 0;
+            self.pending.leftmost = false;
+            return;
+        }
+
+        while distance > 0 {
+            distance -= 1;
+
+            if !self.advance() {
+                break;
+            }
+        }
+    }
+
+    #[inline(always)]
     fn token(&mut self, distance: TokenCount) -> Self::Token {
         if unsafe { self.next_chunk_ref.is_dangling() } {
             return <Self::Token as Token>::eoi();
