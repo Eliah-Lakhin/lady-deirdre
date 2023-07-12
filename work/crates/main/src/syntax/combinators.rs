@@ -204,10 +204,7 @@ impl Recovery {
         }
 
         if stack.is_empty() {
-            while distance > 0 {
-                distance -= 1;
-                let _ = session.advance();
-            }
+            session.skip(distance);
         }
     }
 }
