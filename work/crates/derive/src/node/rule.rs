@@ -504,7 +504,7 @@ impl Rule {
                             site = #core::lexis::TokenCursor::site_ref(session, 0);
                             #core::syntax::SyntaxSession::error(
                                 session,
-                                #core::syntax::SyntaxError {
+                                #core::syntax::ParseError {
                                     span: site..site,
                                     context: #context,
                                     expected_tokens: &#var,
@@ -533,7 +533,7 @@ impl Rule {
                             site = #core::lexis::TokenCursor::site_ref(session, 0);
                             #core::syntax::SyntaxSession::error(
                                 session,
-                                #core::syntax::SyntaxError {
+                                #core::syntax::ParseError {
                                     span: site..site,
                                     context: #context,
                                     expected_tokens: &#core::lexis::EMPTY_TOKEN_SET,
@@ -704,7 +704,7 @@ impl Rule {
 
                     #core::syntax::SyntaxSession::error(
                         session,
-                        #core::syntax::SyntaxError {
+                        #core::syntax::ParseError {
                             span: site..end_site,
                             context: #context,
                             expected_tokens: &#expected_tokens_var,

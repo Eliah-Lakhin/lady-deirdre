@@ -52,21 +52,21 @@ use crate::{
 /// semantic of particular programming language.
 ///
 /// ```rust
-/// use lady_deirdre::syntax::SyntaxError;
+/// use lady_deirdre::syntax::ParseError;
 ///
 /// enum CustomError {
-///     SyntaxError(SyntaxError),
+///     SyntaxError(ParseError),
 ///     SemanticError(&'static str),
 /// }
 ///
-/// impl From<SyntaxError> for CustomError {
-///     fn from(err: SyntaxError) -> Self {
+/// impl From<ParseError> for CustomError {
+///     fn from(err: ParseError) -> Self {
 ///         Self::SyntaxError(err)
 ///     }
 /// }
 /// ```
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SyntaxError {
+pub struct ParseError {
     /// A [site](crate::lexis::Site) reference span of where the rule has failed.
     pub span: SiteRefSpan,
 
@@ -84,11 +84,11 @@ pub struct SyntaxError {
     pub expected_rules: &'static RuleSet,
 }
 
-impl SyntaxError {
+impl ParseError {
     #[inline(always)]
     pub fn title<N: Node>(&self) -> impl Display + '_ {
         struct Title<'error, N> {
-            error: &'error SyntaxError,
+            error: &'error ParseError,
             _node: PhantomData<N>,
         }
 
@@ -115,7 +115,7 @@ impl SyntaxError {
         const SHORT_LENGTH: usize = 80;
 
         struct Describe<'error, N> {
-            error: &'error SyntaxError,
+            error: &'error ParseError,
             _node: PhantomData<N>,
         }
 
@@ -279,7 +279,7 @@ impl SyntaxError {
     #[inline(always)]
     pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Display + '_ {
         struct DisplaySyntaxError<'a, U: CompilationUnit> {
-            error: &'a SyntaxError,
+            error: &'a ParseError,
             unit: &'a U,
         }
 
@@ -312,7 +312,7 @@ impl SyntaxError {
 ///     syntax::{
 ///         SimpleNode,
 ///         SyntaxTree,
-///         SyntaxError,
+///         ParseError,
 ///         TreeContent,
 ///         RuleSet,
 ///         ROOT_RULE,
@@ -325,7 +325,7 @@ impl SyntaxError {
 ///
 /// let new_custom_error_ref = doc.root_node_ref().cluster().link_error(
 ///     &mut doc,
-///     SyntaxError {
+///     ParseError {
 ///         span: SiteRef::nil()..SiteRef::nil(),
 ///         context: ROOT_RULE,
 ///         expected_tokens: &EMPTY_TOKEN_SET,

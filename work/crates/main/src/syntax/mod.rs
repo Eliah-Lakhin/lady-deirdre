@@ -55,7 +55,7 @@ pub use crate::syntax::{
     cluster::{Cluster, ClusterRef},
     combinators::{Recovery, UNLIMITED_RECOVERY},
     content::TreeContent,
-    error::{ErrorRef, SyntaxError},
+    error::{ErrorRef, ParseError},
     index::{RuleIndex, RuleSet, EMPTY_RULE_SET, ROOT_RULE},
     no::NoSyntax,
     node::{Node, NodeRef},

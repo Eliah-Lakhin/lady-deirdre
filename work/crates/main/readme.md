@@ -236,15 +236,15 @@ assert_eq!(
 // enum type with LL(1) grammar rules directly on the enum variants.
 
 use lady_deirdre::{
-    syntax::{Node, SyntaxError, NodeRef, SyntaxTree, TreeContent},
+    syntax::{Node, ParseError, NodeRef, SyntaxTree, TreeContent},
     lexis::TokenRef,
 };
 
 #[derive(Node)]
 #[token(CalcToken)] // We need to specify a Token type explicitly.
-#[error(SyntaxError)] // An object that will store syntax errors.
-                      // SyntaxError is the default implement, but you can use
-                      // any custom type that implements From<SyntaxError>.
+#[error(ParseError)] // An object that will store syntax errors.
+                      // ParseError is the default implement, but you can use
+                      // any custom type that implements From<ParseError>.
 #[trivia($Whitespace)] // Tokens to be ignored in the syntax rule expressions.
 #[recovery([$Open..$Close])]
 enum CalcNode {

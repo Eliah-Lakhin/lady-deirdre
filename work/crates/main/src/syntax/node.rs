@@ -43,7 +43,7 @@ use crate::{
     arena::{Id, Identifiable, Ref},
     lexis::Token,
     std::*,
-    syntax::{ClusterRef, RuleIndex, SyntaxError, SyntaxSession, SyntaxTree},
+    syntax::{ClusterRef, ParseError, RuleIndex, SyntaxSession, SyntaxTree},
 };
 
 /// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
@@ -63,14 +63,14 @@ use crate::{
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     syntax::{Node, SyntaxError, SyntaxTree, TreeContent},
+///     syntax::{Node, ParseError, SyntaxTree, TreeContent},
 ///     lexis::{SimpleToken, TokenRef},
 ///     Document,
 /// };
 ///
 /// #[derive(Node, PartialEq, Debug)]
 /// #[token(SimpleToken)]
-/// #[error(SyntaxError)]
+/// #[error(ParseError)]
 /// #[trivia($Whitespace)]
 /// enum NumbersInParens {
 ///     #[root]
@@ -101,7 +101,7 @@ pub trait Node: Sized + 'static {
     type Token: Token;
 
     /// Describes syntax/semantic error type of this programming language grammar.
-    type Error: From<SyntaxError> + Sized + 'static;
+    type Error: From<ParseError> + Sized + 'static;
 
     /// Parses a branch of the syntax tree from the sequence of [Tokens](crate::lexis::Token) using
     /// specified parse `rule`, and returns an instance of the top node of the branch.
@@ -156,7 +156,7 @@ pub trait Node: Sized + 'static {
     ///         NodeRef,
     ///         SyntaxSession,
     ///         RuleIndex,
-    ///         SyntaxError,
+    ///         ParseError,
     ///         SyntaxTree,
     ///         TreeContent,
     ///         RuleSet,
@@ -179,7 +179,7 @@ pub trait Node: Sized + 'static {
     ///
     /// impl Node for Parens {
     ///     type Token = SimpleToken;
-    ///     type Error = SyntaxError;
+    ///     type Error = ParseError;
     ///
     ///     fn parse<'code>(
     ///         rule: RuleIndex,
@@ -266,7 +266,7 @@ pub trait Node: Sized + 'static {
     ///
     ///         // Registering a syntax error.
     ///         let span = session.site_ref(0)..session.site_ref(0);
-    ///         session.error(SyntaxError {
+    ///         session.error(ParseError {
     ///             span,
     ///             context: PARENS_RULE,
     ///             expected_tokens: &EMPTY_TOKEN_SET,

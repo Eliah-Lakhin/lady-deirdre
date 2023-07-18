@@ -38,7 +38,7 @@
 use crate::{
     lexis::SimpleToken,
     std::*,
-    syntax::{Node, NodeRef, SyntaxError},
+    syntax::{Node, NodeRef, ParseError},
 };
 
 /// A common generic syntax.
@@ -47,7 +47,7 @@ use crate::{
 /// a set of nested parens: parenthesis, braces and brackets.
 #[derive(Node, Clone, Debug, PartialEq, Eq)]
 #[token(SimpleToken)]
-#[error(SyntaxError)]
+#[error(ParseError)]
 #[trivia($Number | $Symbol | $Identifier | $String | $Char | $Whitespace | $Mismatch)]
 #[define(ANY = Parenthesis | Brackets | Braces)]
 #[recovery([$ParenOpen..$ParenClose], [$BracketOpen..$BracketClose], [$BraceOpen..$BraceClose])]

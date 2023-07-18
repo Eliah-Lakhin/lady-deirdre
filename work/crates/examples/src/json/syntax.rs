@@ -37,7 +37,7 @@
 
 use lady_deirdre::{
     lexis::TokenRef,
-    syntax::{Node, NodeRef, SyntaxError},
+    syntax::{Node, NodeRef, ParseError},
 };
 
 use crate::json::lexis::JsonToken;

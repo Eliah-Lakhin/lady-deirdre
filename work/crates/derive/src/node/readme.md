@@ -299,8 +299,8 @@ enum MyNode {
     **Format:** `#[error(<error type>)]`.
 
     Specifies a type of the syntax error. This type must be accessed from the
-    current context, and it must implement a `From<SyntaxError>` trait.
-    In particular the `SyntaxError` itself fits this requirement.
+    current context, and it must implement a `From<ParseError>` trait.
+    In particular the `ParseError` itself fits this requirement.
 
     This attribute is **required**.
 
@@ -506,7 +506,7 @@ enum MyNode {
 ```rust ignore
 #[derive(Node, Clone)]
 #[token(JsonToken)]
-#[error(SyntaxError)]
+#[error(ParseError)]
 #[skip($Whitespace)]
 #[define(ANY = Object | Array | True | False | String | Number | Null)]
 pub enum JsonNode {

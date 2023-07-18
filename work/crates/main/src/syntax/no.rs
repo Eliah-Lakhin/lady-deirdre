@@ -38,7 +38,7 @@
 use crate::{
     lexis::Token,
     std::*,
-    syntax::{Node, RuleIndex, SyntaxError, SyntaxSession},
+    syntax::{Node, ParseError, RuleIndex, SyntaxSession},
 };
 
 /// A special marker that forcefully skips syntax parsing stage.
@@ -79,7 +79,7 @@ impl<T: Token> Debug for NoSyntax<T> {
 
 impl<T: Token> Node for NoSyntax<T> {
     type Token = T;
-    type Error = SyntaxError;
+    type Error = ParseError;
 
     #[inline(always)]
     fn parse<'code>(

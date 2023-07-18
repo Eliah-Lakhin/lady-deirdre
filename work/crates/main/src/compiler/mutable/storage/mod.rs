@@ -79,7 +79,7 @@ mod tests {
         },
         lexis::{LexisSession, Token, TokenIndex},
         std::*,
-        syntax::{Node, RuleIndex, SyntaxError, SyntaxSession},
+        syntax::{Node, ParseError, RuleIndex, SyntaxSession},
     };
 
     #[test]
@@ -843,7 +843,7 @@ mod tests {
 
     impl Node for TestNode {
         type Token = TestToken;
-        type Error = SyntaxError;
+        type Error = ParseError;
 
         fn parse<'code>(
             _rule: RuleIndex,

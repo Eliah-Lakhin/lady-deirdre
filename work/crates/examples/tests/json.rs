@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{CodeContent, TokenBuffer, TokenRef},
-    syntax::{Node, NodeRef, SyntaxError, TreeContent},
+    syntax::{Node, NodeRef, ParseError, TreeContent},
     Document,
 };
 use lady_deirdre_examples::json::{formatter::ToJsonString, lexis::JsonToken, syntax::JsonNode};
