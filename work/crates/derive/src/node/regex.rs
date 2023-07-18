@@ -81,7 +81,10 @@ impl RegexImpl for Regex {
 
             Self::Operand(Operand::Dump(_, inner)) => inner.alphabet(),
 
-            Self::Operand(Operand::Token(_, lit)) => Set::new([lit.clone()]),
+            Self::Operand(Operand::Token(_, lit)) => match lit.is_eoi() {
+                true => Set::empty(),
+                false => Set::new([lit.clone()]),
+            },
 
             Self::Operand(Operand::Rule(..)) => Set::empty(),
 

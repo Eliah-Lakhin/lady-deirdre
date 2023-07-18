@@ -96,10 +96,8 @@ impl ParseError {
             #[inline(always)]
             fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
                 match N::describe(self.error.context) {
-                    Some(context) => {
-                        formatter.write_fmt(format_args!("Syntax error in {context}."))
-                    }
-                    None => formatter.write_str("Syntax error."),
+                    Some(context) => formatter.write_fmt(format_args!("Parse error in {context}.")),
+                    None => formatter.write_str("Parse error."),
                 }
             }
         }

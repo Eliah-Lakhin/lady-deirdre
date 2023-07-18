@@ -112,7 +112,7 @@ impl TokenSet {
 
     #[inline(always)]
     pub const fn all() -> Self {
-        Self { mask: [0xFF; 32] }
+        Self { mask: [0xFF; 32] }.exclude(EOI)
     }
 
     pub const fn inclusive(tokens: &[TokenIndex]) -> Self {
