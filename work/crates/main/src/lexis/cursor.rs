@@ -297,7 +297,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
     }
 
     #[inline(always)]
-    fn skip(&mut self, mut distance: TokenCount) {
+    fn skip(&mut self, distance: TokenCount) {
         self.next = (self.next + distance).min(self.buffer.token_count());
     }
 

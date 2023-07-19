@@ -74,6 +74,8 @@ impl Debug for RuleSet {
             }
 
             debug_list.entry(probe);
+
+            entry += 1;
         }
 
         debug_list.finish()

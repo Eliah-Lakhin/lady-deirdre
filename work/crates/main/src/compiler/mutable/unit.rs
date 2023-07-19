@@ -1007,7 +1007,6 @@ impl<N: Node> MutableUnit<N> {
             return Cover {
                 chunk_ref,
                 span: span.start..(span.start + insert_span),
-                lookahead: 0,
             };
         }
 
@@ -1034,7 +1033,6 @@ impl<N: Node> MutableUnit<N> {
                 return Cover {
                     chunk_ref,
                     span: span.start..(span.start + insert_span),
-                    lookahead: 0,
                 };
             }
         }
@@ -1093,11 +1091,13 @@ impl<N: Node> MutableUnit<N> {
         Cover {
             chunk_ref: head,
             span: span.start..(span.start + insert_span),
-            lookahead: 0,
         }
     }
 
     fn update_syntax(&mut self, mut cover: Cover<N>) {
+        #[allow(unused_variables)]
+        let mut cover_lookahead = 0;
+
         loop {
             let mut shift;
             let mut rule;
@@ -1177,7 +1177,10 @@ impl<N: Node> MutableUnit<N> {
                                     if parse_end_site >= cover.span.end {
                                         cover.span.start -= shift;
                                         cover.span.end = parse_end_site;
-                                        cover.lookahead = cache_cluster.lookahead;
+                                        #[allow(unused_assignments)]
+                                        {
+                                            cover_lookahead = cache_cluster.lookahead;
+                                        }
                                         rule = cache_cluster.rule;
                                         break;
                                     }
@@ -1334,7 +1337,6 @@ impl<T: Token> TokenBuffer<T> {
 struct Cover<N: Node> {
     chunk_ref: ChildRefIndex<N>,
     span: SiteSpan,
-    lookahead: Length,
 }
 
 impl<N: Node> ClusterCache<N> {
