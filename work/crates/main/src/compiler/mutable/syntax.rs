@@ -100,6 +100,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
         if distance == self.peek_distance {
             self.next_chunk_ref = self.peek_chunk_ref;
+            self.next_site = self.peek_site;
             self.peek_distance = 0;
             self.pending.leftmost = false;
             return;
