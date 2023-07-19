@@ -40,7 +40,7 @@ use crate::{
     compiler::{
         mutable::{
             cursor::MutableCursor,
-            lexis::MutableLexisSession,
+            lexis::{MutableLexisSession, SessionOutput},
             storage::{ChildRefIndex, ClusterCache, References, Tree},
             syntax::MutableSyntaxSession,
         },
@@ -855,8 +855,19 @@ impl<N: Node> MutableUnit<N> {
             unsafe { tail.next() }
         }
 
-        let mut product =
-            unsafe { MutableLexisSession::run(text.len() / CHUNK_SIZE + 2, &input, tail) };
+        let mut product = match input.is_empty() {
+            false => unsafe { MutableLexisSession::run(text.len() / CHUNK_SIZE + 2, &input, tail) },
+
+            true => SessionOutput {
+                length: 0,
+                spans: Vec::new(),
+                indices: Vec::new(),
+                tokens: Vec::new(),
+                text: String::new(),
+                tail,
+                overlap: 0,
+            },
+        };
 
         span.end += product.overlap;
 
