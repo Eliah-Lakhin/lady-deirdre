@@ -64,7 +64,7 @@ pub(super) struct Page<N: Node> {
     pub(super) string: PageString,
     pub(super) tokens: [MaybeUninit<N::Token>; PAGE_CAP],
     pub(super) chunks: [RefIndex; PAGE_CAP],
-    pub(super) clusters: [MaybeUninit<Option<CacheEntry<N>>>; PAGE_CAP],
+    pub(super) clusters: [MaybeUninit<Option<Box<CacheEntry<N>>>>; PAGE_CAP],
 }
 
 impl<N: Node> Item for Page<N> {

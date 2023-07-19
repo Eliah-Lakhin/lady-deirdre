@@ -413,7 +413,7 @@ impl<N: Node> ChildRefIndex<N> {
             page.clusters
                 .get_unchecked_mut(self.index)
                 .assume_init_mut(),
-            Some(CacheEntry { cache, ref_index }),
+            Some(Box::new(CacheEntry { cache, ref_index })),
         );
 
         match previous {
