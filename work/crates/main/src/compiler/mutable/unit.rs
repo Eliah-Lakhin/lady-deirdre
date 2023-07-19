@@ -64,7 +64,7 @@ use crate::{
     },
     report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
-    syntax::{Cluster, ClusterRef, NoSyntax, Node, SyntaxTree, NON_ROOT_RULE, ROOT_RULE},
+    syntax::{Cluster, ClusterRef, NoSyntax, Node, SyntaxTree, NON_RULE, ROOT_RULE},
 };
 
 /// An incrementally managed compilation unit.
@@ -1103,7 +1103,7 @@ impl<N: Node> MutableUnit<N> {
 
                         shift = unsafe { *cover.chunk_ref.span() };
 
-                        rule = NON_ROOT_RULE;
+                        rule = NON_RULE;
                     }
                 },
 
@@ -1118,7 +1118,7 @@ impl<N: Node> MutableUnit<N> {
 
                         shift = unsafe { *cover.chunk_ref.span() };
 
-                        rule = NON_ROOT_RULE;
+                        rule = NON_RULE;
                     }
                 },
             }

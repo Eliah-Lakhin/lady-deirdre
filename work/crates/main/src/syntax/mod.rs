@@ -49,14 +49,13 @@ mod session;
 mod simple;
 mod tree;
 
-pub(crate) use crate::syntax::index::NON_ROOT_RULE;
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
     cluster::{Cluster, ClusterRef},
     combinators::{Recovery, UNLIMITED_RECOVERY},
     content::TreeContent,
     error::{ErrorRef, ParseError},
-    index::{RuleIndex, RuleSet, EMPTY_RULE_SET, ROOT_RULE},
+    index::{RuleIndex, RuleSet, EMPTY_RULE_SET, NON_RULE, ROOT_RULE},
     no::NoSyntax,
     node::{Node, NodeRef},
     session::SyntaxSession,

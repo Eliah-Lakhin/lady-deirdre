@@ -44,7 +44,7 @@ use crate::json::lexis::JsonToken;
 
 #[derive(Node, Clone)]
 #[token(JsonToken)]
-#[error(SyntaxError)]
+#[error(ParseError)]
 #[trivia($Whitespace)]
 #[define(ANY = Object | Array | True | False | String | Number | Null)]
 #[recovery(

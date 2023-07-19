@@ -50,7 +50,7 @@ fn test_balance() {
 
     #[derive(Node, Clone, Debug, PartialEq, Eq)]
     #[token(SimpleToken)]
-    #[error(SyntaxError)]
+    #[error(ParseError)]
     #[trivia($Number | $Symbol | $Identifier | $String | $Char | $Whitespace | $Mismatch)]
     #[recovery(
         $ParenClose,

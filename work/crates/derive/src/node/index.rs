@@ -101,6 +101,10 @@ impl Parse for Index {
                 return Err(error!(span, "Zero index reserved for the Root rule.",));
             }
 
+            if index == u16::MAX {
+                return Err(error!(span, "{} index is a marker of non-rule.", u16::MAX));
+            }
+
             return Ok(Index::Overridden(span, index));
         }
 
@@ -119,6 +123,10 @@ impl Parse for Index {
 
                     if index == 0 {
                         return Err(error!(span, "Zero index reserved for the Root rule.",));
+                    }
+
+                    if index == u16::MAX {
+                        return Err(error!(span, "{} index is a marker of non-rule.", u16::MAX));
                     }
 
                     Some(index)

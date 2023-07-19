@@ -49,30 +49,44 @@ pub static EMPTY_RULE_SET: RuleSet = RuleSet::empty();
 /// A syntax grammar entry rule.
 ///
 /// See [`syntax parser algorithm specification`](crate::syntax::Node::parse) for details.
-pub static ROOT_RULE: RuleIndex = 0;
+pub const ROOT_RULE: RuleIndex = 0;
 
-pub(crate) static NON_ROOT_RULE: RuleIndex = 1;
+pub const NON_RULE: RuleIndex = RuleIndex::MAX;
 
+#[repr(transparent)]
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct RuleSet {
     vector: [RuleIndex; Self::LIMIT],
-    occupied: usize,
 }
 
 impl Debug for RuleSet {
-    #[inline(always)]
+    #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        Debug::fmt(&self.vector[0..self.occupied], formatter)
+        let mut debug_list = formatter.debug_list();
+
+        let mut entry = 0;
+
+        while entry < Self::LIMIT {
+            let probe = &self.vector[entry];
+
+            if probe == &NON_RULE {
+                break;
+            }
+
+            debug_list.entry(probe);
+        }
+
+        debug_list.finish()
     }
 }
 
 impl<'set> IntoIterator for &'set RuleSet {
     type Item = RuleIndex;
-    type IntoIter = Copied<Iter<'set, RuleIndex>>;
+    type IntoIter = RuleSetIter<'set>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
-        self.vector[0..self.occupied].into_iter().copied()
+        RuleSetIter { set: self, next: 0 }
     }
 }
 
@@ -95,8 +109,7 @@ impl RuleSet {
     #[inline(always)]
     pub const fn empty() -> Self {
         Self {
-            vector: [0; Self::LIMIT],
-            occupied: 0,
+            vector: [NON_RULE; Self::LIMIT],
         }
     }
 
@@ -107,10 +120,20 @@ impl RuleSet {
 
     #[inline(always)]
     pub const fn contains(&self, rule: RuleIndex) -> bool {
+        if rule == NON_RULE {
+            return false;
+        }
+
         let mut entry = 0;
 
-        while entry < self.occupied {
-            if self.vector[entry] == rule {
+        while entry < Self::LIMIT {
+            let probe = self.vector[entry];
+
+            if probe == NON_RULE {
+                break;
+            }
+
+            if probe == rule {
                 return true;
             }
 
@@ -121,19 +144,40 @@ impl RuleSet {
     }
 
     #[inline(always)]
-    pub const fn include(mut self, rule: RuleIndex) -> Self {
-        if self.contains(rule) {
-            return self;
+    pub const fn include(mut self, mut rule: RuleIndex) -> Self {
+        if rule == NON_RULE {
+            panic!("Non-rule cannot be inserted into the rule set.");
         }
 
-        if self.occupied == Self::LIMIT {
-            panic!("Too many rules in the rule set.");
+        let mut entry = 0;
+
+        while entry < Self::LIMIT {
+            let mut probe = self.vector[entry];
+
+            if probe == rule {
+                return self;
+            }
+
+            if probe > rule {
+                while entry < Self::LIMIT {
+                    probe = self.vector[entry];
+                    self.vector[entry] = rule;
+
+                    if probe == NON_RULE {
+                        return self;
+                    }
+
+                    rule = probe;
+                    entry += 1;
+                }
+
+                break;
+            }
+
+            entry += 1;
         }
 
-        self.vector[self.occupied] = rule;
-        self.occupied += 1;
-
-        self
+        panic!("Too many rules in the rule set.");
     }
 
     #[inline(always)]
@@ -150,17 +194,36 @@ impl RuleSet {
 
     #[inline(always)]
     pub const fn exclude(mut self, rule: RuleIndex) -> Self {
+        if rule == NON_RULE {
+            return self;
+        }
+
         let mut entry = 0;
 
-        while entry < self.occupied {
-            if self.vector[entry] == rule {
-                entry += 1;
-                while entry < self.occupied {
-                    self.vector[entry - 1] = self.vector[entry];
-                    entry += 1;
-                }
+        while entry < Self::LIMIT {
+            let mut probe = self.vector[entry];
 
-                self.occupied -= 1;
+            if probe > rule {
+                break;
+            }
+
+            if probe == rule {
+                loop {
+                    let next = entry + 1;
+
+                    probe = match next < Self::LIMIT {
+                        true => self.vector[next],
+                        false => NON_RULE,
+                    };
+
+                    self.vector[entry] = probe;
+
+                    if probe == NON_RULE {
+                        break;
+                    }
+
+                    entry = next;
+                }
 
                 break;
             }
@@ -185,12 +248,22 @@ impl RuleSet {
 
     #[inline(always)]
     pub const fn is_empty(&self) -> bool {
-        self.occupied == 0
+        self.vector[0] == NON_RULE
     }
 
     #[inline(always)]
     pub const fn length(&self) -> usize {
-        self.occupied
+        let mut length = 0;
+
+        while length < Self::LIMIT {
+            if self.vector[length] == NON_RULE {
+                break;
+            }
+
+            length += 1;
+        }
+
+        length
     }
 
     #[inline(always)]
@@ -222,3 +295,30 @@ impl RuleSet {
         }
     }
 }
+
+pub struct RuleSetIter<'set> {
+    set: &'set RuleSet,
+    next: usize,
+}
+
+impl<'set> Iterator for RuleSetIter<'set> {
+    type Item = RuleIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next == RuleSet::LIMIT {
+            return None;
+        }
+
+        let probe = self.set.vector[self.next];
+
+        if probe == NON_RULE {
+            return None;
+        }
+
+        self.next += 1;
+
+        Some(probe)
+    }
+}
+
+impl<'set> FusedIterator for RuleSetIter<'set> {}
