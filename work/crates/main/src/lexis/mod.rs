@@ -49,7 +49,6 @@ mod simple;
 mod site;
 mod span;
 mod token;
-pub(crate) mod utils;
 
 pub(crate) const CHUNK_SIZE: Length = 5;
 

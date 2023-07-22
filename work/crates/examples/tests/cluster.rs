@@ -50,14 +50,7 @@ use lady_deirdre_examples::json::syntax::JsonNode;
 fn test_clusters_traverse() {
     let mut doc = Document::<JsonNode>::default();
 
-    assert_eq!(
-        0..0,
-        doc.root_node_ref()
-            .cluster()
-            .span(&doc)
-            .to_span(&doc)
-            .unwrap()
-    );
+    assert_eq!(0..0, doc.root_node_ref().cluster().site_span(&doc).unwrap());
 
     doc.write(
         ..,
@@ -66,11 +59,7 @@ fn test_clusters_traverse() {
 
     assert_eq!(
         0..70,
-        doc.root_node_ref()
-            .cluster()
-            .span(&doc)
-            .to_span(&doc)
-            .unwrap()
+        doc.root_node_ref().cluster().site_span(&doc).unwrap()
     );
 
     assert_eq!(
@@ -81,24 +70,24 @@ fn test_clusters_traverse() {
     let mut cluster = doc.root_node_ref().cluster();
 
     cluster = cluster.next(&doc);
-    assert_eq!(8..58, cluster.span(&doc).to_span(&doc).unwrap());
+    assert_eq!(8..58, cluster.site_span(&doc).unwrap());
 
     cluster = cluster.next(&doc);
-    assert_eq!(34..57, cluster.span(&doc).to_span(&doc).unwrap());
+    assert_eq!(34..57, cluster.site_span(&doc).unwrap());
 
     cluster = cluster.next(&doc);
-    assert_eq!(67..69, cluster.span(&doc).to_span(&doc).unwrap());
+    assert_eq!(67..69, cluster.site_span(&doc).unwrap());
 
     assert!(!cluster.next(&doc).is_valid_ref(&doc));
 
     cluster = cluster.previous(&doc);
-    assert_eq!(34..57, cluster.span(&doc).to_span(&doc).unwrap());
+    assert_eq!(34..57, cluster.site_span(&doc).unwrap());
 
     cluster = cluster.previous(&doc);
-    assert_eq!(8..58, cluster.span(&doc).to_span(&doc).unwrap());
+    assert_eq!(8..58, cluster.site_span(&doc).unwrap());
 
     cluster = cluster.previous(&doc);
-    assert_eq!(0..70, cluster.span(&doc).to_span(&doc).unwrap());
+    assert_eq!(0..70, cluster.site_span(&doc).unwrap());
 
     assert!(!cluster.previous(&doc).is_valid_ref(&doc));
 }
@@ -111,31 +100,98 @@ fn test_clusters_cover() {
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(doc.cover(..).span(&doc).to_span(&doc).unwrap())
+        doc.substring(doc.cover(..).site_span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(doc.cover(0..0).span(&doc).to_span(&doc).unwrap())
+        doc.substring(doc.cover(0..0).site_span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(doc.cover(1..1).span(&doc).to_span(&doc).unwrap())
+        doc.substring(doc.cover(1..1).site_span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        doc.substring(doc.cover(9..9).span(&doc).to_span(&doc).unwrap())
+        doc.substring(doc.cover(9..9).site_span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        doc.substring(doc.cover(15..15).span(&doc).to_span(&doc).unwrap())
+        doc.substring(doc.cover(15..15).site_span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        doc.substring(doc.cover(16..16).span(&doc).to_span(&doc).unwrap())
+        doc.substring(doc.cover(16..16).site_span(&doc).unwrap())
     );
+}
+
+#[test]
+fn test_cluster_traverse() {
+    let doc = Document::<JsonNode>::from(
+        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+    );
+
+    let cluster = doc.cover(..);
+
+    assert_eq!(
+        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+        doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
+    );
+
+    let mut children = cluster.children(&doc);
+
+    {
+        let cluster = children.next().unwrap();
+
+        assert_eq!(
+            r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+            doc.substring(cluster.site_span(&doc).unwrap())
+        );
+
+        assert_eq!(
+            r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+            doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
+        );
+
+        let mut children = cluster.children(&doc);
+
+        {
+            let cluster = children.next().unwrap();
+
+            assert_eq!(
+                r#"{"a": "xyz", "b": null}"#,
+                doc.substring(cluster.site_span(&doc).unwrap())
+            );
+
+            assert_eq!(
+                r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+                doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
+            );
+
+            assert!(children.next().is_none());
+        }
+    }
+
+    {
+        let cluster = children.next().unwrap();
+
+        assert_eq!(r#"{}"#, doc.substring(cluster.site_span(&doc).unwrap()));
+
+        assert_eq!(
+            r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
+            doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
+        );
+
+        let mut children = cluster.children(&doc);
+
+        {
+            assert!(children.next().is_none());
+        }
+    }
+
+    assert!(children.next().is_none());
 }

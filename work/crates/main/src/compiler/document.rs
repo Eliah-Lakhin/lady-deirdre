@@ -297,7 +297,7 @@ impl<N: Node> Document<N> {
     }
 
     #[inline(always)]
-    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) {
+    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) -> ClusterRef {
         let mutable = match self.as_mutable() {
             Some(mutable) => mutable,
             None => panic!("Specified Document is not mutable."),

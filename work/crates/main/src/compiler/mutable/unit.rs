@@ -47,7 +47,6 @@ use crate::{
         CompilationUnit,
     },
     lexis::{
-        utils::{split_left, split_right},
         Length,
         Site,
         SiteRef,
@@ -748,7 +747,7 @@ impl<N: Node> MutableUnit<N> {
     /// check span's validity using [is_valid_span](crate::lexis::ToSpan::is_valid_span) function.
     ///
     #[inline(never)]
-    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) {
+    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) -> ClusterRef {
         let span = match span.to_span(self) {
             None => panic!("Specified span is invalid."),
 
@@ -758,16 +757,21 @@ impl<N: Node> MutableUnit<N> {
         let text = text.as_ref();
 
         if span.is_empty() && text.is_empty() {
-            return;
+            return ClusterRef::nil();
         }
 
         let cursor = self.update_lexis(span, text);
 
         if TypeId::of::<N>() == TypeId::of::<NoSyntax<<N as Node>::Token>>() {
-            return;
+            return ClusterRef::nil();
         }
 
-        self.update_syntax(cursor);
+        let cluster_ref = self.update_syntax(cursor);
+
+        ClusterRef {
+            id: self.id,
+            cluster_ref,
+        }
     }
 
     #[inline(always)]
@@ -1094,7 +1098,7 @@ impl<N: Node> MutableUnit<N> {
         }
     }
 
-    fn update_syntax(&mut self, mut cover: Cover<N>) {
+    fn update_syntax(&mut self, mut cover: Cover<N>) -> Ref {
         #[allow(unused_variables)]
         let mut cover_lookahead = 0;
 
@@ -1219,7 +1223,7 @@ impl<N: Node> MutableUnit<N> {
 
                     //todo check lookahead too
                     if cover.span.end == parsed_end_site {
-                        break;
+                        return cluster_ref;
                     }
 
                     cover.span.end = cover.span.end.max(parsed_end_site);
@@ -1258,7 +1262,7 @@ impl<N: Node> MutableUnit<N> {
                         unsafe { tail.next() }
                     }
 
-                    break;
+                    return Ref::Primary;
                 }
             }
         }
@@ -1384,4 +1388,38 @@ impl<N: Node> ClusterCache<N> {
             SiteRefInner::CodeEnd(_) => Some(unit.tree.length()),
         }
     }
+}
+
+#[inline]
+fn split_left(string: &str, mut site: Site) -> &str {
+    if site == 0 {
+        return "";
+    }
+
+    for (index, _) in string.char_indices() {
+        if site == 0 {
+            return unsafe { string.get_unchecked(0..index) };
+        }
+
+        site -= 1;
+    }
+
+    string
+}
+
+#[inline]
+fn split_right(string: &str, mut site: Site) -> &str {
+    if site == 0 {
+        return string;
+    }
+
+    for (index, _) in string.char_indices() {
+        if site == 0 {
+            return unsafe { string.get_unchecked(index..string.len()) };
+        }
+
+        site -= 1;
+    }
+
+    ""
 }

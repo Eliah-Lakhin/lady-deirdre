@@ -35,38 +35,4 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::lexis::Site;
-
-#[inline]
-pub(crate) fn split_left(string: &str, mut site: Site) -> &str {
-    if site == 0 {
-        return "";
-    }
-
-    for (index, _) in string.char_indices() {
-        if site == 0 {
-            return unsafe { string.get_unchecked(0..index) };
-        }
-
-        site -= 1;
-    }
-
-    string
-}
-
-#[inline]
-pub(crate) fn split_right(string: &str, mut site: Site) -> &str {
-    if site == 0 {
-        return string;
-    }
-
-    for (index, _) in string.char_indices() {
-        if site == 0 {
-            return unsafe { string.get_unchecked(index..string.len()) };
-        }
-
-        site -= 1;
-    }
-
-    ""
-}
+mod cluster;

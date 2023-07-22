@@ -383,142 +383,151 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 0 }
 
-    let mut document = Document::<DebugNode>::from("");
-    assert_eq!(document.substring(..), r#""#);
-    assert_eq!(document.debug_errors(), "[1:1]: Missing Object in Root.",);
-    assert_eq!(document.to_json_string(), r#"?"#);
-    assert_eq!(document.debug_print(), r#"0(?)"#);
+    let mut doc = Document::<DebugNode>::from("");
+    assert_eq!(doc.substring(..), r#""#);
+    assert_eq!(doc.debug_errors(), "[1:1]: Missing Object in Root.",);
+    assert_eq!(doc.to_json_string(), r#"?"#);
+    assert_eq!(doc.debug_print(), r#"0(?)"#);
 
     unsafe { VERSION = 1 }
 
-    document.write(0..0, "{");
-    assert_eq!(document.substring(..), r#"{"#);
-    assert_eq!(
-        document.debug_errors(),
-        "[1:2]: Missing Entry or '}' in Object.",
-    );
-    assert_eq!(document.to_json_string(), r#"{}"#);
-    assert_eq!(document.debug_print(), r#"1(1({}))"#);
+    let cluster = doc.write(0..0, "{");
+    assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{"#);
+    assert_eq!(doc.substring(..), r#"{"#);
+    assert_eq!(doc.debug_errors(), "[1:2]: Missing Entry or '}' in Object.",);
+    assert_eq!(doc.to_json_string(), r#"{}"#);
+    assert_eq!(doc.debug_print(), r#"1(1({}))"#);
 
     unsafe { VERSION = 2 }
 
-    document.write(1..1, "}");
-    assert_eq!(document.substring(..), r#"{}"#);
-    assert_eq!(document.to_json_string(), r#"{}"#);
-    assert_eq!(document.debug_print(), r#"2(2({}))"#);
+    let cluster = doc.write(1..1, "}");
+    assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{}"#);
+    assert_eq!(doc.substring(..), r#"{}"#);
+    assert_eq!(doc.to_json_string(), r#"{}"#);
+    assert_eq!(doc.debug_print(), r#"2(2({}))"#);
 
     unsafe { VERSION = 3 }
 
-    document.write(1..1, r#""foo""#);
-    assert_eq!(document.substring(..), r#"{"foo"}"#);
-    assert_eq!(document.debug_errors(), "[1:7]: Missing ':' in Entry.");
-    assert_eq!(document.to_json_string(), r#"{"foo": ?}"#);
-    assert_eq!(document.debug_print(), r#"3(3({3("foo": ?)}))"#);
+    let cluster = doc.write(1..1, r#""foo""#);
+    assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{"foo"}"#);
+    assert_eq!(doc.substring(..), r#"{"foo"}"#);
+    assert_eq!(doc.debug_errors(), "[1:7]: Missing ':' in Entry.");
+    assert_eq!(doc.to_json_string(), r#"{"foo": ?}"#);
+    assert_eq!(doc.debug_print(), r#"3(3({3("foo": ?)}))"#);
 
     unsafe { VERSION = 4 }
 
-    document.write(
+    let cluster = doc.write(
         6..6,
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
     );
     assert_eq!(
-        document.substring(..),
+        doc.substring(cluster.site_ref_span(&doc)),
+        r#""foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
+    );
+    assert_eq!(
+        doc.substring(..),
         r#"{"foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
-    assert_eq!(document.debug_errors(), "[1:7]: Missing ':' in Entry.");
+    assert_eq!(doc.debug_errors(), "[1:7]: Missing ':' in Entry.");
     assert_eq!(
-        document.to_json_string(),
+        doc.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
-        document.debug_print(),
+        doc.debug_print(),
         r#"3(3({4("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
     );
 
     unsafe { VERSION = 5 }
 
-    document.write(6..6, r#" :"#);
+    let cluster = doc.write(6..6, r#" :"#);
     assert_eq!(
-        document.substring(..),
+        doc.substring(cluster.site_ref_span(&doc)),
+        r#""foo" :[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
+    );
+    assert_eq!(
+        doc.substring(..),
         r#"{"foo" :[1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
-    assert_eq!(document.debug_errors(), "");
+    assert_eq!(doc.debug_errors(), "");
     assert_eq!(
-        document.to_json_string(),
+        doc.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
-        document.debug_print(),
+        doc.debug_print(),
         r#"3(3({5("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
     );
 
     unsafe { VERSION = 6 }
 
-    document.write(6..8, r#": "#);
+    let cluster = doc.write(6..8, r#": "#);
     assert_eq!(
-        document.substring(..),
+        doc.substring(cluster.site_ref_span(&doc)),
+        r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#
+    );
+    assert_eq!(
+        doc.substring(..),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
-        document.to_json_string(),
+        doc.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(
-        document.debug_print(),
+        doc.debug_print(),
         r#"3(3({6("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
     );
 
     unsafe { VERSION = 7 }
 
-    document.write(8..34, r#""#);
+    let cluster = doc.write(8..34, r#""#);
     assert_eq!(
-        document.substring(..),
+        doc.substring(cluster.site_ref_span(&doc)),
         r#"{"foo": {"a": "xyz", "b": null}]}"#
     );
+    assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}]}"#);
+    assert_eq!(doc.debug_errors(), "[1:32]: Missing ',' or '}' in Object.");
+    assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(
-        document.debug_errors(),
-        "[1:32]: Missing ',' or '}' in Object."
-    );
-    assert_eq!(
-        document.to_json_string(),
-        r#"{"foo": {"a": "xyz", "b": null}}"#
-    );
-    assert_eq!(
-        document.debug_print(),
+        doc.debug_print(),
         r#"7(7({7("foo": 4({4("a": 4("xyz")), 4("b": 4(null))}))}))"#
     );
 
     unsafe { VERSION = 8 }
 
-    document.write(31..32, r#""#);
+    let cluster = doc.write(31..32, r#""#);
     assert_eq!(
-        document.substring(..),
+        doc.substring(cluster.site_ref_span(&doc)),
         r#"{"foo": {"a": "xyz", "b": null}}"#
     );
-    assert_eq!(document.debug_errors(), "");
+    assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}}"#);
+    assert_eq!(doc.debug_errors(), "");
+    assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(
-        document.to_json_string(),
-        r#"{"foo": {"a": "xyz", "b": null}}"#
-    );
-    assert_eq!(
-        document.debug_print(),
+        doc.debug_print(),
         r#"8(8({8("foo": 8({4("a": 4("xyz")), 4("b": 4(null))}))}))"#
     );
 
     unsafe { VERSION = 9 }
 
-    document.write(14..14, r#"111, "c": "#);
+    let cluster = doc.write(14..14, r#"111, "c": "#);
     assert_eq!(
-        document.substring(..),
-        r#"{"foo": {"a": 111, "c": "xyz", "b": null}}"#
-    );
-    assert_eq!(document.debug_errors(), "");
-    assert_eq!(
-        document.to_json_string(),
-        r#"{"foo": {"a": 111, "c": "xyz", "b": null}}"#
+        doc.substring(cluster.site_ref_span(&doc)),
+        r#"{"a": 111, "c": "xyz", "b": null}"#
     );
     assert_eq!(
-        document.debug_print(),
+        doc.substring(..),
+        r#"{"foo": {"a": 111, "c": "xyz", "b": null}}"#
+    );
+    assert_eq!(doc.debug_errors(), "");
+    assert_eq!(
+        doc.to_json_string(),
+        r#"{"foo": {"a": 111, "c": "xyz", "b": null}}"#
+    );
+    assert_eq!(
+        doc.debug_print(),
         r#"8(8({8("foo": 9({9("a": 9(111)), 9("c": 4("xyz")), 4("b": 4(null))}))}))"#
     );
 }

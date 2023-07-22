@@ -242,7 +242,7 @@ impl ClusterRef {
     }
 
     #[inline(always)]
-    pub fn span(&self, tree: &impl SyntaxTree) -> SiteRefSpan {
+    pub fn site_ref_span(&self, tree: &impl SyntaxTree) -> SiteRefSpan {
         if self.id != tree.id() {
             return SiteRef::nil()..SiteRef::nil();
         }
