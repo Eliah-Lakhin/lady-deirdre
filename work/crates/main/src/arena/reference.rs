@@ -89,10 +89,13 @@ pub enum Ref {
 impl Debug for Ref {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        match &self {
-            Ref::Nil => formatter.write_str("Ref(Nil)"),
-
-            _ => formatter.write_str("Ref"),
+        match self {
+            Ref::Nil => formatter.write_str("Nil"),
+            Ref::Primary => formatter.write_str("Primary"),
+            Ref::Sequence { index } => formatter.write_fmt(format_args!("Ref({index})")),
+            Ref::Repository { index, version } => {
+                formatter.write_fmt(format_args!("Ref({index}:{version})"))
+            }
         }
     }
 }

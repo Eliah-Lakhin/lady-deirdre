@@ -36,12 +36,22 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    arena::Ref,
     lexis::{SiteSpan, SourceCode, ToSpan},
     std::*,
-    syntax::{ClusterRef, Node, SyntaxTree, TreeContent},
+    syntax::{ClusterRef, Node, NodeRef, SyntaxTree, TreeContent},
 };
 
 impl ClusterRef {
+    #[inline(always)]
+    pub fn primary_node_ref(&self) -> NodeRef {
+        NodeRef {
+            id: self.id,
+            cluster_ref: self.cluster_ref,
+            node_ref: Ref::Primary,
+        }
+    }
+
     #[inline(always)]
     pub fn site_span<N: Node>(
         &self,

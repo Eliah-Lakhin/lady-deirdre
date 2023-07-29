@@ -367,7 +367,10 @@ impl Debug for ErrorRef {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
-            false => formatter.write_fmt(format_args!("ErrorRef({:?})", self.id())),
+            false => formatter.write_fmt(format_args!(
+                "ErrorRef(ref: {:?}, cluster: {:?}, id: {:?})",
+                self.error_ref, self.cluster_ref, self.id,
+            )),
             true => formatter.write_str("ErrorRef(Nil)"),
         }
     }

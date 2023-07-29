@@ -68,6 +68,7 @@ pub use ::core::{
     default::Default,
     file,
     fmt::{Arguments as FmtArguments, Debug, Display, Formatter, Result as FmtResult},
+    format_args,
     hint::unreachable_unchecked,
     iter::{
         Copied,
@@ -148,6 +149,7 @@ pub use std::{
         Result as FmtResult,
     },
     format,
+    format_args,
     hint::unreachable_unchecked,
     iter::{
         Copied,

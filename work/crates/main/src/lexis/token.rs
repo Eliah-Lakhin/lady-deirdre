@@ -347,7 +347,10 @@ impl Debug for TokenRef {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
-            false => formatter.write_fmt(format_args!("TokenRef({:?})", self.id())),
+            false => formatter.write_fmt(format_args!(
+                "TokenRef(ref: {:?}, id: {:?})",
+                self.chunk_ref, self.id,
+            )),
             true => formatter.write_str("TokenRef(Nil)"),
         }
     }

@@ -348,7 +348,10 @@ impl Debug for NodeRef {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
-            false => formatter.write_fmt(format_args!("NodeRef({:?})", self.id())),
+            false => formatter.write_fmt(format_args!(
+                "NodeRef(ref: {:?}, cluster: {:?}, id: {:?})",
+                self.node_ref, self.cluster_ref, self.id,
+            )),
             true => formatter.write_str("NodeRef(Nil)"),
         }
     }

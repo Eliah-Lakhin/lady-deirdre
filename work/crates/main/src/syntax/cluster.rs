@@ -160,7 +160,10 @@ impl Debug for ClusterRef {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
-            false => formatter.write_fmt(format_args!("ClusterRef({:?})", self.id())),
+            false => formatter.write_fmt(format_args!(
+                "ClusterRef(ref: {:?}, id: {:?})",
+                self.cluster_ref, self.id,
+            )),
             true => formatter.write_str("ClusterRef(Nil)"),
         }
     }
