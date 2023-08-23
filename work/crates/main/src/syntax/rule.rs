@@ -42,24 +42,24 @@ use crate::{std::*, syntax::Node};
 /// The exact values of this type are uniquely specified by the particular
 /// [`syntax parsing algorithm`](crate::syntax::Node::parse) except the [ROOT_RULE] that is always
 /// specifies grammar's an entry rule.
-pub type RuleIndex = u16;
+pub type NodeRule = u16;
 
-pub static EMPTY_RULE_SET: RuleSet = RuleSet::empty();
+pub static EMPTY_RULE_SET: NodeSet = NodeSet::empty();
 
 /// A syntax grammar entry rule.
 ///
 /// See [`syntax parser algorithm specification`](crate::syntax::Node::parse) for details.
-pub const ROOT_RULE: RuleIndex = 0;
+pub const ROOT_RULE: NodeRule = 0;
 
-pub const NON_RULE: RuleIndex = RuleIndex::MAX;
+pub const NON_RULE: NodeRule = NodeRule::MAX;
 
 #[repr(transparent)]
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
-pub struct RuleSet {
-    vector: [RuleIndex; Self::LIMIT],
+pub struct NodeSet {
+    vector: [NodeRule; Self::LIMIT],
 }
 
-impl Debug for RuleSet {
+impl Debug for NodeSet {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         let mut debug_list = formatter.debug_list();
@@ -82,19 +82,19 @@ impl Debug for RuleSet {
     }
 }
 
-impl<'set> IntoIterator for &'set RuleSet {
-    type Item = RuleIndex;
-    type IntoIter = RuleSetIter<'set>;
+impl<'set> IntoIterator for &'set NodeSet {
+    type Item = NodeRule;
+    type IntoIter = NodeSetIter<'set>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
-        RuleSetIter { set: self, next: 0 }
+        NodeSetIter { set: self, next: 0 }
     }
 }
 
-impl FromIterator<RuleIndex> for RuleSet {
+impl FromIterator<NodeRule> for NodeSet {
     #[inline(always)]
-    fn from_iter<I: IntoIterator<Item = RuleIndex>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = NodeRule>>(iter: I) -> Self {
         let mut result = Self::empty();
 
         for rule in iter {
@@ -105,7 +105,7 @@ impl FromIterator<RuleIndex> for RuleSet {
     }
 }
 
-impl RuleSet {
+impl NodeSet {
     pub const LIMIT: usize = 16;
 
     #[inline(always)]
@@ -116,12 +116,12 @@ impl RuleSet {
     }
 
     #[inline(always)]
-    pub const fn new(rules: &[RuleIndex]) -> Self {
+    pub const fn new(rules: &[NodeRule]) -> Self {
         Self::empty().include_all(rules)
     }
 
     #[inline(always)]
-    pub const fn contains(&self, rule: RuleIndex) -> bool {
+    pub const fn contains(&self, rule: NodeRule) -> bool {
         if rule == NON_RULE {
             return false;
         }
@@ -146,7 +146,7 @@ impl RuleSet {
     }
 
     #[inline(always)]
-    pub const fn include(mut self, mut rule: RuleIndex) -> Self {
+    pub const fn include(mut self, mut rule: NodeRule) -> Self {
         if rule == NON_RULE {
             panic!("Non-rule cannot be inserted into the rule set.");
         }
@@ -183,7 +183,7 @@ impl RuleSet {
     }
 
     #[inline(always)]
-    pub const fn include_all(mut self, rules: &[RuleIndex]) -> Self {
+    pub const fn include_all(mut self, rules: &[NodeRule]) -> Self {
         let mut slice_index = 0;
 
         while slice_index < rules.len() {
@@ -195,7 +195,7 @@ impl RuleSet {
     }
 
     #[inline(always)]
-    pub const fn exclude(mut self, rule: RuleIndex) -> Self {
+    pub const fn exclude(mut self, rule: NodeRule) -> Self {
         if rule == NON_RULE {
             return self;
         }
@@ -237,7 +237,7 @@ impl RuleSet {
     }
 
     #[inline(always)]
-    pub const fn exclude_all(mut self, rules: &[RuleIndex]) -> Self {
+    pub const fn exclude_all(mut self, rules: &[NodeRule]) -> Self {
         let mut slice_index = 0;
 
         while slice_index < rules.len() {
@@ -270,14 +270,14 @@ impl RuleSet {
 
     #[inline(always)]
     pub fn display<N: Node>(&self) -> impl Display + '_ {
-        pub struct DisplayRuleSet<'set, N> {
-            set: &'set RuleSet,
+        pub struct DisplayNodeSet<'set, N> {
+            set: &'set NodeSet,
             _token: PhantomData<N>,
         }
 
-        impl<'set, N: Node> Display for DisplayRuleSet<'set, N> {
+        impl<'set, N: Node> Display for DisplayNodeSet<'set, N> {
             fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-                let mut vector = Vec::with_capacity(RuleSet::LIMIT);
+                let mut vector = Vec::with_capacity(NodeSet::LIMIT);
 
                 for rule in self.set {
                     if let Some(description) = N::describe(rule) {
@@ -291,23 +291,23 @@ impl RuleSet {
             }
         }
 
-        DisplayRuleSet {
+        DisplayNodeSet {
             set: self,
             _token: PhantomData::<N>,
         }
     }
 }
 
-pub struct RuleSetIter<'set> {
-    set: &'set RuleSet,
+pub struct NodeSetIter<'set> {
+    set: &'set NodeSet,
     next: usize,
 }
 
-impl<'set> Iterator for RuleSetIter<'set> {
-    type Item = RuleIndex;
+impl<'set> Iterator for NodeSetIter<'set> {
+    type Item = NodeRule;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next == RuleSet::LIMIT {
+        if self.next == NodeSet::LIMIT {
             return None;
         }
 
@@ -323,4 +323,4 @@ impl<'set> Iterator for RuleSetIter<'set> {
     }
 }
 
-impl<'set> FusedIterator for RuleSetIter<'set> {}
+impl<'set> FusedIterator for NodeSetIter<'set> {}

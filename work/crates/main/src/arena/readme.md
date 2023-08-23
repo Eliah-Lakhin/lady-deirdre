@@ -20,7 +20,7 @@ As a rule of thumb you can implement an [Identifiable] trait for your Container,
 so it would be easier for your users to distinct between Container instances.
 
 ```rust
-use lady_deirdre::arena::{Id, Identifiable, Repository, Sequence, Ref};
+use lady_deirdre::arena::{Id, Identifiable, Repository, Sequence, Entry};
 
 pub struct IntStorage {
     id: Id,
@@ -46,7 +46,7 @@ impl IntStorage {
         //
         // Returning value is always uniquely identifies the Item across other
         // "self.set" items.
-        let inner_ref = self.inner.insert(item);
+        let entry = self.inner.insert(item);
 
         // This is a "weak" reference to a corresponding Item stored in the
         // `IntStorage` collection.
@@ -61,7 +61,7 @@ impl IntStorage {
         // cleanup approaches.
         IntRef {
             id: self.id,
-            inner_ref,
+            entry,
         }
     }
 }
@@ -71,7 +71,7 @@ impl IntStorage {
 #[derive(Clone, Copy)]
 pub struct IntRef {
     id: Id,
-    inner_ref: Ref,
+    entry: Entry,
 }
 
 impl Identifiable for IntRef {
@@ -93,7 +93,7 @@ impl IntRef {
 
         // Returns "Some" if referred Item still exists in this Repository,
         // otherwise returns "None"(IntRef weak reference considered obsolete).
-        storage.inner.get(&self.inner_ref)
+        storage.inner.get(&self.entry)
     }
 
     // Returns removed Item from provided IntStorage instance if the referred
@@ -106,7 +106,7 @@ impl IntRef {
             return None;
         }
 
-        storage.inner.remove(&self.inner_ref)
+        storage.inner.remove(&self.entry)
     }
 }
 ```

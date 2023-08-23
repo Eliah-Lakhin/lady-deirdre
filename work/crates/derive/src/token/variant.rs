@@ -63,16 +63,17 @@ use crate::{
     utils::error,
 };
 
-pub(super) type TokenIndex = u8;
+pub(super) type TokenRule = u8;
 
-pub(super) const EOI: TokenIndex = 0;
-pub(super) const MISMATCH: TokenIndex = 1;
+pub(super) const EOI: TokenRule = 0;
+pub(super) const MISMATCH: TokenRule = 1;
 
 pub(super) struct TokenVariant {
     pub(super) ident: Ident,
     pub(super) index: Option<u8>,
     pub(super) rule: Option<(Span, Regex)>,
     pub(super) automata: Option<TokenAutomata>,
+    //todo turn to Expr
     pub(super) constructor: Option<Ident>,
     pub(super) priority: isize,
     pub(super) description: LitStr,

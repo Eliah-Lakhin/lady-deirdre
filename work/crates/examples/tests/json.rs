@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{CodeContent, TokenBuffer, TokenRef},
-    syntax::{Node, NodeRef, ParseError, TreeContent},
+    syntax::{Child, Node, NodeRef, ParseError, TreeContent},
     Document,
 };
 use lady_deirdre_examples::json::{formatter::ToJsonString, lexis::JsonToken, syntax::JsonNode};
@@ -73,7 +73,7 @@ fn test_json_errors_1() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:2]..[1:5]: Missing Entry or '}' in Object.",
+        "1:2..1:5: Missing Entry or '}' in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -95,7 +95,7 @@ fn test_json_errors_2() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:15]: Missing ',' in Array.",
+        "1:15: Missing ',' in Array.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -117,7 +117,7 @@ fn test_json_errors_3() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:15]..[1:16]: Array format mismatch. Expected Array, False, Null, Number, Object, String, True.",
+        "1:15..1:16: Array format mismatch. Expected Array, False, Null, Number, Object, String, True.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -139,8 +139,8 @@ fn test_json_errors_4() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:38]..[1:44]: Missing ',' or ']' in Array.\n\
-        [1:50]..[1:56]: Missing ',' or ']' in Array.",
+        "1:38..1:44: Missing ',' or ']' in Array.\n\
+        1:50..1:56: Missing ',' or ']' in Array.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -160,7 +160,7 @@ fn test_json_errors_5() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:24]..[1:25]: Missing Entry in Object.",
+        "1:24..1:25: Missing Entry in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -180,8 +180,8 @@ fn test_json_errors_6() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:18]: Entry format mismatch. Expected Array, False, Null, Number, Object, String, True.\n\
-        [1:18]: Missing ',' or '}' in Object.",
+        "1:18: Entry format mismatch. Expected Array, False, Null, Number, Object, String, True.\n\
+        1:18: Missing ',' or '}' in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -203,11 +203,11 @@ fn test_json_errors_7() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "[1:19]..[1:20]: Array format mismatch. Expected Array, False, Null, Number, Object, String, True, ']'.\n\
-        [1:24]..[1:30]: Missing ',' or ']' in Array.\n\
-        [1:49]..[1:58]: Missing ':' in Entry.\n\
-        [1:67]: Missing ',' or ']' in Array.\n\
-        [1:67]: Missing ',' or '}' in Object.",
+        "1:19..1:20: Array format mismatch. Expected Array, False, Null, Number, Object, String, True, ']'.\n\
+        1:24..1:30: Missing ',' or ']' in Array.\n\
+        1:49..1:58: Missing ':' in Entry.\n\
+        1:67: Missing ',' or ']' in Array.\n\
+        1:67: Missing ',' or '}' in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -219,7 +219,7 @@ fn test_json_errors_7() {
 fn test_json_incremental() {
     static mut VERSION: usize = 0;
 
-    #[derive(Node, Clone)]
+    #[derive(Node, Clone, Debug)]
     #[token(JsonToken)]
     #[error(ParseError)]
     #[trivia($Whitespace)]
@@ -234,8 +234,13 @@ fn test_json_incremental() {
         #[root]
         #[rule(object: Object)]
         Root {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
+            #[child]
             object: NodeRef,
         },
 
@@ -245,16 +250,27 @@ fn test_json_incremental() {
             [$BracketOpen..$BracketClose],
         )]
         Object {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
+            #[child]
             entries: Vec<NodeRef>,
         },
 
         #[rule(key: $String & $Colon & value: ANY)]
         Entry {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
+            #[child]
             key: TokenRef,
+            #[child]
             value: NodeRef,
         },
 
@@ -264,39 +280,66 @@ fn test_json_incremental() {
             [$BracketOpen..$BracketClose],
         )]
         Array {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
+            #[child]
             items: Vec<NodeRef>,
         },
 
         #[rule(value: $String)]
         String {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
+            #[child]
             value: TokenRef,
         },
 
         #[rule(value: $Number)]
         Number {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
+            #[child]
             value: TokenRef,
         },
 
         #[rule($True)]
         True {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
         },
 
         #[rule($False)]
         False {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
         },
 
         #[rule($Null)]
         Null {
+            #[parent]
+            parent_ref: NodeRef,
+            #[node]
+            node_ref: NodeRef,
             #[default(unsafe { VERSION })]
             version: usize,
         },
@@ -310,36 +353,62 @@ fn test_json_incremental() {
 
     impl DebugPrint for Document<DebugNode> {
         fn debug_print(&self) -> String {
-            fn traverse(document: &Document<DebugNode>, node_ref: &NodeRef) -> String {
-                let node = match node_ref.deref(document) {
+            fn traverse(
+                document: &Document<DebugNode>,
+                node_ref: &NodeRef,
+                parent_ref: &NodeRef,
+            ) -> String {
+                let node: &DebugNode = match node_ref.deref(document) {
                     None => return format!("?"),
                     Some(node) => node,
                 };
 
+                assert_eq!(&node.node_ref(), node_ref);
+
+                assert_eq!(&node.parent_ref(), parent_ref);
+
                 match node {
-                    DebugNode::Root { version, object } => {
-                        format!("{}({})", version, traverse(document, object))
+                    DebugNode::Root {
+                        version, object, ..
+                    } => {
+                        assert_eq!(
+                            node.children(),
+                            vec![("object", Child::from(object))].into_iter().collect(),
+                        );
+                        format!("{}({})", version, traverse(document, object, node_ref))
                     }
 
-                    DebugNode::Object { version, entries } => {
+                    DebugNode::Object {
+                        version, entries, ..
+                    } => {
+                        assert_eq!(
+                            node.children(),
+                            vec![("entries", Child::from(entries))]
+                                .into_iter()
+                                .collect(),
+                        );
                         format!(
                             "{}({{{}}})",
                             version,
                             entries
                                 .into_iter()
-                                .map(|node_ref| traverse(document, node_ref))
+                                .map(|entry_ref| traverse(document, entry_ref, node_ref))
                                 .collect::<Vec<_>>()
                                 .join(", "),
                         )
                     }
 
-                    DebugNode::Array { version, items } => {
+                    DebugNode::Array { version, items, .. } => {
+                        assert_eq!(
+                            node.children(),
+                            vec![("items", Child::from(items))].into_iter().collect(),
+                        );
                         format!(
                             "{}([{}])",
                             version,
                             items
                                 .into_iter()
-                                .map(|node_ref| traverse(document, node_ref))
+                                .map(|item_ref| traverse(document, item_ref, node_ref))
                                 .collect::<Vec<_>>()
                                 .join(", "),
                         )
@@ -349,28 +418,40 @@ fn test_json_incremental() {
                         version,
                         key,
                         value,
+                        ..
                     } => {
+                        assert_eq!(
+                            node.children(),
+                            vec![("key", Child::from(key)), ("value", Child::from(value))]
+                                .into_iter()
+                                .collect(),
+                        );
                         format!(
                             "{}({:#}: {})",
                             version,
                             key.string(document).unwrap_or("?"),
-                            traverse(document, value),
+                            traverse(document, value, node_ref),
                         )
                     }
 
-                    DebugNode::String { version, value } | DebugNode::Number { version, value } => {
+                    DebugNode::String { version, value, .. }
+                    | DebugNode::Number { version, value, .. } => {
+                        assert_eq!(
+                            node.children(),
+                            vec![("value", Child::from(value))].into_iter().collect(),
+                        );
                         format!("{}({})", version, value.string(document).unwrap_or("?"))
                     }
 
-                    DebugNode::True { version } => format!("{}(true)", version),
+                    DebugNode::True { version, .. } => format!("{}(true)", version),
 
-                    DebugNode::False { version } => format!("{}(false)", version),
+                    DebugNode::False { version, .. } => format!("{}(false)", version),
 
-                    DebugNode::Null { version } => format!("{}(null)", version),
+                    DebugNode::Null { version, .. } => format!("{}(null)", version),
                 }
             }
 
-            traverse(self, &self.root_node_ref())
+            traverse(self, &self.root_node_ref(), &NodeRef::nil())
         }
 
         fn debug_errors(&self) -> String {
@@ -385,22 +466,22 @@ fn test_json_incremental() {
 
     let mut doc = Document::<DebugNode>::from("");
     assert_eq!(doc.substring(..), r#""#);
-    assert_eq!(doc.debug_errors(), "[1:1]: Missing Object in Root.",);
+    assert_eq!(doc.debug_errors(), "1:1: Missing Object in Root.",);
     assert_eq!(doc.to_json_string(), r#"?"#);
     assert_eq!(doc.debug_print(), r#"0(?)"#);
 
     unsafe { VERSION = 1 }
 
-    let cluster = doc.write(0..0, "{");
+    let cluster = doc.write(0..0, "{").cluster();
     assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{"#);
     assert_eq!(doc.substring(..), r#"{"#);
-    assert_eq!(doc.debug_errors(), "[1:2]: Missing Entry or '}' in Object.",);
+    assert_eq!(doc.debug_errors(), "1:2: Missing Entry or '}' in Object.",);
     assert_eq!(doc.to_json_string(), r#"{}"#);
     assert_eq!(doc.debug_print(), r#"1(1({}))"#);
 
     unsafe { VERSION = 2 }
 
-    let cluster = doc.write(1..1, "}");
+    let cluster = doc.write(1..1, "}").cluster();
     assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{}"#);
     assert_eq!(doc.substring(..), r#"{}"#);
     assert_eq!(doc.to_json_string(), r#"{}"#);
@@ -408,19 +489,21 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 3 }
 
-    let cluster = doc.write(1..1, r#""foo""#);
+    let cluster = doc.write(1..1, r#""foo""#).cluster();
     assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{"foo"}"#);
     assert_eq!(doc.substring(..), r#"{"foo"}"#);
-    assert_eq!(doc.debug_errors(), "[1:7]: Missing ':' in Entry.");
+    assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(doc.to_json_string(), r#"{"foo": ?}"#);
     assert_eq!(doc.debug_print(), r#"3(3({3("foo": ?)}))"#);
 
     unsafe { VERSION = 4 }
 
-    let cluster = doc.write(
-        6..6,
-        r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-    );
+    let cluster = doc
+        .write(
+            6..6,
+            r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        )
+        .cluster();
     assert_eq!(
         doc.substring(cluster.site_ref_span(&doc)),
         r#""foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
@@ -429,7 +512,7 @@ fn test_json_incremental() {
         doc.substring(..),
         r#"{"foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
-    assert_eq!(doc.debug_errors(), "[1:7]: Missing ':' in Entry.");
+    assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(
         doc.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
@@ -441,7 +524,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 5 }
 
-    let cluster = doc.write(6..6, r#" :"#);
+    let cluster = doc.write(6..6, r#" :"#).cluster();
     assert_eq!(
         doc.substring(cluster.site_ref_span(&doc)),
         r#""foo" :[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
@@ -462,7 +545,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 6 }
 
-    let cluster = doc.write(6..8, r#": "#);
+    let cluster = doc.write(6..8, r#": "#).cluster();
     assert_eq!(
         doc.substring(cluster.site_ref_span(&doc)),
         r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#
@@ -482,13 +565,13 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 7 }
 
-    let cluster = doc.write(8..34, r#""#);
+    let cluster = doc.write(8..34, r#""#).cluster();
     assert_eq!(
         doc.substring(cluster.site_ref_span(&doc)),
         r#"{"foo": {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}]}"#);
-    assert_eq!(doc.debug_errors(), "[1:32]: Missing ',' or '}' in Object.");
+    assert_eq!(doc.debug_errors(), "1:32: Missing ',' or '}' in Object.");
     assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(
         doc.debug_print(),
@@ -497,7 +580,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 8 }
 
-    let cluster = doc.write(31..32, r#""#);
+    let cluster = doc.write(31..32, r#""#).cluster();
     assert_eq!(
         doc.substring(cluster.site_ref_span(&doc)),
         r#"{"foo": {"a": "xyz", "b": null}}"#
@@ -512,7 +595,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 9 }
 
-    let cluster = doc.write(14..14, r#"111, "c": "#);
+    let cluster = doc.write(14..14, r#"111, "c": "#).cluster();
     assert_eq!(
         doc.substring(cluster.site_ref_span(&doc)),
         r#"{"a": 111, "c": "xyz", "b": null}"#

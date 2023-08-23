@@ -40,9 +40,10 @@ extern crate lady_deirdre_derive;
 pub use lady_deirdre_derive::Token;
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
-    lexis::{Chunk, Length, LexisSession, Site, SiteRef, SourceCode, TokenIndex},
+    arena::{Entry, Id, Identifiable},
+    lexis::{Chunk, Length, LexisSession, Site, SiteRef, SourceCode, TokenRule},
     std::*,
+    syntax::{NodeRef, PolyRef, PolyVariant, RefKind},
 };
 
 /// A number of Tokens.
@@ -172,7 +173,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
     /// use lady_deirdre::lexis::{
     ///     Token,
     ///     TokenBuffer,
-    ///     TokenIndex,
+    ///     TokenRule,
     ///     CodeContent,
     ///     LexisSession,
     ///     Chunk,
@@ -244,12 +245,21 @@ pub trait Token: Copy + Eq + Sized + 'static {
     ///         Self::Mismatch
     ///     }
     ///
-    ///     fn index(self) -> TokenIndex {
+    ///     fn rule(self) -> TokenRule {
     ///         self as u8
     ///     }
     ///
-    ///     fn describe(index: TokenIndex) -> Option<&'static str> {
+    ///     fn name(index: TokenRule) -> Option<&'static str> {
     ///         match index {
+    ///             0 => Some("Mismatch"),
+    ///             1 => Some("Num"),
+    ///             2 => Some("Word"),
+    ///             _ => None,
+    ///         }
+    ///     }
+    ///
+    ///     fn describe(rule: TokenRule) -> Option<&'static str> {
+    ///         match rule {
     ///             0 => Some("<mismatch>"),
     ///             1 => Some("<num>"),
     ///             2 => Some("<word>"),
@@ -279,9 +289,11 @@ pub trait Token: Copy + Eq + Sized + 'static {
 
     fn mismatch() -> Self;
 
-    fn index(self) -> TokenIndex;
+    fn rule(self) -> TokenRule;
 
-    fn describe(index: TokenIndex) -> Option<&'static str>;
+    fn name(rule: TokenRule) -> Option<&'static str>;
+
+    fn describe(rule: TokenRule) -> Option<&'static str>;
 }
 
 /// A weak reference of the [Token] and its [Chunk](crate::lexis::Chunk) metadata inside the source
@@ -337,10 +349,10 @@ pub struct TokenRef {
     /// An internal weak reference of the token's Chunk into
     /// the [SourceCode](crate::lexis::SourceCode) instance.
     ///
-    /// This low-level [Ref](crate::arena::Ref) object used by the TokenRef under the hood to
+    /// This low-level [Ref](crate::arena::Entry) object used by the TokenRef under the hood to
     /// fetch particular values from the SourceCode dereferencing functions(e.g.
     /// [`SourceCode::get_token`](crate::lexis::SourceCode::get_token)).
-    pub chunk_ref: Ref,
+    pub chunk_entry: Entry,
 }
 
 impl Debug for TokenRef {
@@ -348,8 +360,8 @@ impl Debug for TokenRef {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
-                "TokenRef(ref: {:?}, id: {:?})",
-                self.chunk_ref, self.id,
+                "TokenRef(id: {:?}, chunk_entry: {:?})",
+                self.chunk_entry, self.id,
             )),
             true => formatter.write_str("TokenRef(Nil)"),
         }
@@ -363,6 +375,35 @@ impl Identifiable for TokenRef {
     }
 }
 
+impl PolyRef for TokenRef {
+    #[inline(always)]
+    fn kind(&self) -> RefKind {
+        RefKind::Token
+    }
+
+    #[inline(always)]
+    fn is_nil(&self) -> bool {
+        self.id.is_nil() || self.chunk_entry.is_nil()
+    }
+
+    #[inline(always)]
+    fn as_variant(&self) -> PolyVariant {
+        PolyVariant::Token(*self)
+    }
+
+    #[inline(always)]
+    fn as_token_ref(&self) -> &TokenRef {
+        self
+    }
+
+    #[inline(always)]
+    fn as_node_ref(&self) -> &NodeRef {
+        static NIL: NodeRef = NodeRef::nil();
+
+        &NIL
+    }
+}
+
 impl TokenRef {
     /// Returns an invalid instance of the TokenRef.
     ///
@@ -371,22 +412,8 @@ impl TokenRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            chunk_ref: Ref::Nil,
+            chunk_entry: Entry::Nil,
         }
-    }
-
-    /// Returns `true` if this instance will never resolve to valid [Token] or
-    /// [token metadata](crate::lexis::Chunk).
-    ///
-    /// It is guaranteed that `TokenRef::nil().is_nil()` is always `true`, but in general if
-    /// this function returns `false` it is not guaranteed that provided instance is a valid
-    /// reference.
-    ///
-    /// To determine reference validity per specified [SourceCode](crate::lexis::SourceCode)
-    /// instance use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) function instead.
-    #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.chunk_ref.is_nil()
     }
 
     /// Immutably dereferences weakly referred [Token](crate::lexis::Token) of specified
@@ -404,7 +431,7 @@ impl TokenRef {
             return None;
         }
 
-        code.get_token(&self.chunk_ref)
+        code.get_token(&self.chunk_entry)
     }
 
     /// Returns a [Chunk](crate::lexis::Chunk) overall token metadata object of the weakly
@@ -425,10 +452,10 @@ impl TokenRef {
             return None;
         }
 
-        let token = code.get_token(&self.chunk_ref)?;
-        let site = code.get_site(&self.chunk_ref)?;
-        let length = code.get_length(&self.chunk_ref)?;
-        let string = code.get_string(&self.chunk_ref)?;
+        let token = code.get_token(&self.chunk_entry)?;
+        let site = code.get_site(&self.chunk_entry)?;
+        let length = code.get_length(&self.chunk_entry)?;
+        let string = code.get_string(&self.chunk_entry)?;
 
         Some(Chunk {
             token,
@@ -453,7 +480,7 @@ impl TokenRef {
             return None;
         }
 
-        code.get_site(&self.chunk_ref)
+        code.get_site(&self.chunk_entry)
     }
 
     /// Returns a token string of the weakly referred token from specified
@@ -474,7 +501,7 @@ impl TokenRef {
             return None;
         }
 
-        code.get_string(&self.chunk_ref)
+        code.get_string(&self.chunk_entry)
     }
 
     /// Returns a number of Unicode characters of the string of the weakly referred token from
@@ -492,7 +519,7 @@ impl TokenRef {
             return None;
         }
 
-        code.get_length(&self.chunk_ref)
+        code.get_length(&self.chunk_entry)
     }
 
     /// Returns `true` if and only if referred weak Token reference belongs to specified
@@ -506,7 +533,7 @@ impl TokenRef {
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, code: &impl SourceCode) -> bool {
-        self.id == code.id() && code.contains_chunk(&self.chunk_ref)
+        self.id == code.id() && code.contains_chunk(&self.chunk_entry)
     }
 
     /// Turns this weak reference into the Token string first character weak reference of the

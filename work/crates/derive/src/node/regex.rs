@@ -526,6 +526,18 @@ impl ExpressionOperand<Operator> for Operand {
             if input.peek(Token![:]) {
                 let _ = input.parse::<Token![:]>()?;
 
+                let name = ident.to_string();
+
+                let fits = match ident.to_string().as_str() {
+                    "node" | "node_ref" | "parent" | "parent_ref" | "child" | "rule"
+                    | "constructor" | "default" | "session" | "skip_trivia" => false,
+                    _ => !name.starts_with("parse_"),
+                };
+
+                if !fits {
+                    return Err(error!(ident.span(), "This word is reserved.",));
+                }
+
                 let lookahead = input.lookahead1();
 
                 if input.peek(Token![$]) {

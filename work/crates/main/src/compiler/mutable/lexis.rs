@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    compiler::mutable::storage::ChildRefIndex,
+    compiler::mutable::storage::ChildCursor,
     lexis::{ByteIndex, Length, LexisSession, Site, Token, TokenCount, CHUNK_SIZE},
     report::{debug_assert, debug_assert_ne, debug_unreachable, system_panic},
     std::*,
@@ -111,7 +111,7 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
     pub(super) unsafe fn run(
         product_capacity: TokenCount,
         input: SessionInput<'source>,
-        tail: ChildRefIndex<N>,
+        tail: ChildCursor<N>,
     ) -> SessionOutput<N> {
         let last = match input.len().checked_sub(1) {
             Some(last) => last,
@@ -259,7 +259,7 @@ pub(super) struct SessionOutput<N: Node> {
     pub(super) indices: Vec<ByteIndex>,
     pub(super) tokens: Vec<N::Token>,
     pub(super) text: String,
-    pub(super) tail: ChildRefIndex<N>,
+    pub(super) tail: ChildCursor<N>,
     pub(super) overlap: Length,
 }
 
@@ -290,7 +290,7 @@ struct Cursor<N: Node> {
     index: usize,
     byte: ByteIndex,
     site: Site,
-    tail: ChildRefIndex<N>,
+    tail: ChildCursor<N>,
     overlap: Length,
 }
 
@@ -528,17 +528,17 @@ fn substring_to<N: Node>(
         return;
     }
 
-    let mut chunk_ref = from.tail;
+    let mut chunk_cursor = from.tail;
 
     for index in from.index..=to.index {
         let string = match index < input.len() {
             true => unsafe { *input.get_unchecked(index) },
 
-            false => match chunk_ref.is_dangling() {
+            false => match chunk_cursor.is_dangling() {
                 false => {
-                    let string = unsafe { chunk_ref.string() };
+                    let string = unsafe { chunk_cursor.string() };
 
-                    unsafe { chunk_ref.next() };
+                    unsafe { chunk_cursor.next() };
 
                     string
                 }

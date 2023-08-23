@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
+    arena::{Entry, Id, Identifiable},
     compiler::{CompilationUnit, ImmutableUnit, MutableUnit},
     lexis::{
         Length,
@@ -52,7 +52,7 @@ use crate::{
         TokenRef,
     },
     std::*,
-    syntax::{Cluster, ClusterRef, Node, SyntaxTree},
+    syntax::{Cluster, ClusterRef, Node, NodeRef, SyntaxTree},
 };
 
 #[derive(Debug)]
@@ -108,42 +108,42 @@ impl<N: Node> SourceCode for Document<N> {
     type Cursor<'document> = DocumentCursor<'document, N>;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
+    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
         match self {
-            Self::Mutable(unit) => unit.contains_chunk(chunk_ref),
-            Self::Immutable(unit) => unit.contains_chunk(chunk_ref),
+            Self::Mutable(unit) => unit.contains_chunk(chunk_entry),
+            Self::Immutable(unit) => unit.contains_chunk(chunk_entry),
         }
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
+    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
         match self {
-            Self::Mutable(unit) => unit.get_token(chunk_ref),
-            Self::Immutable(unit) => unit.get_token(chunk_ref),
+            Self::Mutable(unit) => unit.get_token(chunk_entry),
+            Self::Immutable(unit) => unit.get_token(chunk_entry),
         }
     }
 
     #[inline(always)]
-    fn get_site(&self, chunk_ref: &Ref) -> Option<Site> {
+    fn get_site(&self, chunk_entry: &Entry) -> Option<Site> {
         match self {
-            Self::Mutable(unit) => unit.get_site(chunk_ref),
-            Self::Immutable(unit) => unit.get_site(chunk_ref),
+            Self::Mutable(unit) => unit.get_site(chunk_entry),
+            Self::Immutable(unit) => unit.get_site(chunk_entry),
         }
     }
 
     #[inline(always)]
-    fn get_string(&self, chunk_ref: &Ref) -> Option<&str> {
+    fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
         match self {
-            Self::Mutable(unit) => unit.get_string(chunk_ref),
-            Self::Immutable(unit) => unit.get_string(chunk_ref),
+            Self::Mutable(unit) => unit.get_string(chunk_entry),
+            Self::Immutable(unit) => unit.get_string(chunk_entry),
         }
     }
 
     #[inline(always)]
-    fn get_length(&self, chunk_ref: &Ref) -> Option<Length> {
+    fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
         match self {
-            Self::Mutable(unit) => unit.get_length(chunk_ref),
-            Self::Immutable(unit) => unit.get_length(chunk_ref),
+            Self::Mutable(unit) => unit.get_length(chunk_entry),
+            Self::Immutable(unit) => unit.get_length(chunk_entry),
         }
     }
 
@@ -184,58 +184,58 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 
     #[inline(always)]
-    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
+    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
         match self {
-            Self::Mutable(unit) => unit.contains_cluster(cluster_ref),
-            Self::Immutable(unit) => unit.contains_cluster(cluster_ref),
+            Self::Mutable(unit) => unit.contains_cluster(cluster_entry),
+            Self::Immutable(unit) => unit.contains_cluster(cluster_entry),
         }
     }
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_ref: &Ref) -> Option<&Cluster<Self::Node>> {
+    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
         match self {
-            Self::Mutable(unit) => unit.get_cluster(cluster_ref),
-            Self::Immutable(unit) => unit.get_cluster(cluster_ref),
+            Self::Mutable(unit) => unit.get_cluster(cluster_entry),
+            Self::Immutable(unit) => unit.get_cluster(cluster_entry),
         }
     }
 
     #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>> {
+    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
         match self {
-            Self::Mutable(unit) => unit.get_cluster_mut(cluster_ref),
-            Self::Immutable(unit) => unit.get_cluster_mut(cluster_ref),
+            Self::Mutable(unit) => unit.get_cluster_mut(cluster_entry),
+            Self::Immutable(unit) => unit.get_cluster_mut(cluster_entry),
         }
     }
 
     #[inline(always)]
-    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
+    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
         match self {
-            Self::Mutable(unit) => unit.get_cluster_span(cluster_ref),
-            Self::Immutable(unit) => unit.get_cluster_span(cluster_ref),
+            Self::Mutable(unit) => unit.get_cluster_span(cluster_entry),
+            Self::Immutable(unit) => unit.get_cluster_span(cluster_entry),
         }
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
+    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry {
         match self {
-            Self::Mutable(unit) => unit.get_previous_cluster(cluster_ref),
-            Self::Immutable(unit) => unit.get_previous_cluster(cluster_ref),
+            Self::Mutable(unit) => unit.get_previous_cluster(cluster_entry),
+            Self::Immutable(unit) => unit.get_previous_cluster(cluster_entry),
         }
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
+    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry {
         match self {
-            Self::Mutable(unit) => unit.get_next_cluster(cluster_ref),
-            Self::Immutable(unit) => unit.get_next_cluster(cluster_ref),
+            Self::Mutable(unit) => unit.get_next_cluster(cluster_entry),
+            Self::Immutable(unit) => unit.get_next_cluster(cluster_entry),
         }
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
+    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
         match self {
-            Self::Mutable(unit) => unit.remove_cluster(cluster_ref),
-            Self::Immutable(unit) => unit.remove_cluster(cluster_ref),
+            Self::Mutable(unit) => unit.remove_cluster(cluster_entry),
+            Self::Immutable(unit) => unit.remove_cluster(cluster_entry),
         }
     }
 }
@@ -297,13 +297,13 @@ impl<N: Node> Document<N> {
     }
 
     #[inline(always)]
-    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) -> ClusterRef {
-        let mutable = match self.as_mutable() {
-            Some(mutable) => mutable,
+    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) -> NodeRef {
+        let unit = match self.as_mutable() {
+            Some(unit) => unit,
             None => panic!("Specified Document is not mutable."),
         };
 
-        mutable.write(span, text)
+        unit.write(span, text)
     }
 
     #[inline(always)]

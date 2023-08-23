@@ -43,7 +43,7 @@ use crate::{
     token::{
         chars::Class,
         input::{ProductMap, Variants},
-        variant::TokenIndex,
+        variant::TokenRule,
     },
     utils::{
         error,
@@ -223,7 +223,7 @@ impl Scope {
 pub(super) enum Terminal {
     Null,
     Class(Class),
-    Product(TokenIndex),
+    Product(TokenRule),
 }
 
 impl AutomataTerminal for Terminal {

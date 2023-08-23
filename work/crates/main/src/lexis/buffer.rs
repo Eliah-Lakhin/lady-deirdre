@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref, Sequence},
+    arena::{Entry, Id, Identifiable, Sequence},
     lexis::{
         cursor::TokenBufferCursor,
         session::{Cursor, SequentialLexisSession},
@@ -163,24 +163,24 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
     type Cursor<'code> = TokenBufferCursor<'code, Self::Token>;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
-        self.tokens.contains(chunk_ref)
+    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
+        self.tokens.contains(chunk_entry)
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
-        self.tokens.get(chunk_ref).copied()
+    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
+        self.tokens.get(chunk_entry).copied()
     }
 
     #[inline(always)]
-    fn get_site(&self, chunk_ref: &Ref) -> Option<Site> {
-        self.sites.get(chunk_ref).copied()
+    fn get_site(&self, chunk_entry: &Entry) -> Option<Site> {
+        self.sites.get(chunk_entry).copied()
     }
 
     #[inline(always)]
-    fn get_string(&self, chunk_ref: &Ref) -> Option<&str> {
-        let index = match chunk_ref {
-            Ref::Sequence { index } => *index,
+    fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
+        let index = match chunk_entry {
+            Entry::Seq { index } => *index,
             _ => return None,
         };
 
@@ -193,8 +193,8 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
     }
 
     #[inline(always)]
-    fn get_length(&self, chunk_ref: &Ref) -> Option<Length> {
-        self.spans.get(chunk_ref).copied()
+    fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
+        self.spans.get(chunk_entry).copied()
     }
 
     #[inline(always)]

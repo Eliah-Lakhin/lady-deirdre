@@ -48,6 +48,7 @@ use syn::{
     DeriveInput,
     Error,
     File,
+    LitStr,
     Result,
     Type,
     Visibility,
@@ -595,7 +596,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
             let mut globals = Globals::default();
 
-            let output = result.compile_skip_function(
+            let output = result.compile_skip_fn(
                 &mut globals,
                 trivia,
                 &Index::Generated(span, 0),
@@ -643,14 +644,8 @@ impl TryFrom<DeriveInput> for NodeInput {
 
                     let mut globals = Globals::default();
 
-                    let output = result.compile_skip_function(
-                        &mut globals,
-                        trivia,
-                        context,
-                        true,
-                        true,
-                        false,
-                    );
+                    let output =
+                        result.compile_skip_fn(&mut globals, trivia, context, true, true, false);
 
                     let output_string = match parse2::<File>(output.clone()) {
                         Ok(file) => ::prettyplease::unparse(&file),
@@ -671,14 +666,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                     let mut globals = Globals::default();
 
                     let output = expect_some!(
-                        variant.compile_parser_function(
-                            &result,
-                            &mut globals,
-                            false,
-                            true,
-                            true,
-                            false
-                        ),
+                        variant.compile_parser_fn(&result, &mut globals, false, true, true, false),
                         "Parser function generation failure.",
                     );
 
@@ -734,7 +722,7 @@ impl ToTokens for NodeInput {
 
         let trivia = match &self.trivia {
             None => None,
-            Some(trivia) => Some(self.compile_skip_function(
+            Some(trivia) => Some(self.compile_skip_fn(
                 &mut globals,
                 trivia,
                 &Index::Generated(span, 0),
@@ -744,9 +732,15 @@ impl ToTokens for NodeInput {
             )),
         };
 
-        let mut indices = Vec::with_capacity(self.variants.len());
-        let mut functions = Vec::with_capacity(self.variants.len());
-        let mut cases = Vec::with_capacity(self.variants.len());
+        let capacity = self.variants.len();
+
+        let mut indices = Vec::with_capacity(capacity);
+        let mut functions = Vec::with_capacity(capacity);
+        let mut cases = Vec::with_capacity(capacity);
+        let mut node_getters = Vec::with_capacity(capacity);
+        let mut parent_getters = Vec::with_capacity(capacity);
+        let mut parent_setters = Vec::with_capacity(capacity);
+        let mut children_getters = Vec::with_capacity(capacity);
 
         let mut by_index = self
             .variants
@@ -766,11 +760,16 @@ impl ToTokens for NodeInput {
                 Some(variant) => variant,
             };
 
+            node_getters.push(variant.inheritance.compile_node_getter());
+            parent_getters.push(variant.inheritance.compile_parent_getter());
+            parent_setters.push(variant.inheritance.compile_parent_setter());
+            children_getters.push(variant.inheritance.compile_children_getter());
+
             if let Some(Index::Named(name, Some(index))) = &variant.index {
                 let span = name.span();
                 let core = span.face_core();
                 indices.push(quote_spanned!(span=>
-                    #vis const #name: #core::syntax::RuleIndex = #index;
+                    #vis const #name: #core::syntax::NodeRule = #index;
                 ))
             }
 
@@ -788,14 +787,7 @@ impl ToTokens for NodeInput {
             }
 
             let function = expect_some!(
-                variant.compile_parser_function(
-                    self,
-                    &mut globals,
-                    true,
-                    false,
-                    output_comments,
-                    true,
-                ),
+                variant.compile_parser_fn(self, &mut globals, true, false, output_comments, true,),
                 "Parsable non-overridden rule without generated parser.",
             );
 
@@ -817,16 +809,29 @@ impl ToTokens for NodeInput {
 
                 let index = expect_some!(variant.index.as_ref(), "Description without index",);
 
-                Some((index, description))
+                Some((index, &variant.ident, description))
             })
             .flatten()
             .collect::<Vec<_>>();
 
-        descriptions.sort_by_key(|(index, _)| index.get());
+        descriptions.sort_by_key(|(index, _, _)| index.get());
 
-        let descriptions = descriptions
+        let get_index = descriptions
+            .iter()
+            .map(|(index, ident, _)| quote_spanned!(index.span() => Self::#ident { .. } => #index,))
+            .collect::<Vec<_>>();
+
+        let (get_name, get_description): (Vec<_>, Vec<_>) = descriptions
             .into_iter()
-            .map(|(index, description)| quote_spanned!(index.span() => #index => #option::Some(#description),));
+            .map(|(index, ident, description)| {
+                let name = LitStr::new(&ident.to_string(), ident.span());
+
+                (
+                    quote_spanned!(index.span() => #index => #option::Some(#name),),
+                    quote_spanned!(index.span() => #index => #option::Some(#description),),
+                )
+            })
+            .unzip();
 
         let globals = globals.compile(span, &self.token);
 
@@ -886,8 +891,8 @@ impl ToTokens for NodeInput {
 
                 #[inline(always)]
                 fn parse<#code>(
-                    rule: #core::syntax::RuleIndex,
                     session: &mut impl #core::syntax::SyntaxSession<#code, Node = Self>,
+                    rule: #core::syntax::NodeRule,
                 ) -> Self
                 {
                     #globals
@@ -901,16 +906,88 @@ impl ToTokens for NodeInput {
                     match rule {
                         #( #cases )*
 
+                        #[allow(unreachable_patterns)]
                         other => #unimplemented("Unsupported rule {}.", other),
                     }
                 }
 
                 #[inline(always)]
-                fn describe(rule: #core::syntax::RuleIndex) -> #option<&'static str> {
+                fn index(&self) -> #core::syntax::NodeRule {
+                    match self {
+                        #(
+                        #get_index
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::syntax::NON_RULE,
+                    }
+                }
+
+                #[inline(always)]
+                fn node_ref(&self) -> #core::syntax::NodeRef {
+                    match self {
+                        #( #node_getters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::syntax::NodeRef::nil(),
+                    }
+                }
+
+                #[inline(always)]
+                fn parent_ref(&self) -> #core::syntax::NodeRef {
+                    match self {
+                        #( #parent_getters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::syntax::NodeRef::nil(),
+                    }
+                }
+
+                #[inline(always)]
+                fn set_parent_ref(&mut self, parent_ref: #core::syntax::NodeRef) {
+                    match self {
+                        #( #parent_setters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+                }
+
+                #[inline(always)]
+                fn children(&self) -> #core::syntax::Children {
+                    #[allow(unused_mut)]
+                    let mut children = #core::syntax::Children::with_capacity(#capacity);
+
+                    match self {
+                        #( #children_getters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+
+                    children
+                }
+
+                #[inline(always)]
+                fn name(rule: #core::syntax::NodeRule) -> #option<&'static str> {
                     match rule {
                         #(
-                        #descriptions
+                        #get_name
                         )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #option::None,
+                    }
+                }
+
+                #[inline(always)]
+                fn describe(rule: #core::syntax::NodeRule) -> #option<&'static str> {
+                    match rule {
+                        #(
+                        #get_description
+                        )*
+
+                        #[allow(unreachable_patterns)]
                         _ => #option::None,
                     }
                 }
@@ -939,7 +1016,47 @@ impl NodeInput {
         }
     }
 
-    pub(super) fn compile_skip_function(
+    pub(super) fn make_fn(
+        &self,
+        ident: Ident,
+        params: Vec<TokenStream>,
+        result: Option<TokenStream>,
+        body: TokenStream,
+        allow_warnings: bool,
+    ) -> (Ident, TokenStream) {
+        let span = ident.span();
+        let core = span.face_core();
+        let (impl_generics, _, where_clause) = self.generics.func.split_for_impl();
+        let code = &self.generics.code;
+        let this = self.this();
+
+        let allowed_warnings = match allow_warnings {
+            true => Some(Self::base_warnings(span)),
+            false => None,
+        };
+
+        let result = match result {
+            Some(ty) => Some(quote_spanned!(span=> -> #ty)),
+            None => None,
+        };
+
+        (
+            ident.clone(),
+            quote_spanned!(span=>
+                #allowed_warnings
+                fn #ident #impl_generics (
+                    session: &mut impl #core::syntax::SyntaxSession<#code, Node = #this>,
+                    #(
+                    #params,
+                    )*
+                ) #result #where_clause {
+                    #body
+                }
+            ),
+        )
+    }
+
+    pub(super) fn compile_skip_fn(
         &self,
         globals: &mut Globals,
         trivia: &Rule,
@@ -949,7 +1066,6 @@ impl NodeInput {
         allow_warnings: bool,
     ) -> TokenStream {
         let span = trivia.span;
-        let core = span.face_core();
         let body = trivia.compile(
             self,
             globals,
@@ -959,38 +1075,26 @@ impl NodeInput {
             false,
             output_comments,
         );
-        let (impl_generics, _, where_clause) = self.generics.func.split_for_impl();
-        let code = &self.generics.code;
-        let this = self.this();
 
         let globals = match include_globals {
             false => None,
             true => Some(globals.compile(span, &self.token)),
         };
 
-        let allowed_warnings = match allow_warnings {
-            true => {
-                let base = Self::base_warnings(span);
-
-                Some(quote_spanned!(span=> #[allow(unused)] #base))
-            }
-            false => None,
-        };
-
-        quote_spanned!(span=>
-            #allowed_warnings
-            fn skip_trivia #impl_generics (
-                session: &mut impl #core::syntax::SyntaxSession<#code, Node = #this>,
-            ) #where_clause {
-                #globals
-                #body
-            }
+        self.make_fn(
+            format_ident!("skip_trivia", span = span),
+            vec![],
+            None,
+            quote_spanned!(span=> #globals #body),
+            allow_warnings,
         )
+        .1
     }
 
     #[inline]
     pub(super) fn base_warnings(span: Span) -> TokenStream {
         quote_spanned!(span=>
+            #[allow(unused)]
             #[allow(unused_mut)]
             #[allow(unused_assignments)]
             #[allow(unused_variables)]

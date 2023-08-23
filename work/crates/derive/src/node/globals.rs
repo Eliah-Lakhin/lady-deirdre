@@ -94,8 +94,8 @@ impl Globals {
             let ident = Ident::new(ident, span);
 
             quote_spanned!(span=>
-                static #ident: #core::syntax::RuleSet =
-                    #core::syntax::RuleSet::new(&[#(#rules),*]);
+                static #ident: #core::syntax::NodeSet =
+                    #core::syntax::NodeSet::new(&[#(#rules),*]);
             )
             .to_tokens(&mut stream);
         }
@@ -153,7 +153,7 @@ impl Globals {
         let set = set.collect::<BTreeSet<_>>();
 
         if set.is_empty() {
-            return GlobalVar::EmptyRuleSet;
+            return GlobalVar::EmptyNodeSet;
         }
 
         if let Some(ident) = self.rules.get(&set) {
@@ -208,7 +208,7 @@ pub(super) enum GlobalVar {
     Static(String),
     EmptyTokenSet,
     FullTokenSet,
-    EmptyRuleSet,
+    EmptyNodeSet,
     UnlimitedRecovery,
 }
 
@@ -230,7 +230,7 @@ impl GlobalVar {
                 quote_spanned!(span=> #core::lexis::FULL_TOKEN_SET)
             }
 
-            Self::EmptyRuleSet => {
+            Self::EmptyNodeSet => {
                 let core = span.face_core();
 
                 quote_spanned!(span=> #core::syntax::EMPTY_RULE_SET)

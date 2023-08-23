@@ -179,6 +179,11 @@ impl VariableMap {
     }
 
     #[inline(always)]
+    pub(super) fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    #[inline(always)]
     pub(super) fn get(&self, variable: &Ident) -> &VariableMeta {
         expect_some!(self.map.get(variable), "Missing variable \"{variable}\".",)
     }
@@ -259,6 +264,36 @@ impl VariableMeta {
         }
 
         TokenStream::new()
+    }
+
+    pub(super) fn ty(&self) -> TokenStream {
+        use VariableKind::*;
+        use VariableRepetition::*;
+
+        let span = self.name.span();
+        let core = span.face_core();
+
+        match (&self.kind, &self.repetition) {
+            (TokenRef, Single | Optional) => {
+                quote_spanned!(span=> #core::lexis::TokenRef)
+            }
+
+            (NodeRef, Single | Optional) => {
+                quote_spanned!(span=> #core::syntax::NodeRef::nil())
+            }
+
+            (TokenRef, Multiple) => {
+                let vec = span.face_vec();
+
+                quote_spanned!(span=> #vec::<#core::lexis::TokenRef>)
+            }
+
+            (NodeRef, Multiple) => {
+                let vec = span.face_vec();
+
+                quote_spanned!(span=> #vec::<#core::syntax::NodeRef>)
+            }
+        }
     }
 
     fn init(&self) -> TokenStream {

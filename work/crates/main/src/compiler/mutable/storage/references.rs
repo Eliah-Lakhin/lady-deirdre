@@ -37,14 +37,14 @@
 
 use crate::{
     arena::Repository,
-    compiler::mutable::storage::child::ChildRefIndex,
+    compiler::mutable::storage::child::ChildCursor,
     std::*,
     syntax::Node,
 };
 
 pub(crate) struct References<N: Node> {
-    pub(super) chunks: Repository<ChildRefIndex<N>>,
-    pub(super) clusters: Repository<ChildRefIndex<N>>,
+    pub(super) chunks: Repository<ChildCursor<N>>,
+    pub(super) clusters: Repository<ChildCursor<N>>,
 }
 
 impl<N: Node> Default for References<N> {
@@ -67,17 +67,17 @@ impl<N: Node> References<N> {
     }
 
     #[inline(always)]
-    pub(crate) fn chunks(&self) -> &Repository<ChildRefIndex<N>> {
+    pub(crate) fn chunks(&self) -> &Repository<ChildCursor<N>> {
         &self.chunks
     }
 
     #[inline(always)]
-    pub(crate) fn clusters(&self) -> &Repository<ChildRefIndex<N>> {
+    pub(crate) fn clusters(&self) -> &Repository<ChildCursor<N>> {
         &self.clusters
     }
 
     #[inline(always)]
-    pub(crate) fn clusters_mut(&mut self) -> &mut Repository<ChildRefIndex<N>> {
+    pub(crate) fn clusters_mut(&mut self) -> &mut Repository<ChildCursor<N>> {
         &mut self.clusters
     }
 }

@@ -36,60 +36,114 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Length, PositionSpan, Site, SiteSpan, SourceCode, ToPosition, Token},
+    arena::{Id, Identifiable},
+    compiler::CompilationUnit,
+    lexis::{Chunk, SourceCode, Token, TokenCursor, TokenRef},
     std::*,
+    syntax::{Child, Node, NodeRef, SyntaxTree},
 };
 
-/// A Token metadata borrow object.
-///
-/// This object borrows reference into the Token instance, and the metadata of the source code
-/// substring this token belongs to.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Chunk<'source, T: Token> {
-    /// Token instance reference.
-    ///
-    /// This instance is supposed to describe lexical kind of the "token", and possible additional
-    /// generic semantic metadata inside this instance.
-    pub token: T,
-
-    /// Token's substring absolute UTF-8 character offset inside the source code text.
-    pub site: Site,
-
-    /// Token's substring UTF-8 characters count.
-    pub length: Length,
-
-    /// Token's original substring reference inside the source code text.
-    pub string: &'source str,
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PolyVariant {
+    Token(TokenRef),
+    Node(NodeRef),
 }
 
-impl<'source, T: Token> Chunk<'source, T> {
+impl Debug for PolyVariant {
     #[inline(always)]
-    pub fn start(&self) -> Site {
-        self.site
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Token(variant) => Debug::fmt(variant, formatter),
+            Self::Node(variant) => Debug::fmt(variant, formatter),
+        }
+    }
+}
+
+impl Identifiable for PolyVariant {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        match self {
+            Self::Token(child) => child.id,
+            Self::Node(child) => child.id,
+        }
+    }
+}
+
+impl PolyRef for PolyVariant {
+    #[inline(always)]
+    fn kind(&self) -> RefKind {
+        match self {
+            Self::Token(..) => RefKind::Token,
+            Self::Node(..) => RefKind::Node,
+        }
     }
 
     #[inline(always)]
-    pub fn end(&self) -> Site {
-        self.site + self.length
+    fn is_nil(&self) -> bool {
+        match self {
+            Self::Token(variant) => variant.is_nil(),
+            Self::Node(variant) => variant.is_nil(),
+        }
     }
 
     #[inline(always)]
-    pub fn site_span(&self) -> SiteSpan {
-        self.start()..self.end()
+    fn as_variant(&self) -> PolyVariant {
+        *self
     }
 
     #[inline(always)]
-    pub fn position_span(&self, code: &impl SourceCode) -> PositionSpan {
-        let start = self
-            .start()
-            .to_position(code)
-            .expect("Site to Position transformation failure.");
+    fn as_token_ref(&self) -> &TokenRef {
+        static NIL: TokenRef = TokenRef::nil();
 
-        let end = self
-            .end()
-            .to_position(code)
-            .expect("Site to Position transformation failure.");
+        match self {
+            Self::Token(variant) => variant,
+            Self::Node(..) => &NIL,
+        }
+    }
 
-        start..end
+    #[inline(always)]
+    fn as_node_ref(&self) -> &NodeRef {
+        static NIL: NodeRef = NodeRef::nil();
+
+        match self {
+            Self::Token(..) => &NIL,
+            Self::Node(variant) => variant,
+        }
+    }
+}
+
+pub trait PolyRef: Identifiable + Debug + 'static {
+    fn kind(&self) -> RefKind;
+
+    fn is_nil(&self) -> bool;
+
+    fn as_variant(&self) -> PolyVariant;
+
+    fn as_token_ref(&self) -> &TokenRef;
+
+    fn as_node_ref(&self) -> &NodeRef;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RefKind {
+    Token,
+    Node,
+}
+
+impl RefKind {
+    #[inline(always)]
+    pub fn is_token(&self) -> bool {
+        match self {
+            Self::Token => true,
+            _ => false,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_node(&self) -> bool {
+        match self {
+            Self::Node => true,
+            _ => false,
+        }
     }
 }

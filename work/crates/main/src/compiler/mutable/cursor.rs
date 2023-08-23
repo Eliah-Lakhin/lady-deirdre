@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    compiler::{mutable::storage::ChildRefIndex, MutableUnit},
+    compiler::{mutable::storage::ChildCursor, MutableUnit},
     lexis::{Length, Site, SiteRef, SiteSpan, Token, TokenCount, TokenCursor, TokenRef},
     report::debug_assert,
     std::*,
@@ -46,9 +46,9 @@ use crate::{
 
 pub struct MutableCursor<'unit, N: Node> {
     unit: &'unit MutableUnit<N>,
-    next_chunk_ref: ChildRefIndex<N>,
-    end_chunk_ref: ChildRefIndex<N>,
-    peek_chunk_ref: ChildRefIndex<N>,
+    next_child_cursor: ChildCursor<N>,
+    end_child_cursor: ChildCursor<N>,
+    peek_child_cursor: ChildCursor<N>,
     peek_distance: TokenCount,
 }
 
@@ -64,15 +64,15 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return false;
         }
 
-        unsafe { self.next_chunk_ref.next() };
+        unsafe { self.next_child_cursor.next() };
 
         match self.peek_distance == 0 {
             true => {
-                self.peek_chunk_ref = self.next_chunk_ref;
+                self.peek_child_cursor = self.next_child_cursor;
             }
 
             false => {
@@ -86,7 +86,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     #[inline(always)]
     fn skip(&mut self, mut distance: TokenCount) {
         if distance == self.peek_distance {
-            self.next_chunk_ref = self.peek_chunk_ref;
+            self.next_child_cursor = self.peek_child_cursor;
             self.peek_distance = 0;
             return;
         }
@@ -102,7 +102,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
     #[inline(always)]
     fn token(&mut self, distance: TokenCount) -> Self::Token {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return <Self::Token as Token>::eoi();
         }
 
@@ -110,12 +110,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return <Self::Token as Token>::eoi();
         }
 
-        unsafe { self.peek_chunk_ref.token() }
+        unsafe { self.peek_child_cursor.token() }
     }
 
     #[inline(always)]
     fn site(&mut self, distance: TokenCount) -> Option<Site> {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return None;
         }
 
@@ -123,12 +123,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return None;
         }
 
-        Some(unsafe { self.unit.tree().site_of(&self.peek_chunk_ref) })
+        Some(unsafe { self.unit.tree().site_of(&self.peek_child_cursor) })
     }
 
     #[inline(always)]
     fn length(&mut self, distance: TokenCount) -> Option<Length> {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return None;
         }
 
@@ -136,12 +136,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return None;
         }
 
-        Some(*unsafe { self.peek_chunk_ref.span() })
+        Some(*unsafe { self.peek_child_cursor.span() })
     }
 
     #[inline(always)]
     fn string(&mut self, distance: TokenCount) -> Option<&'unit str> {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return None;
         }
 
@@ -149,12 +149,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return None;
         }
 
-        Some(unsafe { self.peek_chunk_ref.string() })
+        Some(unsafe { self.peek_child_cursor.string() })
     }
 
     #[inline(always)]
     fn token_ref(&mut self, distance: TokenCount) -> TokenRef {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return TokenRef::nil();
         }
 
@@ -162,19 +162,19 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return TokenRef::nil();
         }
 
-        let ref_index = unsafe { self.peek_chunk_ref.chunk_ref_index() };
+        let entry_index = unsafe { self.peek_child_cursor.chunk_entry_index() };
 
-        let chunk_ref = unsafe { self.unit.references.chunks().make_ref(ref_index) };
+        let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.unit.id(),
-            chunk_ref,
+            chunk_entry,
         }
     }
 
     #[inline(always)]
     fn site_ref(&mut self, distance: TokenCount) -> SiteRef {
-        if unsafe { self.next_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
             return self.end_site_ref();
         }
 
@@ -182,30 +182,30 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return self.end_site_ref();
         }
 
-        let ref_index = unsafe { self.peek_chunk_ref.chunk_ref_index() };
+        let entry_index = unsafe { self.peek_child_cursor.chunk_entry_index() };
 
-        let chunk_ref = unsafe { self.unit.references.chunks().make_ref(ref_index) };
+        let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.unit.id(),
-            chunk_ref,
+            chunk_entry,
         }
         .site_ref()
     }
 
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
-        if self.end_chunk_ref.is_dangling() {
+        if self.end_child_cursor.is_dangling() {
             return SiteRef::new_code_end(self.unit.id());
         }
 
-        let ref_index = unsafe { self.end_chunk_ref.chunk_ref_index() };
+        let entry_index = unsafe { self.end_child_cursor.chunk_entry_index() };
 
-        let chunk_ref = unsafe { self.unit.references.chunks().make_ref(ref_index) };
+        let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.unit.id(),
-            chunk_ref,
+            chunk_entry,
         }
         .site_ref()
     }
@@ -213,63 +213,63 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
 impl<'unit, N: Node> MutableCursor<'unit, N> {
     pub(super) fn new(unit: &'unit MutableUnit<N>, mut span: SiteSpan) -> Self {
-        let mut next_chunk_ref = unit.tree().lookup(&mut span.start);
-        let mut end_chunk_ref = unit.tree().lookup(&mut span.end);
+        let mut next_chunk_cursor = unit.tree().lookup(&mut span.start);
+        let mut end_chunk_cursor = unit.tree().lookup(&mut span.end);
 
-        if next_chunk_ref.is_dangling() {
-            next_chunk_ref = unit.tree().last();
-        } else if span.start == 0 && unsafe { !next_chunk_ref.is_first() } {
-            unsafe { next_chunk_ref.back() };
+        if next_chunk_cursor.is_dangling() {
+            next_chunk_cursor = unit.tree().last();
+        } else if span.start == 0 && unsafe { !next_chunk_cursor.is_first() } {
+            unsafe { next_chunk_cursor.back() };
         }
 
-        if !end_chunk_ref.is_dangling() {
-            unsafe { end_chunk_ref.next() };
+        if !end_chunk_cursor.is_dangling() {
+            unsafe { end_chunk_cursor.next() };
         }
 
         Self {
             unit,
-            next_chunk_ref,
-            end_chunk_ref,
-            peek_chunk_ref: next_chunk_ref,
+            next_child_cursor: next_chunk_cursor,
+            end_child_cursor: end_chunk_cursor,
+            peek_child_cursor: next_chunk_cursor,
             peek_distance: 0,
         }
     }
 
     // Returns `true` if jump has failed.
-    // Safety: `self.next_chunk_ref` behind the `self.end_chunk_ref`.
+    // Safety: `self.next_child_cursor` behind the `self.end_child_cursor`.
     #[inline]
     unsafe fn jump(&mut self, target: TokenCount) -> bool {
         while self.peek_distance < target {
             self.peek_distance += 1;
 
-            unsafe { self.peek_chunk_ref.next() };
+            unsafe { self.peek_child_cursor.next() };
 
-            if unsafe { self.peek_chunk_ref.same_chunk_as(&self.end_chunk_ref) } {
+            if unsafe { self.peek_child_cursor.same_chunk_as(&self.end_child_cursor) } {
                 self.peek_distance = 0;
-                self.peek_chunk_ref = self.next_chunk_ref;
+                self.peek_child_cursor = self.next_child_cursor;
                 return true;
             }
         }
 
         if self.peek_distance > target * 2 {
             self.peek_distance = 0;
-            self.peek_chunk_ref = self.next_chunk_ref;
+            self.peek_child_cursor = self.next_child_cursor;
 
             while self.peek_distance < target {
                 self.peek_distance += 1;
 
-                unsafe { self.peek_chunk_ref.next() };
+                unsafe { self.peek_child_cursor.next() };
 
-                debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
+                debug_assert!(!self.peek_child_cursor.is_dangling(), "Dangling peek ref.");
             }
 
             return false;
         }
 
         while self.peek_distance > target {
-            unsafe { self.peek_chunk_ref.back() }
+            unsafe { self.peek_child_cursor.back() }
 
-            debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
+            debug_assert!(!self.peek_child_cursor.is_dangling(), "Dangling peek ref.");
 
             self.peek_distance -= 1;
         }

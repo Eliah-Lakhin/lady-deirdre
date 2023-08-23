@@ -36,11 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
+    arena::{Entry, Id, Identifiable},
     compiler::CompilationUnit,
     lexis::{SiteRefSpan, ToSpan, Token, TokenSet},
     std::*,
-    syntax::{ClusterRef, Node, RuleIndex, RuleSet, SyntaxTree, ROOT_RULE},
+    syntax::{ClusterRef, Node, NodeRule, NodeSet, SyntaxTree, ROOT_RULE},
 };
 
 /// A base syntax parse error object.
@@ -71,7 +71,7 @@ pub struct ParseError {
     pub span: SiteRefSpan,
 
     /// A name of the rule that has failed.
-    pub context: RuleIndex,
+    pub context: NodeRule,
 
     /// A set of tokens that the parser was expected.
     ///
@@ -81,7 +81,7 @@ pub struct ParseError {
     /// A set of named rules that the parser was expected to be descend to.
     ///
     /// Possibly empty set.
-    pub expected_rules: &'static RuleSet,
+    pub expected_rules: &'static NodeSet,
 }
 
 impl ParseError {
@@ -312,7 +312,7 @@ impl ParseError {
 ///         SyntaxTree,
 ///         ParseError,
 ///         TreeContent,
-///         RuleSet,
+///         NodeSet,
 ///         ROOT_RULE,
 ///         EMPTY_RULE_SET,
 ///     },
@@ -356,11 +356,11 @@ pub struct ErrorRef {
 
     /// An internal weak reference of the error object's [Cluster](crate::syntax::Cluster) of the
     /// [SyntaxTree](crate::syntax::SyntaxTree) instance.
-    pub cluster_ref: Ref,
+    pub cluster_entry: Entry,
 
     /// An internal weak reference of the error object in the
     /// [`Cluster::errors`](crate::syntax::Cluster::errors) repository.
-    pub error_ref: Ref,
+    pub error_entry: Entry,
 }
 
 impl Debug for ErrorRef {
@@ -368,8 +368,8 @@ impl Debug for ErrorRef {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
-                "ErrorRef(ref: {:?}, cluster: {:?}, id: {:?})",
-                self.error_ref, self.cluster_ref, self.id,
+                "ErrorRef(id: {:?}, cluster_entry: {:?}, error_entry: {:?})",
+                self.id, self.cluster_entry, self.error_entry,
             )),
             true => formatter.write_str("ErrorRef(Nil)"),
         }
@@ -391,8 +391,8 @@ impl ErrorRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            cluster_ref: Ref::Nil,
-            error_ref: Ref::Nil,
+            cluster_entry: Entry::Nil,
+            error_entry: Entry::Nil,
         }
     }
 
@@ -406,7 +406,7 @@ impl ErrorRef {
     /// instance use [is_valid_ref](crate::syntax::ErrorRef::is_valid_ref) function instead.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.cluster_ref.is_nil() || self.error_ref.is_nil()
+        self.id.is_nil() || self.cluster_entry.is_nil() || self.error_entry.is_nil()
     }
 
     /// Immutably dereferences weakly referred error object of specified
@@ -427,9 +427,9 @@ impl ErrorRef {
             return None;
         }
 
-        match tree.get_cluster(&self.cluster_ref) {
+        match tree.get_cluster(&self.cluster_entry) {
             None => None,
-            Some(cluster) => cluster.errors.get(&self.error_ref),
+            Some(cluster) => cluster.errors.get(&self.error_entry),
         }
     }
 
@@ -452,9 +452,9 @@ impl ErrorRef {
             return None;
         }
 
-        match tree.get_cluster_mut(&self.cluster_ref) {
+        match tree.get_cluster_mut(&self.cluster_entry) {
             None => None,
-            Some(data) => data.errors.get_mut(&self.error_ref),
+            Some(data) => data.errors.get_mut(&self.error_entry),
         }
     }
 
@@ -463,7 +463,7 @@ impl ErrorRef {
     pub fn cluster(&self) -> ClusterRef {
         ClusterRef {
             id: self.id,
-            cluster_ref: self.cluster_ref,
+            cluster_entry: self.cluster_entry,
         }
     }
 
@@ -487,9 +487,9 @@ impl ErrorRef {
             return None;
         }
 
-        match tree.get_cluster_mut(&self.cluster_ref) {
+        match tree.get_cluster_mut(&self.cluster_entry) {
             None => None,
-            Some(data) => data.errors.remove(&self.error_ref),
+            Some(data) => data.errors.remove(&self.error_entry),
         }
     }
 
@@ -508,9 +508,9 @@ impl ErrorRef {
             return false;
         }
 
-        match tree.get_cluster(&self.cluster_ref) {
+        match tree.get_cluster(&self.cluster_entry) {
             None => false,
-            Some(cluster) => cluster.errors.contains(&self.error_ref),
+            Some(cluster) => cluster.errors.contains(&self.error_entry),
         }
     }
 }

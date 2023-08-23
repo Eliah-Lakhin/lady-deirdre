@@ -39,7 +39,7 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    arena::Ref,
+    arena::Entry,
     lexis::{CodeContent, ToSpan},
     syntax::{SyntaxTree, TreeContent},
     Document,
@@ -64,7 +64,7 @@ fn test_clusters_traverse() {
 
     assert_eq!(
         0..70,
-        doc.get_cluster_span(&Ref::Primary).to_span(&doc).unwrap()
+        doc.get_cluster_span(&Entry::Primary).to_span(&doc).unwrap()
     );
 
     let mut cluster = doc.root_node_ref().cluster();

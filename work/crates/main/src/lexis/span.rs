@@ -210,7 +210,7 @@ pub unsafe trait ToSpan {
     /// let doc = Document::<SimpleNode>::from("foo\nbar baz");
     ///
     /// assert_eq!(doc.substring(2..7), "o\nbar");
-    /// assert_eq!((2..7).display(&doc).to_string(), "[1:3]..[2:3]");
+    /// assert_eq!((2..7).display(&doc).to_string(), "1:3..2:3");
     /// ```
     #[inline]
     fn display(&self, code: &impl SourceCode) -> DisplayPositionSpan {

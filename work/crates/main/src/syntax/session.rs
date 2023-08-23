@@ -36,10 +36,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref, Repository},
+    arena::{Entry, EntryIndex, Id, Identifiable, Repository},
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
     std::*,
-    syntax::{ErrorRef, Node, NodeRef, RuleIndex, ROOT_RULE},
+    syntax::{ErrorRef, Node, NodeRef, NodeRule, ROOT_RULE},
 };
 
 /// An interface to the source code syntax parsing/re-parsing session.
@@ -89,18 +89,24 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     ///
     /// By the [`Algorithm Specification`](crate::syntax::Node::parse) the `Node::new` function should
     /// avoid of calling of this function with the [ROOT_RULE](crate::syntax::ROOT_RULE) value.
-    fn descend(&mut self, rule: RuleIndex) -> NodeRef;
+    fn descend(&mut self, rule: NodeRule) -> NodeRef;
 
-    fn node(&mut self, node: Self::Node) -> NodeRef;
+    fn enter_node(&mut self) -> NodeRef;
+
+    fn leave_node(&mut self, node: Self::Node) -> NodeRef;
+
+    fn node_ref(&self) -> NodeRef;
+
+    fn parent_ref(&self) -> NodeRef;
 
     /// Registers a syntax parse error.
     ///
     /// If the Syntax Parser encounters grammatically incorrect input sequence, it should recover
     /// this error and register all syntax errors objects of the currently parsed
-    /// [RuleIndex](crate::syntax::RuleIndex) using this function.
+    /// [RuleIndex](crate::syntax::NodeRule) using this function.
     ///
     /// The function returns a [`weak reference`](crate::syntax::ErrorRef) into registered error.
-    fn error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef;
+    fn attach_error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef;
 }
 
 pub(super) struct SequentialSyntaxSession<
@@ -109,6 +115,7 @@ pub(super) struct SequentialSyntaxSession<
     C: TokenCursor<'code, Token = <N as Node>::Token>,
 > {
     pub(super) id: Id,
+    pub(super) context: Vec<EntryIndex>,
     pub(super) primary: Option<N>,
     pub(super) nodes: Repository<N>,
     pub(super) errors: Repository<N::Error>,
@@ -187,41 +194,120 @@ where
 {
     type Node = N;
 
-    fn descend(&mut self, rule: RuleIndex) -> NodeRef {
-        let node = N::parse(rule, self);
+    fn descend(&mut self, rule: NodeRule) -> NodeRef {
+        let index = self.nodes.reserve();
 
-        let node_ref = match rule == ROOT_RULE {
-            true => {
-                self.primary = Some(node);
+        self.context.push(index);
 
-                Ref::Primary
-            }
+        let node = N::parse(self, rule);
 
-            false => self.nodes.insert(node),
+        #[allow(unused)]
+        let last = self.context.pop();
+
+        #[cfg(debug_assertions)]
+        if last != Some(index) {
+            panic!("Inheritance imbalance.");
+        }
+
+        unsafe { self.nodes.set_unchecked(index, node) };
+
+        NodeRef {
+            id: self.id,
+            cluster_entry: Entry::Primary,
+            node_entry: unsafe { self.nodes.entry_of(index) },
+        }
+    }
+
+    #[inline]
+    fn enter_node(&mut self) -> NodeRef {
+        let index = self.nodes.reserve();
+
+        self.context.push(index);
+
+        NodeRef {
+            id: self.id,
+            cluster_entry: Entry::Primary,
+            node_entry: unsafe { self.nodes.entry_of(index) },
+        }
+    }
+
+    #[inline]
+    fn leave_node(&mut self, node: Self::Node) -> NodeRef {
+        let index = match self.context.pop() {
+            None => panic!("Inheritance imbalance."),
+            Some(index) => index,
         };
 
+        unsafe { self.nodes.set_unchecked(index, node) };
+
         NodeRef {
             id: self.id,
-            cluster_ref: Ref::Primary,
-            node_ref,
+            cluster_entry: Entry::Primary,
+            node_entry: unsafe { self.nodes.entry_of(index) },
         }
     }
 
     #[inline(always)]
-    fn node(&mut self, node: Self::Node) -> NodeRef {
-        NodeRef {
-            id: self.id,
-            cluster_ref: Ref::Primary,
-            node_ref: self.nodes.insert(node),
+    fn node_ref(&self) -> NodeRef {
+        match self.context.last() {
+            None => NodeRef {
+                id: self.id,
+                cluster_entry: Entry::Primary,
+                node_entry: Entry::Primary,
+            },
+
+            Some(index) => NodeRef {
+                id: self.id,
+                cluster_entry: Entry::Primary,
+                node_entry: unsafe { self.nodes.entry_of(*index) },
+            },
         }
     }
 
     #[inline(always)]
-    fn error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
+    fn parent_ref(&self) -> NodeRef {
+        match self.context.len() {
+            0 => NodeRef::nil(),
+            1 => NodeRef {
+                id: self.id,
+                cluster_entry: Entry::Primary,
+                node_entry: Entry::Primary,
+            },
+            _ => {
+                let index = *unsafe { self.context.get_unchecked(self.context.len() - 2) };
+
+                NodeRef {
+                    id: self.id,
+                    cluster_entry: Entry::Primary,
+                    node_entry: unsafe { self.nodes.entry_of(index) },
+                }
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn attach_error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
         ErrorRef {
             id: self.id,
-            cluster_ref: Ref::Primary,
-            error_ref: self.errors.insert(error.into()),
+            cluster_entry: Entry::Primary,
+            error_entry: self.errors.insert(error.into()),
         }
+    }
+}
+
+impl<'code, N, C> SequentialSyntaxSession<'code, N, C>
+where
+    N: Node,
+    C: TokenCursor<'code, Token = <N as Node>::Token>,
+{
+    pub(super) fn enter_root(&mut self) {
+        let node = N::parse(self, ROOT_RULE);
+
+        #[cfg(debug_assertions)]
+        if !self.context.is_empty() {
+            panic!("Inheritance imbalance.");
+        }
+
+        self.primary = Some(node);
     }
 }

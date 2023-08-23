@@ -36,11 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{RefIndex, Sequence},
+    arena::{EntryIndex, Sequence},
     compiler::mutable::storage::{
         branch::BranchRef,
         cache::CacheEntry,
-        child::{ChildCount, ChildIndex, ChildRefIndex},
+        child::{ChildCount, ChildCursor, ChildIndex},
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::PageLayer,
         references::References,
@@ -56,14 +56,14 @@ use crate::{
 };
 
 pub(super) struct Page<N: Node> {
-    pub(super) parent: ChildRefIndex<N>,
+    pub(super) parent: ChildCursor<N>,
     pub(super) previous: Option<PageRef<N>>,
     pub(super) next: Option<PageRef<N>>,
     pub(super) occupied: ChildCount,
     pub(super) spans: [Length; PAGE_CAP],
     pub(super) string: PageString,
     pub(super) tokens: [MaybeUninit<N::Token>; PAGE_CAP],
-    pub(super) chunks: [RefIndex; PAGE_CAP],
+    pub(super) chunks: [EntryIndex; PAGE_CAP],
     pub(super) clusters: [MaybeUninit<Option<Box<CacheEntry<N>>>>; PAGE_CAP],
 }
 
@@ -204,7 +204,7 @@ impl<N: Node> Page<N> {
         );
 
         let page = Self {
-            parent: ChildRefIndex::dangling(),
+            parent: ChildCursor::dangling(),
             previous: None,
             next: None,
             occupied,
@@ -269,7 +269,11 @@ impl<N: Node> Page<N> {
                 take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
 
             if let Some(cache_entry) = cache_entry {
-                unsafe { references.clusters.remove_unchecked(cache_entry.ref_index) };
+                unsafe {
+                    references
+                        .clusters
+                        .remove_unchecked(cache_entry.entry_index)
+                };
             }
         }
 
@@ -356,25 +360,25 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
     }
 
     #[inline(always)]
-    unsafe fn parent(&self) -> &ChildRefIndex<N> {
+    unsafe fn parent(&self) -> &ChildCursor<N> {
         unsafe { &self.as_ref().parent }
     }
 
     #[inline(always)]
-    unsafe fn set_parent(&mut self, parent: ChildRefIndex<N>) {
+    unsafe fn set_parent(&mut self, parent: ChildCursor<N>) {
         unsafe { self.as_mut().parent = parent };
     }
 
     #[inline(always)]
     unsafe fn parent_mut(&mut self) -> &mut BranchRef<Self::SelfLayer, N> {
-        let parent_ref_index = unsafe { &mut self.as_mut().parent };
+        let parent_entry_index = unsafe { &mut self.as_mut().parent };
 
         debug_assert!(
-            !parent_ref_index.is_dangling(),
+            !parent_entry_index.is_dangling(),
             "An attempt to get parent from root.",
         );
 
-        unsafe { parent_ref_index.item.as_branch_mut() }
+        unsafe { parent_entry_index.item.as_branch_mut() }
     }
 
     unsafe fn update_children(
@@ -408,8 +412,11 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
             let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
 
             if let Some(cache_entry) = cache_entry {
-                let cluster_ref =
-                    unsafe { references.clusters.get_unchecked_mut(cache_entry.ref_index) };
+                let cluster_ref = unsafe {
+                    references
+                        .clusters
+                        .get_unchecked_mut(cache_entry.entry_index)
+                };
 
                 cluster_ref.item = self_variant;
                 cluster_ref.index = index;
@@ -591,7 +598,11 @@ impl<N: Node> PageRef<N> {
             unsafe { references.chunks.upgrade(chunk_index) };
 
             if let Some(cache_entry) = cache_entry {
-                unsafe { references.clusters.remove_unchecked(cache_entry.ref_index) }
+                unsafe {
+                    references
+                        .clusters
+                        .remove_unchecked(cache_entry.entry_index)
+                }
             }
         }
 
@@ -638,7 +649,11 @@ impl<N: Node> PageRef<N> {
                 take(unsafe { page.clusters.get_unchecked_mut(index).assume_init_mut() });
 
             if let Some(cache_entry) = cache_entry {
-                unsafe { references.clusters.remove_unchecked(cache_entry.ref_index) }
+                unsafe {
+                    references
+                        .clusters
+                        .remove_unchecked(cache_entry.entry_index)
+                }
             }
 
             length += span;
@@ -689,8 +704,11 @@ impl<N: Node> PageRef<N> {
                 let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
 
                 if let Some(cache_entry) = cache_entry {
-                    let cluster_ref =
-                        unsafe { references.clusters.get_unchecked_mut(cache_entry.ref_index) };
+                    let cluster_ref = unsafe {
+                        references
+                            .clusters
+                            .get_unchecked_mut(cache_entry.entry_index)
+                    };
 
                     cluster_ref.index = index;
                 }
@@ -773,11 +791,10 @@ impl<N: Node> PageRef<N> {
             }
 
             unsafe {
-                *page.chunks.get_unchecked_mut(index) =
-                    references.chunks.insert_index(ChildRefIndex {
-                        item: self_ref_variant,
-                        index,
-                    })
+                *page.chunks.get_unchecked_mut(index) = references.chunks.insert_raw(ChildCursor {
+                    item: self_ref_variant,
+                    index,
+                })
             }
 
             unsafe {
@@ -796,8 +813,11 @@ impl<N: Node> PageRef<N> {
             let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
 
             if let Some(cache_entry) = cache_entry {
-                let cluster_ref =
-                    unsafe { references.clusters.get_unchecked_mut(cache_entry.ref_index) };
+                let cluster_ref = unsafe {
+                    references
+                        .clusters
+                        .get_unchecked_mut(cache_entry.entry_index)
+                };
 
                 cluster_ref.index = index;
             }

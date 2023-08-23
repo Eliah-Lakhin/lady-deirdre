@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, RefIndex, Sequence},
+    arena::{EntryIndex, Id, Identifiable, Sequence},
     lexis::{
         Length,
         Site,
@@ -49,6 +49,7 @@ use crate::{
         TokenRef,
     },
     std::*,
+    syntax::PolyRef,
 };
 
 /// A lookahead iterator over the source code Tokens.
@@ -264,7 +265,7 @@ pub trait TokenCursor<'code>: Identifiable {
 
 pub struct TokenBufferCursor<'code, T: Token> {
     buffer: &'code TokenBuffer<T>,
-    next: RefIndex,
+    next: EntryIndex,
     end_site: Site,
     end_site_ref: SiteRef,
 }
@@ -391,7 +392,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
         TokenRef {
             id: self.buffer.id(),
-            chunk_ref: Sequence::<Self::Token>::make_ref(distance),
+            chunk_entry: Sequence::<Self::Token>::entry_of(distance),
         }
     }
 
@@ -422,7 +423,7 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
                 if peek_site > self.end_site {
                     self.end_site_ref = TokenRef {
                         id: self.buffer.id(),
-                        chunk_ref: Sequence::<Self::Token>::make_ref(index),
+                        chunk_entry: Sequence::<Self::Token>::entry_of(index),
                     }
                     .site_ref();
                     break;

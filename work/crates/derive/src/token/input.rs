@@ -49,6 +49,7 @@ use syn::{
     Error,
     File,
     Generics,
+    LitStr,
     Result,
 };
 
@@ -594,14 +595,42 @@ impl TokenInput {
         )
     }
 
-    fn compile_index_fn(&self) -> TokenStream {
+    fn compile_rule_fn(&self) -> TokenStream {
         let span = self.ident.span();
         let core = span.face_core();
 
         quote_spanned!(span=>
             #[inline(always)]
-            fn index(self) -> #core::lexis::TokenIndex {
+            fn rule(self) -> #core::lexis::TokenRule {
                 self as u8
+            }
+        )
+    }
+
+    fn compile_name_fn(&self) -> TokenStream {
+        let span = self.ident.span();
+        let core = span.face_core();
+        let option = span.face_option();
+
+        let names = self.variants.iter().map(|variant| {
+            let ident = &variant.ident;
+            let span = ident.span();
+            let option = span.face_option();
+            let name = LitStr::new(ident.to_string().as_str(), span);
+
+            quote_spanned!(span=>
+                if Self::#ident as u8 == rule {
+                    return #option::Some(#name);
+                }
+            )
+        });
+
+        quote_spanned!(span=>
+            #[inline(always)]
+            fn name(rule: #core::lexis::TokenRule) -> #option<&'static str> {
+                #(#names)*
+
+                None
             }
         )
     }
@@ -618,7 +647,7 @@ impl TokenInput {
             let description = &variant.description;
 
             quote_spanned!(span=>
-                if Self::#ident as u8 == token {
+                if Self::#ident as u8 == rule {
                     return #option::Some(#description);
                 }
             )
@@ -626,7 +655,7 @@ impl TokenInput {
 
         quote_spanned!(span=>
             #[inline(always)]
-            fn describe(token: #core::lexis::TokenIndex) -> #option<&'static str> {
+            fn describe(rule: #core::lexis::TokenRule) -> #option<&'static str> {
                 #(#descriptions)*
 
                 None
@@ -650,7 +679,8 @@ impl ToTokens for TokenInput {
         let parse = self.compile_parse_fn();
         let eoi = self.compile_eoi_fn();
         let mismatch = self.compile_mismatch_fn();
-        let index = self.compile_index_fn();
+        let rule = self.compile_rule_fn();
+        let name = self.compile_name_fn();
         let description = self.compile_description_fn();
 
         quote_spanned!(span=>
@@ -660,7 +690,8 @@ impl ToTokens for TokenInput {
                 #parse
                 #eoi
                 #mismatch
-                #index
+                #rule
+                #name
                 #description
             }
         )

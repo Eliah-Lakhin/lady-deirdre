@@ -42,8 +42,8 @@ mod chunks;
 mod code;
 mod content;
 mod cursor;
-mod index;
 mod position;
+mod rule;
 mod session;
 mod simple;
 mod site;
@@ -59,8 +59,8 @@ pub use crate::lexis::{
     code::SourceCode,
     content::CodeContent,
     cursor::TokenCursor,
-    index::{TokenIndex, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},
     position::{Column, Line, Position, ToPosition},
+    rule::{TokenRule, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},
     session::LexisSession,
     simple::SimpleToken,
     site::{ByteIndex, Length, Site, SiteRef, ToSite},

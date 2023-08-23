@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Identifiable, Ref},
+    arena::{Entry, Identifiable},
     lexis::{SiteRefSpan, ToSpan},
     std::*,
     syntax::{Cluster, ClusterRef, Node},
@@ -82,7 +82,7 @@ pub trait SyntaxTree: Identifiable {
     /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
     /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
     /// under the hood. An API user normally don't need to call this function directly.
-    fn contains_cluster(&self, cluster_ref: &Ref) -> bool;
+    fn contains_cluster(&self, cluster_entry: &Entry) -> bool;
 
     /// Immutably dereferences a [Cluster](crate::syntax::Cluster) instance by specified low-level
     /// `cluster_ref` weak reference.
@@ -92,7 +92,7 @@ pub trait SyntaxTree: Identifiable {
     /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
     /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
     /// under the hood. An API user normally don't need to call this function directly.
-    fn get_cluster(&self, cluster_ref: &Ref) -> Option<&Cluster<Self::Node>>;
+    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>>;
 
     /// Mutably dereferences a [Cluster](crate::syntax::Cluster) instance by specified low-level
     /// `cluster_ref` weak reference.
@@ -102,13 +102,13 @@ pub trait SyntaxTree: Identifiable {
     /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
     /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
     /// under the hood. An API user normally don't need to call this function directly.
-    fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>>;
+    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>>;
 
-    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan;
+    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan;
 
-    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref;
+    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry;
 
-    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref;
+    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry;
 
-    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>>;
+    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>>;
 }

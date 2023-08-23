@@ -344,7 +344,7 @@ impl Rule {
         match halts {
             true => {
                 expected_tokens_var = GlobalVar::EmptyTokenSet.compile(span);
-                expected_rules_var = GlobalVar::EmptyRuleSet.compile(span);
+                expected_rules_var = GlobalVar::EmptyNodeSet.compile(span);
 
                 let eoi = TokenLit::EOI(span);
 
@@ -502,7 +502,7 @@ impl Rule {
 
                         quote_spanned!(span=>
                             site = #core::lexis::TokenCursor::site_ref(session, 0);
-                            #core::syntax::SyntaxSession::error(
+                            #core::syntax::SyntaxSession::attach_error(
                                 session,
                                 #core::syntax::ParseError {
                                     span: site..site,
@@ -531,7 +531,7 @@ impl Rule {
 
                         quote_spanned!(span=>
                             site = #core::lexis::TokenCursor::site_ref(session, 0);
-                            #core::syntax::SyntaxSession::error(
+                            #core::syntax::SyntaxSession::attach_error(
                                 session,
                                 #core::syntax::ParseError {
                                     span: site..site,
@@ -574,21 +574,19 @@ impl Rule {
                                 "Missing parsable variant index.",
                             );
 
-                            match output_comments {
+                            let index = match output_comments {
+                                false => index.to_token_stream(),
                                 true => {
                                     let comment = LitStr::new(&format!(" {}", ident), ident.span());
 
-                                    quote_spanned!(span=> #core::syntax::SyntaxSession::descend(
-                                        session,
-                                        #[doc = #comment]
-                                        #index,
-                                    ))
+                                    quote_spanned!(span=> #[doc = #comment] #index)
                                 }
+                            };
 
-                                false => {
-                                    quote_spanned!(span=> #core::syntax::SyntaxSession::descend(session, #index))
-                                }
-                            }
+                            quote_spanned!(span=> #core::syntax::SyntaxSession::descend(
+                                session,
+                                #index,
+                            ))
                         }
 
                         true => match &variant.parser {
@@ -596,19 +594,30 @@ impl Rule {
                                 let ident = variant.generated_parser_ident();
 
                                 quote_spanned!(span=> {
+                                    #core::syntax::SyntaxSession::enter_node(session);
                                     let node = #ident(session);
-
-                                    #core::syntax::SyntaxSession::node(session, node)
+                                    #core::syntax::SyntaxSession::leave_node(session, node)
                                 })
                             }
 
-                            Some(ident) => {
+                            Some(expr) => {
+                                let expr_span = expr.span();
                                 let this = input.this();
 
-                                quote_spanned!(span=> {
-                                    let node = #this::#ident(session);
+                                let (fn_ident, fn_impl) = input.make_fn(
+                                    format_ident!("parse", span = expr_span),
+                                    vec![],
+                                    Some(this.to_token_stream()),
+                                    expr.to_token_stream(),
+                                    false,
+                                );
 
-                                    #core::syntax::SyntaxSession::node(session, node)
+                                quote_spanned!(span=> {
+                                    #[inline(always)]
+                                    #fn_impl
+                                    #core::syntax::SyntaxSession::enter_node(session);
+                                    let node = #fn_ident(session);
+                                    #core::syntax::SyntaxSession::leave_node(session, node)
                                 })
                             }
                         },
@@ -702,7 +711,7 @@ impl Rule {
                 quote_spanned!(span=>
                     let end_site = #core::lexis::TokenCursor::site_ref(session, 0);
 
-                    #core::syntax::SyntaxSession::error(
+                    #core::syntax::SyntaxSession::attach_error(
                         session,
                         #core::syntax::ParseError {
                             span: site..end_site,

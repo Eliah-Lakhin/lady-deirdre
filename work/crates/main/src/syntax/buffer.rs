@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref, Repository},
+    arena::{Entry, Id, Identifiable, Repository},
     lexis::{SiteRef, SiteRefSpan, ToSpan, TokenCursor},
     std::*,
     syntax::{
@@ -44,6 +44,7 @@ use crate::{
         Cluster,
         ClusterRef,
         Node,
+        NodeRef,
         SyntaxSession,
         SyntaxTree,
         ROOT_RULE,
@@ -133,57 +134,57 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     fn cover(&self, _span: impl ToSpan) -> ClusterRef {
         ClusterRef {
             id: self.id,
-            cluster_ref: Ref::Primary,
+            cluster_entry: Entry::Primary,
         }
     }
 
     #[inline(always)]
-    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
-        match cluster_ref {
-            Ref::Primary => true,
+    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
+        match cluster_entry {
+            Entry::Primary => true,
             _ => false,
         }
     }
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_ref: &Ref) -> Option<&Cluster<Self::Node>> {
-        match cluster_ref {
-            Ref::Primary => Some(&self.cluster),
+    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
+        match cluster_entry {
+            Entry::Primary => Some(&self.cluster),
 
             _ => None,
         }
     }
 
     #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>> {
-        match cluster_ref {
-            Ref::Primary => Some(&mut self.cluster),
+    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
+        match cluster_entry {
+            Entry::Primary => Some(&mut self.cluster),
 
             _ => None,
         }
     }
 
     #[inline(always)]
-    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
-        match cluster_ref {
-            Ref::Primary => self.span.clone(),
+    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
+        match cluster_entry {
+            Entry::Primary => self.span.clone(),
 
             _ => SiteRef::nil()..SiteRef::nil(),
         }
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, _cluster_ref: &Ref) -> Ref {
-        Ref::Nil
+    fn get_previous_cluster(&self, _cluster_entry: &Entry) -> Entry {
+        Entry::Nil
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, _cluster_ref: &Ref) -> Ref {
-        Ref::Nil
+    fn get_next_cluster(&self, _cluster_entry: &Entry) -> Entry {
+        Entry::Nil
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, _cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
+    fn remove_cluster(&mut self, _cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
         None
     }
 }
@@ -202,6 +203,7 @@ impl<N: Node> SyntaxBuffer<N> {
 
         let mut session = SequentialSyntaxSession {
             id,
+            context: Vec::with_capacity(10),
             primary: None,
             nodes: Repository::with_capacity(1),
             errors: Repository::default(),
@@ -209,7 +211,7 @@ impl<N: Node> SyntaxBuffer<N> {
             _code_lifetime: Default::default(),
         };
 
-        let _ = session.descend(ROOT_RULE);
+        session.enter_root();
 
         let end = session.token_cursor.site_ref(0);
 

@@ -111,7 +111,7 @@ fn test_balance() {
                     Some(node) => node,
                 };
 
-                let errors = match document.get_cluster(&node_ref.cluster_ref) {
+                let errors = match document.get_cluster(&node_ref.cluster_entry) {
                     None => 0,
 
                     Some(cluster) => (&cluster.errors).into_iter().count(),
@@ -196,7 +196,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "(foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "[1:13]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'."
+        "1:13: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'."
     );
 
     unsafe { VERSION = 2 };
@@ -206,9 +206,9 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "[1:15]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
-        [1:15]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
-        [1:15]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
+        "1:15: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
+        1:15: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
+        1:15: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
     );
 
     unsafe { VERSION = 3 };
@@ -218,8 +218,8 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo) bar baz");
     assert_eq!(
         document.debug_errors(),
-        "[1:7]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
-        [1:7]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
+        "1:7: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
+        1:7: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
     );
 
     unsafe { VERSION = 4 };
@@ -229,9 +229,9 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "[1:15]: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
-        [1:15]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
-        [1:15]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
+        "1:15: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
+        1:15: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
+        1:15: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
     );
 
     unsafe { VERSION = 5 };
@@ -252,8 +252,8 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "[1:15]..[1:20]: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
-        [1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
+        "1:15..1:20: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
+        1:8: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
     );
 
     unsafe { VERSION = 9 };
@@ -263,8 +263,8 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "[1:16]..[1:21]: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
-        [1:8]: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
+        "1:16..1:21: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
+        1:8: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
     );
 
     unsafe { VERSION = 10 };
@@ -284,7 +284,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([({foo)[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "[1:8]: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'.",
+        "1:8: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'.",
     );
 
     unsafe { VERSION = 12 };

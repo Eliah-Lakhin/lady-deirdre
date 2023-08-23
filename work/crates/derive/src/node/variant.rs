@@ -39,13 +39,14 @@ use std::mem::take;
 
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
-use syn::{spanned::Spanned, AttrStyle, Error, LitStr, Meta, Result, Variant};
+use syn::{spanned::Spanned, AttrStyle, Error, Expr, Fields, LitStr, Meta, Result, Variant};
 
 use crate::{
     node::{
         constructor::Constructor,
         globals::{GlobalVar, Globals},
         index::Index,
+        inheritance::Inheritance,
         input::NodeInput,
         recovery::Recovery,
         rule::Rule,
@@ -60,8 +61,9 @@ pub(super) struct NodeVariant {
     pub(super) rule: Option<Rule>,
     pub(super) trivia: VariantTrivia,
     pub(super) recovery: Option<Recovery>,
+    pub(super) inheritance: Inheritance,
     pub(super) constructor: Option<Constructor>,
-    pub(super) parser: Option<Ident>,
+    pub(super) parser: Option<Expr>,
     pub(super) secondary: Option<Span>,
     pub(super) description: Option<LitStr>,
     pub(super) dump: Dump,
@@ -71,6 +73,17 @@ impl TryFrom<Variant> for NodeVariant {
     type Error = Error;
 
     fn try_from(mut variant: Variant) -> Result<Self> {
+        match &variant.fields {
+            Fields::Unnamed(fields) => {
+                return Err(error!(
+                    fields.span(),
+                    "Variants with unnamed fields not supported.",
+                ));
+            }
+
+            _ => (),
+        }
+
         let ident = variant.ident.clone();
 
         let mut root = None;
@@ -91,13 +104,13 @@ impl TryFrom<Variant> for NodeVariant {
             }
 
             let name = match attr.meta.path().get_ident() {
-                Some(ident) => ident,
+                Some(ident) => ident.to_string(),
                 None => continue,
             };
 
             let span = attr.span();
 
-            match name.to_string().as_str() {
+            match name.as_str() {
                 "root" => {
                     if root.is_some() {
                         return Err(error!(span, "Duplicate Root attribute.",));
@@ -157,7 +170,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Parser attribute.",));
                     }
 
-                    parser = Some((span, attr.parse_args::<Ident>()?));
+                    parser = Some((span, attr.parse_args::<Expr>()?));
                 }
 
                 "secondary" => {
@@ -257,6 +270,8 @@ impl TryFrom<Variant> for NodeVariant {
                 ));
             }
         };
+
+        let inheritance = Inheritance::try_from(&variant)?;
 
         let constructor = match (rule.is_some(), parser.is_some(), constructor) {
             (true, false, None) => Some(Constructor::try_from(variant)?),
@@ -397,6 +412,7 @@ impl TryFrom<Variant> for NodeVariant {
             rule,
             trivia,
             recovery,
+            inheritance,
             constructor,
             parser,
             secondary,
@@ -407,7 +423,7 @@ impl TryFrom<Variant> for NodeVariant {
 }
 
 impl NodeVariant {
-    pub(super) fn compile_parser_function(
+    pub(super) fn compile_parser_fn(
         &self,
         input: &NodeInput,
         globals: &mut Globals,
@@ -426,7 +442,6 @@ impl NodeVariant {
         let function_ident = self.generated_parser_ident();
 
         let span = rule.span;
-        let core = span.face_core();
 
         let recovery_var = match (&self.recovery, &input.recovery) {
             (Some(recovery), _) => globals.recovery(recovery.clone()),
@@ -452,8 +467,8 @@ impl NodeVariant {
             output_comments,
         );
 
-        let trivia_function = match self.trivia.rule() {
-            Some(trivia) if include_trivia => Some(input.compile_skip_function(
+        let trivia_fn = match self.trivia.rule() {
+            Some(trivia) if include_trivia => Some(input.compile_skip_fn(
                 globals,
                 trivia,
                 context,
@@ -464,35 +479,29 @@ impl NodeVariant {
             _ => None,
         };
 
-        let constructor = constructor.compile(input, variables);
-
-        let (impl_generics, _, where_clause) = input.generics.func.split_for_impl();
-
-        let code = &input.generics.code;
-
-        let this = input.this();
-
-        let allowed_warnings = match allow_warnings {
-            true => Some(NodeInput::base_warnings(span)),
-            false => None,
-        };
+        let constructor = constructor.compile(input, variables, allow_warnings);
 
         let globals = match include_globals {
             false => None,
             true => Some(globals.compile(span, &input.token)),
         };
 
-        Some(quote_spanned!(span=>
-            #allowed_warnings
-            fn #function_ident #impl_generics (
-                session: &mut impl #core::syntax::SyntaxSession<#code, Node = #this>,
-            ) -> #this #where_clause {
-                #globals
-                #trivia_function
-                #body
-                #constructor
-            }
-        ))
+        Some(
+            input
+                .make_fn(
+                    function_ident,
+                    vec![],
+                    Some(input.this()),
+                    quote_spanned!(span=>
+                        #globals
+                        #trivia_fn
+                        #body
+                        #constructor
+                    ),
+                    allow_warnings,
+                )
+                .1,
+        )
     }
 
     pub(super) fn generated_parser_ident(&self) -> Ident {

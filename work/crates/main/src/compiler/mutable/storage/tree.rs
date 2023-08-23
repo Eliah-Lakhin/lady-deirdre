@@ -38,7 +38,7 @@
 use crate::{
     compiler::mutable::storage::{
         branch::Branch,
-        child::{ChildIndex, ChildRefIndex},
+        child::{ChildCursor, ChildIndex},
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::{BranchLayer, Height, PageLayer},
         page::{Page, PageList, PageRef},
@@ -152,7 +152,7 @@ impl<N: Node> Tree<N> {
 
             match &mut last_page {
                 Some(page_ref) => {
-                    let reference = references.chunks.insert_index(ChildRefIndex {
+                    let entry_index = references.chunks.insert_raw(ChildCursor {
                         item: unsafe { page_ref.into_variant() },
                         index,
                     });
@@ -164,7 +164,7 @@ impl<N: Node> Tree<N> {
                     unsafe { *page.spans.get_unchecked_mut(index) = span };
                     unsafe { page.string.set_byte_index(index, byte_index - first_byte) };
                     unsafe { page.tokens.get_unchecked_mut(index).write(token) };
-                    unsafe { *page.chunks.get_unchecked_mut(index) = reference };
+                    unsafe { *page.chunks.get_unchecked_mut(index) = entry_index };
                     unsafe { page.clusters.get_unchecked_mut(index).write(None) };
                 }
 
@@ -234,7 +234,7 @@ impl<N: Node> Tree<N> {
                             None => unsafe { debug_unreachable!("Missing last branch.") },
                         };
 
-                        unsafe { child_ref.as_mut().parent = ChildRefIndex { item: *last, index } };
+                        unsafe { child_ref.as_mut().parent = ChildCursor { item: *last, index } };
 
                         let branch = unsafe { last.as_branch_mut::<PageLayer>().as_mut() };
 
@@ -312,7 +312,7 @@ impl<N: Node> Tree<N> {
                         };
 
                         unsafe {
-                            child_ref.as_mut().inner.parent = ChildRefIndex { item: *last, index }
+                            child_ref.as_mut().inner.parent = ChildCursor { item: *last, index }
                         };
 
                         let branch = unsafe { last.as_branch_mut::<BranchLayer>().as_mut() };
@@ -362,38 +362,38 @@ impl<N: Node> Tree<N> {
     }
 
     #[inline(always)]
-    pub(crate) fn first(&self) -> ChildRefIndex<N> {
+    pub(crate) fn first(&self) -> ChildCursor<N> {
         if self.height == 0 {
-            return ChildRefIndex::dangling();
+            return ChildCursor::dangling();
         }
 
-        ChildRefIndex {
+        ChildCursor {
             item: unsafe { self.pages.first.into_variant() },
             index: 0,
         }
     }
 
     #[inline(always)]
-    pub(crate) fn last(&self) -> ChildRefIndex<N> {
+    pub(crate) fn last(&self) -> ChildCursor<N> {
         if self.height == 0 {
-            return ChildRefIndex::dangling();
+            return ChildCursor::dangling();
         }
 
         let last_page = unsafe { self.pages.last.as_ref() };
 
         debug_assert!(last_page.occupied > 0, "Empty page.");
 
-        ChildRefIndex {
+        ChildCursor {
             item: unsafe { self.pages.last.into_variant() },
             index: last_page.occupied - 1,
         }
     }
 
     #[inline]
-    pub(crate) fn lookup(&self, site: &mut Site) -> ChildRefIndex<N> {
+    pub(crate) fn lookup(&self, site: &mut Site) -> ChildCursor<N> {
         if *site >= self.length {
             *site = 0;
-            return ChildRefIndex::dangling();
+            return ChildCursor::dangling();
         }
 
         debug_assert!(self.height > 0, "An attempt to search in empty Tree.");
@@ -440,13 +440,13 @@ impl<N: Node> Tree<N> {
             break;
         }
 
-        ChildRefIndex { item, index }
+        ChildCursor { item, index }
     }
 
     // Safety:
     // 1. `chunk_ref`(possibly dangling) refers valid data inside this instance.
     #[inline]
-    pub(crate) unsafe fn site_of(&self, chunk_ref: &ChildRefIndex<N>) -> Site {
+    pub(crate) unsafe fn site_of(&self, chunk_ref: &ChildCursor<N>) -> Site {
         if chunk_ref.is_dangling() {
             return self.length;
         }
@@ -500,7 +500,7 @@ impl<N: Node> Tree<N> {
     #[inline(always)]
     pub(crate) unsafe fn is_writeable(
         &self,
-        chunk_ref: &ChildRefIndex<N>,
+        chunk_ref: &ChildCursor<N>,
         remove: TokenCount,
         insert: TokenCount,
     ) -> bool {
@@ -544,14 +544,14 @@ impl<N: Node> Tree<N> {
     pub(crate) unsafe fn write(
         &mut self,
         references: &mut References<N>,
-        mut chunk_ref: ChildRefIndex<N>,
+        mut chunk_ref: ChildCursor<N>,
         remove: TokenCount,
         insert: TokenCount,
         mut spans: impl Iterator<Item = Length>,
         mut indices: &[ByteIndex],
         mut tokens: impl Iterator<Item = N::Token>,
         text: &str,
-    ) -> (ChildRefIndex<N>, Length) {
+    ) -> (ChildCursor<N>, Length) {
         debug_assert!(self.height > 0, "Empty tree.");
 
         debug_assert!(
@@ -569,7 +569,7 @@ impl<N: Node> Tree<N> {
 
             debug_assert_eq!(remove, removed_count, "Token count inconsistency.");
 
-            return (ChildRefIndex::dangling(), 0);
+            return (ChildCursor::dangling(), 0);
         }
 
         let rewrite = remove.min(insert);
@@ -632,12 +632,12 @@ impl<N: Node> Tree<N> {
 
         if insert == 0 && chunk_ref.index + remove == occupied {
             chunk_ref = match chunk_ref.item.as_page_ref().as_ref().next {
-                Some(next) => ChildRefIndex {
+                Some(next) => ChildCursor {
                     item: next.into_variant(),
                     index: 0,
                 },
 
-                None => ChildRefIndex::dangling(),
+                None => ChildCursor::dangling(),
             };
         }
 
@@ -650,7 +650,7 @@ impl<N: Node> Tree<N> {
     pub(crate) unsafe fn split(
         &mut self,
         references: &mut References<N>,
-        mut chunk_ref: ChildRefIndex<N>,
+        mut chunk_ref: ChildCursor<N>,
     ) -> Self {
         if chunk_ref.is_dangling() {
             return Self::default();

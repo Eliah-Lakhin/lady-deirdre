@@ -36,6 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::{Ident, Span, TokenStream};
+use quote::ToTokens;
 use syn::{
     parse::ParseStream,
     punctuated::Punctuated,
@@ -45,51 +46,34 @@ use syn::{
     Error,
     Expr,
     Fields,
+    Meta,
     Result,
+    Type,
     Variant,
 };
 
 use crate::{
     node::{input::NodeInput, variables::VariableMap},
-    utils::{error, expect_some},
+    utils::{error, expect_some, system_panic, Facade},
 };
 
 pub(super) struct Constructor {
     span: Span,
-    name: Ident,
-    parameters: Vec<Parameter>,
-    overridden: bool,
+    mode: Mode,
 }
 
-impl TryFrom<Attribute> for Constructor {
+impl<'a> TryFrom<Attribute> for Constructor {
     type Error = Error;
 
     fn try_from(attr: Attribute) -> Result<Self> {
         let span = attr.span();
 
         attr.parse_args_with(|input: ParseStream| {
-            let name = input.parse::<Ident>()?;
-
-            let content;
-            parenthesized!(content in input);
-
-            if !input.is_empty() {
-                return Err(error!(input.span(), "Unexpected end of input.",));
-            }
-
-            let parameters = Punctuated::<Ident, Token![,]>::parse_terminated(&content)?
-                .into_iter()
-                .map(|name| Parameter {
-                    name,
-                    default: None,
-                })
-                .collect::<Vec<_>>();
+            let expression = input.parse::<Expr>()?;
 
             Ok(Self {
                 span,
-                name,
-                parameters,
-                overridden: true,
+                mode: Mode::Overridden { expression },
             })
         })
     }
@@ -99,73 +83,118 @@ impl TryFrom<Variant> for Constructor {
     type Error = Error;
 
     fn try_from(variant: Variant) -> Result<Self> {
-        match &variant.fields {
-            Fields::Unnamed(fields) => {
-                return Err(error!(
-                    fields.span(),
-                    "Variants with unnamed fields require overridden \
-                    constructor.\nAnnotate this variant with \
-                    #[constructor(...)] attribute.",
-                ));
-            }
-
-            _ => (),
-        }
-
         let span = variant.span();
-        let name = variant.ident.clone();
+        let ident = variant.ident.clone();
 
-        let parameters = variant
-            .fields
-            .into_iter()
-            .map(|field| {
-                let mut default = None;
+        let mut params = Vec::with_capacity(variant.fields.len());
 
-                for attr in field.attrs {
-                    match attr.style {
-                        AttrStyle::Inner(_) => continue,
-                        AttrStyle::Outer => (),
-                    }
+        for field in variant.fields {
+            let mut initializer = Initializer::Capture;
 
-                    let name = match attr.meta.path().get_ident() {
-                        Some(ident) => ident,
-                        None => continue,
-                    };
+            let ident = expect_some!(field.ident, "Unnamed field.",);
 
-                    match name.to_string().as_str() {
-                        "default" => {
-                            if default.is_some() {
-                                return Err(error!(attr.span(), "Duplicate Default attribute.",));
+            for attr in field.attrs {
+                match attr.style {
+                    AttrStyle::Inner(_) => continue,
+                    AttrStyle::Outer => (),
+                }
+
+                let attr_span = attr.span();
+
+                let name = match attr.meta.path().get_ident() {
+                    Some(ident) => ident.to_string(),
+                    None => continue,
+                };
+
+                match name.as_str() {
+                    "default" => {
+                        match &initializer {
+                            Initializer::Capture => (),
+                            Initializer::Default(..) | Initializer::Custom(..) => {
+                                return Err(error!(attr_span, "Duplicate Default attribute.",));
                             }
-
-                            default = Some((attr.span(), attr.parse_args::<Expr>()?));
+                            Initializer::Node(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Default attribute conflicts with Node attribute.",
+                                ));
+                            }
+                            Initializer::Parent(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Default attribute conflicts with Parent attribute.",
+                                ));
+                            }
                         }
 
-                        _ => (),
+                        if let Meta::Path(..) = &attr.meta {
+                            initializer = Initializer::Default(attr_span);
+                            continue;
+                        }
+
+                        initializer = Initializer::Custom(attr_span, attr.parse_args::<Expr>()?);
                     }
+
+                    "node" => {
+                        match &initializer {
+                            Initializer::Capture => (),
+                            Initializer::Default(..) | Initializer::Custom(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Parent attribute conflicts with Default attribute.",
+                                ));
+                            }
+                            Initializer::Node(..) => {
+                                return Err(error!(attr_span, "Duplicate Node field.",));
+                            }
+                            Initializer::Parent(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Node attribute conflicts with Parent attribute.",
+                                ));
+                            }
+                        }
+
+                        initializer = Initializer::Node(attr_span);
+                    }
+
+                    "parent" => {
+                        match &initializer {
+                            Initializer::Capture => (),
+                            Initializer::Default(..) | Initializer::Custom(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Parent attribute conflicts with Default attribute.",
+                                ));
+                            }
+                            Initializer::Node(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Parent attribute conflicts with Node attribute.",
+                                ));
+                            }
+                            Initializer::Parent(..) => {
+                                return Err(error!(attr_span, "Duplicate Parent field.",));
+                            }
+                        }
+
+                        initializer = Initializer::Parent(attr_span);
+                    }
+
+                    _ => (),
                 }
+            }
 
-                let name = expect_some!(field.ident, "Unnamed field.",);
-
-                match default {
-                    None => Ok(Parameter {
-                        name,
-                        default: None,
-                    }),
-
-                    Some((span, value)) => Ok(Parameter {
-                        name,
-                        default: Some((span, value)),
-                    }),
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
+            params.push(Parameter {
+                ident,
+                ty: field.ty,
+                initializer,
+            });
+        }
 
         Ok(Self {
             span,
-            name,
-            parameters,
-            overridden: false,
+            mode: Mode::Instance { ident, params },
         })
     }
 }
@@ -177,108 +206,196 @@ impl Constructor {
     }
 
     pub(super) fn fits(&self, variables: &VariableMap) -> Result<()> {
-        for Parameter { name, default } in &self.parameters {
-            if variables.contains(name) {
-                if let Some((span, _)) = default {
+        match &self.mode {
+            Mode::Overridden { .. } => Ok(()),
+
+            Mode::Instance { params, .. } => {
+                for Parameter {
+                    ident, initializer, ..
+                } in params
+                {
+                    if variables.contains(ident) {
+                        match initializer {
+                            Initializer::Capture => (),
+                            Initializer::Default(span) | Initializer::Custom(span, ..) => {
+                                return Err(error!(
+                                    *span,
+                                    "Default attribute is not applicable here, \
+                                    because corresponding variable is \
+                                    explicitly captured in the rule expression.",
+                                ));
+                            }
+                            Initializer::Node(..) => {
+                                system_panic!("\"node\" variable capturing.");
+                            }
+                            Initializer::Parent(..) => {
+                                system_panic!("\"parent\" variable capturing.");
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if let Initializer::Capture = initializer {
+                        return Err(error!(
+                            ident.span(),
+                            "This parameter is missing in the set of the rule \
+                            capturing variables.\nIf this is intending, the \
+                            rule needs an explicit \
+                            constructor.\nUse #[constructor(...)] \
+                            attribute to specify constructor \
+                            expression.\nAlternatively, associate this \
+                            parameter with #[default] or #[default(...)] \
+                            attribute.",
+                        ));
+                    }
+                }
+
+                for variable in variables {
+                    let has_corresponding_parameter =
+                        params.iter().any(|parameter| &parameter.ident == variable);
+
+                    if has_corresponding_parameter {
+                        continue;
+                    }
+
                     return Err(error!(
-                        *span,
-                        "Default attribute is not applicable here, because \
-                        corresponding variable is explicitly captured in the \
-                        rule expression.",
+                        variable.span(),
+                        "Capturing \"{variable}\" variable is missing in the \
+                        list of variant fields.\nIf this is intending, the \
+                        rule needs an explicit constructor.\nUse \
+                        #[constructor(...)] attribute to specify constructor \
+                        expression.",
                     ));
                 }
 
-                continue;
-            }
-
-            if self.overridden {
-                return Err(error!(
-                    name.span(),
-                    "This parameter is missing in the set of the rule \
-                    capturing variables.",
-                ));
-            }
-
-            if default.is_none() {
-                return Err(error!(
-                    name.span(),
-                    "This parameter is missing in the set of the rule \
-                    capturing variables.\nIf this is intending, the rule needs \
-                    an explicit constructor.\nUse #[constructor(...)] \
-                    attribute to specify constructor function.\n\
-                    Alternatively, associate this parameter with \
-                    #[default(...)] attribute.",
-                ));
+                Ok(())
             }
         }
-
-        for variable in variables {
-            let has_corresponding_parameter = self
-                .parameters
-                .iter()
-                .any(|parameter| &parameter.name == variable);
-
-            if has_corresponding_parameter {
-                continue;
-            }
-
-            if self.overridden {
-                return Err(error!(
-                    variable.span(),
-                    "Capturing \"{variable}\" variable is missing in \
-                    constructor's parameters.",
-                ));
-            }
-
-            return Err(error!(
-                variable.span(),
-                "Capturing \"{variable}\" variable is missing in the list of \
-                variant fields.",
-            ));
-        }
-
-        Ok(())
     }
 
-    pub(super) fn compile(&self, input: &NodeInput, variables: &VariableMap) -> TokenStream {
-        let span = self.name.span();
+    pub(super) fn compile(
+        &self,
+        input: &NodeInput,
+        variables: &VariableMap,
+        allow_warnings: bool,
+    ) -> TokenStream {
+        let span = self.span();
         let this = input.this();
-        let constructor_name = &self.name;
 
-        if self.overridden {
-            let parameters = self
-                .parameters
-                .iter()
-                .map(|parameter| variables.get(&parameter.name));
+        match &self.mode {
+            Mode::Instance { ident, params, .. } => {
+                let params = params.iter().map(|param| {
+                    let ident = &param.ident;
+                    let span = ident.span();
 
-            return quote_spanned!(span=>
-                #this::#constructor_name(#( #parameters ),*));
-        }
+                    match &param.initializer {
+                        Initializer::Capture => {
+                            let variable = variables.get(ident);
 
-        let parameters = self.parameters.iter().map(|parameter| {
-            let key = &parameter.name;
-            let span = key.span();
+                            quote_spanned!(span=> #ident: #variable,)
+                        }
 
-            match &parameter.default {
-                None => {
-                    let variable = variables.get(key);
+                        Initializer::Node(value_span) => {
+                            let core = value_span.face_core();
+                            let value = quote_spanned!(*value_span =>
+                                #core::syntax::SyntaxSession::node_ref(session));
 
-                    quote_spanned!(span=> #key: #variable,)
-                }
+                            quote_spanned!(span=> #ident: #value,)
+                        }
 
-                Some((span, default)) => {
-                    quote_spanned!(*span=> #key: #default,)
-                }
+                        Initializer::Parent(value_span) => {
+                            let core = value_span.face_core();
+                            let value = quote_spanned!(*value_span =>
+                                #core::syntax::SyntaxSession::parent_ref(session));
+
+                            quote_spanned!(span=> #ident: #value,)
+                        }
+
+                        Initializer::Default(value_span) => {
+                            let default = value_span.face_default();
+                            let ty = &param.ty;
+
+                            let value = quote_spanned!(*value_span => <#ty as #default>::default());
+
+                            quote_spanned!(span=> #ident: #value,)
+                        }
+
+                        Initializer::Custom(value_span, expr) => {
+                            let ty = &param.ty;
+
+                            let (fn_ident, fn_impl) = input.make_fn(
+                                format_ident!("default", span = *value_span),
+                                vec![],
+                                Some(ty.to_token_stream()),
+                                expr.to_token_stream(),
+                                allow_warnings,
+                            );
+
+                            quote_spanned!(span=> #ident: {
+                                #[inline(always)]
+                                #fn_impl
+                                #fn_ident(session)
+                            },)
+                        }
+                    }
+                });
+
+                quote_spanned!(span=>#this::#ident {#(
+                    #params
+                )*})
             }
-        });
 
-        quote_spanned!(span=>#this::#constructor_name {#(
-            #parameters
-        )*})
+            Mode::Overridden { expression } => {
+                let mut params = Vec::with_capacity(variables.len());
+                let mut args = Vec::with_capacity(variables.len());
+
+                for ident in variables {
+                    let ty = variables.get(ident).ty();
+
+                    params.push(quote_spanned!(span=> #ident: #ty));
+                    args.push(ident.clone());
+                }
+
+                let (fn_ident, fn_impl) = input.make_fn(
+                    format_ident!("constructor", span = span),
+                    params,
+                    Some(this),
+                    expression.to_token_stream(),
+                    allow_warnings,
+                );
+
+                quote_spanned!(span=> {
+                    #[inline(always)]
+                    #fn_impl
+                    #fn_ident(session #(, #args )*)
+                },)
+            }
+        }
     }
 }
 
+enum Mode {
+    Instance {
+        ident: Ident,
+        params: Vec<Parameter>,
+    },
+
+    Overridden {
+        expression: Expr,
+    },
+}
+
 struct Parameter {
-    name: Ident,
-    default: Option<(Span, Expr)>,
+    ident: Ident,
+    ty: Type,
+    initializer: Initializer,
+}
+
+enum Initializer {
+    Capture,
+    Node(Span),
+    Parent(Span),
+    Default(Span),
+    Custom(Span, Expr),
 }

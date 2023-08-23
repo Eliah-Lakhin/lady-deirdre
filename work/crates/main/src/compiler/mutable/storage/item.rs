@@ -38,7 +38,7 @@
 use crate::{
     compiler::mutable::storage::{
         branch::{Branch, BranchRef},
-        child::{ChildCount, ChildIndex, ChildRefIndex},
+        child::{ChildCount, ChildCursor, ChildIndex},
         nesting::{BranchLayer, Layer, LayerDescriptor},
         page::PageRef,
         references::References,
@@ -109,11 +109,11 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
     //Safety:
     // 1. `self` is not dangling.
-    unsafe fn parent(&self) -> &ChildRefIndex<N>;
+    unsafe fn parent(&self) -> &ChildCursor<N>;
 
     //Safety:
     // 1. `self` is not dangling.
-    unsafe fn set_parent(&mut self, parent: ChildRefIndex<N>);
+    unsafe fn set_parent(&mut self, parent: ChildCursor<N>);
 
     //Safety:
     // 1. `self` is not dangling.
@@ -276,14 +276,14 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let parent_ref_variant = unsafe { new_root_ref.into_variant() };
 
         unsafe {
-            left_ref.set_parent(ChildRefIndex {
+            left_ref.set_parent(ChildCursor {
                 item: parent_ref_variant,
                 index: 0,
             })
         };
 
         unsafe {
-            right_ref.set_parent(ChildRefIndex {
+            right_ref.set_parent(ChildCursor {
                 item: parent_ref_variant,
                 index: 1,
             })
@@ -594,7 +594,7 @@ impl<N: Node> ItemRefVariant<N> {
 
     //Safety: `SelfLayer` correctly describes variant kind.
     #[inline(always)]
-    pub(super) unsafe fn set_parent<SelfLayer: Layer>(&mut self, parent: ChildRefIndex<N>) {
+    pub(super) unsafe fn set_parent<SelfLayer: Layer>(&mut self, parent: ChildCursor<N>) {
         match SelfLayer::descriptor() {
             LayerDescriptor::Branch => unsafe { self.as_branch_mut::<()>().set_parent(parent) },
             LayerDescriptor::Page => unsafe { self.as_page_mut().set_parent(parent) },

@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Identifiable, Ref},
+    arena::{Entry, Identifiable},
     lexis::{Length, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
     std::*,
 };
@@ -81,53 +81,53 @@ pub trait SourceCode: Identifiable {
     where
         Self: 'code;
 
-    /// Returns `true` if the token referred by specified low-level `chunk_ref` weak reference
+    /// Returns `true` if the token referred by specified low-level `chunk_entry` weak reference
     /// exists in this source code instance.
     ///
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef) and
     /// [SiteRef](crate::lexis::SiteRef) weak references under the hood. An API user normally don't
     /// need to call this function directly.
-    fn contains_chunk(&self, chunk_ref: &Ref) -> bool;
+    fn contains_chunk(&self, chunk_entry: &Entry) -> bool;
 
     /// Immutably dereferences a [Token](crate::lexis::Token) instance by specified low-level
-    /// `chunk_ref` weak reference.
+    /// `chunk_entry` weak reference.
     ///
     /// Returns [None] if referred Token Chunk does not exist in this instance.
     ///
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token>;
+    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token>;
 
     /// Returns absolute character index of the [Token](crate::lexis::Token) substring inside this
-    /// source code text by specified low-level `chunk_ref` weak reference.
+    /// source code text by specified low-level `chunk_entry` weak reference.
     ///
     /// Returns [None] if referred Token Chunk does not exist in this instance.
     ///
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef) and
     /// [SiteRef](crate::lexis::SiteRef) weak reference under the hood. An API user normally does
     /// not need to call this function directly.
-    fn get_site(&self, chunk_ref: &Ref) -> Option<Site>;
+    fn get_site(&self, chunk_entry: &Entry) -> Option<Site>;
 
     /// Returns a substring of the [Token](crate::lexis::Token) inside this source code text by
-    /// specified low-level `chunk_ref` weak reference.
+    /// specified low-level `chunk_entry` weak reference.
     ///
     /// Returns [None] if referred Token Chunk does not exist in this instance.
     ///
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_string(&self, chunk_ref: &Ref) -> Option<&str>;
+    fn get_string(&self, chunk_entry: &Entry) -> Option<&str>;
 
     /// Returns character count of the [Token](crate::lexis::Token) substring inside this
-    /// source code text by specified low-level `chunk_ref` weak reference.
+    /// source code text by specified low-level `chunk_entry` weak reference.
     ///
     /// Returns [None] if referred Token Chunk does not exist in this instance.
     ///
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_length(&self, chunk_ref: &Ref) -> Option<Length>;
+    fn get_length(&self, chunk_entry: &Entry) -> Option<Length>;
 
     /// Returns a [TokenCursor](crate::lexis::TokenCursor) instance to traverse tokens and
     /// their metadata that "touch" specified `span`.

@@ -38,26 +38,30 @@
 #![doc = include_str!("readme.md")]
 
 mod buffer;
+mod children;
 mod cluster;
-mod combinators;
 mod content;
 mod error;
-mod index;
+mod morphism;
 mod no;
 mod node;
+mod recovery;
+mod rule;
 mod session;
 mod simple;
 mod tree;
 
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
+    children::{Child, Children},
     cluster::{Cluster, ClusterRef},
-    combinators::{Recovery, UNLIMITED_RECOVERY},
     content::TreeContent,
     error::{ErrorRef, ParseError},
-    index::{RuleIndex, RuleSet, EMPTY_RULE_SET, NON_RULE, ROOT_RULE},
+    morphism::{PolyRef, PolyVariant, RefKind},
     no::NoSyntax,
     node::{Node, NodeRef},
+    recovery::{Recovery, UNLIMITED_RECOVERY},
+    rule::{NodeRule, NodeSet, EMPTY_RULE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,
     tree::SyntaxTree,

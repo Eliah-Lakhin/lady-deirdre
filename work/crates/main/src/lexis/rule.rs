@@ -40,10 +40,10 @@ use crate::{
     std::*,
 };
 
-pub type TokenIndex = u8;
+pub type TokenRule = u8;
 
-pub const EOI: TokenIndex = 0;
-pub const MISMATCH: TokenIndex = 1;
+pub const EOI: TokenRule = 0;
+pub const MISMATCH: TokenRule = 1;
 
 pub static EMPTY_TOKEN_SET: TokenSet = TokenSet::empty();
 pub static FULL_TOKEN_SET: TokenSet = TokenSet::all();
@@ -62,7 +62,7 @@ impl Debug for TokenSet {
 }
 
 impl<'a> IntoIterator for &'a TokenSet {
-    type Item = TokenIndex;
+    type Item = TokenRule;
     type IntoIter = TokenSetIterator<'a>;
 
     #[inline(always)]
@@ -74,9 +74,9 @@ impl<'a> IntoIterator for &'a TokenSet {
     }
 }
 
-impl FromIterator<TokenIndex> for TokenSet {
+impl FromIterator<TokenRule> for TokenSet {
     #[inline]
-    fn from_iter<I: IntoIterator<Item = TokenIndex>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = TokenRule>>(iter: I) -> Self {
         let mut result = Self::empty();
 
         for token in iter {
@@ -95,7 +95,7 @@ impl<T: Token> FromIterator<T> for TokenSet {
         let mut result = Self::empty();
 
         for token in iter {
-            let (index, bit) = Self::index_of(token.index());
+            let (index, bit) = Self::index_of(token.rule());
 
             result.mask[index] |= bit;
         }
@@ -115,7 +115,7 @@ impl TokenSet {
         Self { mask: [0xFF; 32] }.exclude(EOI)
     }
 
-    pub const fn inclusive(tokens: &[TokenIndex]) -> Self {
+    pub const fn inclusive(tokens: &[TokenRule]) -> Self {
         let mut set = Self::empty();
 
         let mut slice_index = 0;
@@ -133,7 +133,7 @@ impl TokenSet {
         set
     }
 
-    pub const fn exclusive(tokens: &[TokenIndex]) -> Self {
+    pub const fn exclusive(tokens: &[TokenRule]) -> Self {
         let mut set = Self::all();
 
         let mut slice_index = 0;
@@ -151,14 +151,14 @@ impl TokenSet {
         set
     }
 
-    pub const fn contains(&self, token: TokenIndex) -> bool {
+    pub const fn contains(&self, token: TokenRule) -> bool {
         let (index, bit) = Self::index_of(token);
 
         self.mask[index] & bit > 0
     }
 
     #[inline(always)]
-    pub const fn include(mut self, token: TokenIndex) -> Self {
+    pub const fn include(mut self, token: TokenRule) -> Self {
         let (index, bit) = Self::index_of(token);
 
         self.mask[index] |= bit;
@@ -167,7 +167,7 @@ impl TokenSet {
     }
 
     #[inline(always)]
-    pub const fn include_all(mut self, tokens: &[TokenIndex]) -> Self {
+    pub const fn include_all(mut self, tokens: &[TokenRule]) -> Self {
         let mut slice_index = tokens.len();
 
         while slice_index < tokens.len() {
@@ -182,7 +182,7 @@ impl TokenSet {
     }
 
     #[inline(always)]
-    pub const fn exclude(mut self, token: TokenIndex) -> Self {
+    pub const fn exclude(mut self, token: TokenRule) -> Self {
         let (index, bit) = Self::index_of(token);
 
         self.mask[index] &= 0xFF ^ bit;
@@ -191,7 +191,7 @@ impl TokenSet {
     }
 
     #[inline(always)]
-    pub const fn exclude_all(mut self, tokens: &[TokenIndex]) -> Self {
+    pub const fn exclude_all(mut self, tokens: &[TokenRule]) -> Self {
         let mut slice_index = tokens.len();
 
         while slice_index < tokens.len() {
@@ -315,23 +315,23 @@ impl TokenSet {
     }
 
     #[inline(always)]
-    const fn index_of(token: TokenIndex) -> (usize, u8) {
-        (token as usize / 8, 1 << (token % 8))
+    const fn index_of(rule: TokenRule) -> (usize, u8) {
+        (rule as usize / 8, 1 << (rule % 8))
     }
 }
 
 pub struct TokenSetIterator<'a> {
-    token: Option<TokenIndex>,
+    token: Option<TokenRule>,
     set: &'a TokenSet,
 }
 
 impl<'a> Iterator for TokenSetIterator<'a> {
-    type Item = TokenIndex;
+    type Item = TokenRule;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(token) = self.token {
-            self.token = match token == TokenIndex::MAX {
+            self.token = match token == TokenRule::MAX {
                 true => None,
                 false => Some(token + 1),
             };

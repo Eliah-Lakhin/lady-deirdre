@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{RefIndex, Sequence},
+    arena::{EntryIndex, Sequence},
     compiler::mutable::storage::{
         cache::{CacheEntry, ClusterCache},
         item::{Item, ItemRef, ItemRefVariant},
@@ -51,21 +51,21 @@ use crate::{
 pub(super) type ChildIndex = usize;
 pub(super) type ChildCount = usize;
 
-pub(crate) struct ChildRefIndex<N: Node> {
+pub(crate) struct ChildCursor<N: Node> {
     pub(super) item: ItemRefVariant<N>,
     pub(super) index: ChildIndex,
 }
 
-impl<N: Node> Clone for ChildRefIndex<N> {
+impl<N: Node> Clone for ChildCursor<N> {
     #[inline(always)]
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<N: Node> Copy for ChildRefIndex<N> {}
+impl<N: Node> Copy for ChildCursor<N> {}
 
-impl<N: Node> ChildRefIndex<N> {
+impl<N: Node> ChildCursor<N> {
     #[inline(always)]
     pub(crate) const fn dangling() -> Self {
         Self {
@@ -301,7 +301,7 @@ impl<N: Node> ChildRefIndex<N> {
     // 3. `'a` does not outlive corresponding Page instance.
     // 4. Referred item contains a cluster cache.
     #[inline(always)]
-    pub(crate) unsafe fn cache_index(&self) -> RefIndex {
+    pub(crate) unsafe fn cache_index(&self) -> EntryIndex {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
@@ -315,7 +315,7 @@ impl<N: Node> ChildRefIndex<N> {
         );
 
         match unsafe { page.clusters.get_unchecked(self.index).assume_init_ref() } {
-            Some(cache_entry) => cache_entry.ref_index,
+            Some(cache_entry) => cache_entry.entry_index,
 
             None => unsafe {
                 debug_unreachable!("An attempt to get RefIndex of undefined ClusterCache.")
@@ -329,7 +329,7 @@ impl<N: Node> ChildRefIndex<N> {
     // 3. Referred item contains a cluster cache.
     // 4. There are no other references to this ClusterCache.
     #[inline(always)]
-    pub(crate) unsafe fn remove_cache(&self) -> RefIndex {
+    pub(crate) unsafe fn remove_cache(&self) -> EntryIndex {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
@@ -349,7 +349,7 @@ impl<N: Node> ChildRefIndex<N> {
                     .assume_init_mut(),
             )
         } {
-            Some(cache_entry) => cache_entry.ref_index,
+            Some(cache_entry) => cache_entry.entry_index,
 
             None => unsafe { debug_unreachable!("An attempt to remove undefined ClusterCache.") },
         }
@@ -394,9 +394,9 @@ impl<N: Node> ChildRefIndex<N> {
     #[inline(always)]
     pub(crate) unsafe fn set_cache(
         &self,
-        ref_index: RefIndex,
+        entry_index: EntryIndex,
         cache: ClusterCache<N>,
-    ) -> Option<RefIndex> {
+    ) -> Option<EntryIndex> {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
@@ -413,11 +413,11 @@ impl<N: Node> ChildRefIndex<N> {
             page.clusters
                 .get_unchecked_mut(self.index)
                 .assume_init_mut(),
-            Some(Box::new(CacheEntry { cache, ref_index })),
+            Some(Box::new(CacheEntry { cache, entry_index })),
         );
 
         match previous {
-            Some(cache_entry) => Some(cache_entry.ref_index),
+            Some(cache_entry) => Some(cache_entry.entry_index),
 
             None => None,
         }
@@ -459,7 +459,7 @@ impl<N: Node> ChildRefIndex<N> {
     // 1. `self` is not dangling.
     // 2. `self.item` is a Page reference.
     #[inline(always)]
-    pub(crate) unsafe fn chunk_ref_index(&self) -> RefIndex {
+    pub(crate) unsafe fn chunk_entry_index(&self) -> EntryIndex {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",

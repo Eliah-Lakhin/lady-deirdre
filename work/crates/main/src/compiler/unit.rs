@@ -36,11 +36,22 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Identifiable, Ref},
+    arena::{Entry, Identifiable},
     compiler::{ImmutableUnit, MutableUnit},
-    lexis::{Length, Site, SiteRefSpan, SourceCode, ToSpan, TokenBuffer, TokenCount},
+    lexis::{
+        Chunk,
+        Length,
+        Site,
+        SiteRefSpan,
+        SourceCode,
+        ToSpan,
+        Token,
+        TokenBuffer,
+        TokenCount,
+        TokenCursor,
+    },
     std::*,
-    syntax::{Cluster, ClusterRef, Node, SyntaxTree},
+    syntax::{Child, Cluster, ClusterRef, Node, PolyRef, PolyVariant, SyntaxTree},
     Document,
 };
 
@@ -82,6 +93,20 @@ pub trait CompilationUnit:
     {
         self.into_token_buffer().into_immutable_unit()
     }
+
+    #[inline(always)]
+    fn debug_tree(
+        &self,
+        poly_ref: &impl PolyRef,
+    ) -> DebugTree<<Self as SyntaxTree>::Node, <Self as SourceCode>::Cursor<'_>, Self>
+    where
+        Self: Sized,
+    {
+        DebugTree {
+            unit: self,
+            variant: poly_ref.as_variant(),
+        }
+    }
 }
 
 pub trait Lexis: Identifiable {
@@ -97,28 +122,28 @@ impl<F: Lexis> SourceCode for F {
         where Self: 'code;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_ref: &Ref) -> bool {
-        self.lexis().contains_chunk(chunk_ref)
+    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
+        self.lexis().contains_chunk(chunk_entry)
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_ref: &Ref) -> Option<Self::Token> {
-        self.lexis().get_token(chunk_ref)
+    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
+        self.lexis().get_token(chunk_entry)
     }
 
     #[inline(always)]
-    fn get_site(&self, chunk_ref: &Ref) -> Option<Site> {
-        self.lexis().get_site(chunk_ref)
+    fn get_site(&self, chunk_entry: &Entry) -> Option<Site> {
+        self.lexis().get_site(chunk_entry)
     }
 
     #[inline(always)]
-    fn get_string(&self, chunk_ref: &Ref) -> Option<&str> {
-        self.lexis().get_string(chunk_ref)
+    fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
+        self.lexis().get_string(chunk_entry)
     }
 
     #[inline(always)]
-    fn get_length(&self, chunk_ref: &Ref) -> Option<Length> {
-        self.lexis().get_length(chunk_ref)
+    fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
+        self.lexis().get_length(chunk_entry)
     }
 
     #[inline(always)]
@@ -154,37 +179,149 @@ impl<F: Syntax> SyntaxTree for F {
     }
 
     #[inline(always)]
-    fn contains_cluster(&self, cluster_ref: &Ref) -> bool {
-        self.syntax().contains_cluster(cluster_ref)
+    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
+        self.syntax().contains_cluster(cluster_entry)
     }
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_ref: &Ref) -> Option<&Cluster<Self::Node>> {
-        self.syntax().get_cluster(cluster_ref)
+    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
+        self.syntax().get_cluster(cluster_entry)
     }
 
     #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_ref: &Ref) -> Option<&mut Cluster<Self::Node>> {
-        self.syntax_mut().get_cluster_mut(cluster_ref)
+    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
+        self.syntax_mut().get_cluster_mut(cluster_entry)
     }
 
     #[inline(always)]
-    fn get_cluster_span(&self, cluster_ref: &Ref) -> SiteRefSpan {
-        self.syntax().get_cluster_span(cluster_ref)
+    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
+        self.syntax().get_cluster_span(cluster_entry)
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, cluster_ref: &Ref) -> Ref {
-        self.syntax().get_previous_cluster(cluster_ref)
+    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry {
+        self.syntax().get_previous_cluster(cluster_entry)
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, cluster_ref: &Ref) -> Ref {
-        self.syntax().get_next_cluster(cluster_ref)
+    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry {
+        self.syntax().get_next_cluster(cluster_entry)
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, cluster_ref: &Ref) -> Option<Cluster<Self::Node>> {
-        self.syntax_mut().remove_cluster(cluster_ref)
+    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
+        self.syntax_mut().remove_cluster(cluster_entry)
+    }
+}
+
+pub struct DebugTree<
+    'unit,
+    N: Node,
+    C: TokenCursor<'unit>,
+    U: CompilationUnit<Cursor<'unit> = C, Node = N>,
+> {
+    unit: &'unit U,
+    variant: PolyVariant,
+}
+
+impl<'unit, N, C, U> Debug for DebugTree<'unit, N, C, U>
+where
+    N: Node,
+    C: TokenCursor<'unit>,
+    U: CompilationUnit<Cursor<'unit> = C, Node = N>,
+{
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, formatter)
+    }
+}
+
+impl<'unit, N, C, U> Display for DebugTree<'unit, N, C, U>
+where
+    N: Node,
+    C: TokenCursor<'unit>,
+    U: CompilationUnit<Cursor<'unit> = C, Node = N>,
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        match &self.variant {
+            PolyVariant::Token(variant) => {
+                let chunk: Chunk<U::Token> = match variant.chunk(self.unit) {
+                    None => return Debug::fmt(variant, formatter),
+                    Some(chunk) => chunk,
+                };
+
+                let rule = chunk.token.rule();
+                let name = <U::Token as Token>::name(rule).unwrap_or("TokenRef");
+                let span = chunk.position_span(self.unit);
+
+                let mut debug_struct = formatter
+                    .debug_struct(&format!("${name}(chunk_entry: {:?})", variant.chunk_entry));
+
+                debug_struct.field("string", &chunk.string);
+                debug_struct.field("length", &chunk.length);
+                debug_struct.field("site_span", &chunk.site_span());
+                debug_struct.field(
+                    "position_span",
+                    &format_args!("{}..{}", span.start, span.end),
+                );
+
+                debug_struct.finish()
+            }
+
+            PolyVariant::Node(variant) => {
+                let node: &N = match variant.deref(self.unit) {
+                    None => return Debug::fmt(variant, formatter),
+                    Some(node) => node,
+                };
+
+                let rule = node.index();
+                let name = N::name(rule).unwrap_or("NodeRef");
+
+                let alternate = formatter.alternate();
+
+                let mut debug_struct = formatter.debug_struct(&format!(
+                    "{name}(cluster_entry: {:?}, node_entry: {:?})",
+                    variant.cluster_entry, variant.node_entry,
+                ));
+
+                for (key, value) in node.children().entries() {
+                    match value {
+                        Child::Token(child) => match alternate {
+                            true => debug_struct
+                                .field(key, &format_args!("{:#}", self.unit.debug_tree(child))),
+                            false => debug_struct
+                                .field(key, &format_args!("{}", self.unit.debug_tree(child))),
+                        },
+
+                        Child::TokenSeq(child) => {
+                            let child = child
+                                .iter()
+                                .map(|poly_ref| self.unit.debug_tree(poly_ref))
+                                .collect::<Vec<_>>();
+
+                            debug_struct.field(key, &child)
+                        }
+
+                        Child::Node(child) => match alternate {
+                            true => debug_struct
+                                .field(key, &format_args!("{:#}", self.unit.debug_tree(child))),
+                            false => debug_struct
+                                .field(key, &format_args!("{}", self.unit.debug_tree(child))),
+                        },
+
+                        Child::NodeSeq(child) => {
+                            let child = child
+                                .iter()
+                                .map(|poly_ref| self.unit.debug_tree(poly_ref))
+                                .collect::<Vec<_>>();
+
+                            debug_struct.field(key, &child)
+                        }
+                    };
+                }
+
+                debug_struct.finish()
+            }
+        }
     }
 }

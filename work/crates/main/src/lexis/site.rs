@@ -39,6 +39,7 @@ use crate::{
     arena::{Id, Identifiable},
     lexis::{SourceCode, TokenCursor, TokenRef},
     std::*,
+    syntax::PolyRef,
 };
 
 /// A number of Unicode characters in the text.
@@ -147,7 +148,7 @@ unsafe impl ToSite for SiteRef {
     #[inline(always)]
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
         match &self.0 {
-            SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.chunk_ref),
+            SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.chunk_entry),
 
             SiteRefInner::CodeEnd(id) => match id == &code.id() {
                 false => None,
@@ -193,7 +194,7 @@ impl SiteRef {
     /// To determine reference validity per specified [SourceCode](crate::lexis::SourceCode)
     /// instance use [is_valid_site](crate::lexis::ToSite::is_valid_site) function instead.
     #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
+    pub fn is_nil(&self) -> bool {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.is_nil(),
             SiteRefInner::CodeEnd(_) => false,

@@ -92,6 +92,21 @@ pub trait Facade: Spanned {
     }
 
     #[inline(always)]
+    fn face_default(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::default::Default)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::core::default::Default)
+        }
+    }
+
+    #[inline(always)]
     fn face_unimplemented(&self) -> TokenStream {
         let span = self.span();
 

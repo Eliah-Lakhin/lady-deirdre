@@ -37,7 +37,7 @@
 
 use crate::{
     compiler::mutable::storage::{
-        child::{ChildCount, ChildIndex, ChildRefIndex},
+        child::{ChildCount, ChildCursor, ChildIndex},
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::{BranchLayer, Height, Layer, LayerDescriptor, PageLayer},
         references::References,
@@ -58,7 +58,7 @@ pub(super) struct Branch<ChildLayer: Layer, N: Node> {
 }
 
 pub(super) struct BranchInner<N: Node> {
-    pub(super) parent: ChildRefIndex<N>,
+    pub(super) parent: ChildCursor<N>,
     pub(super) occupied: ChildCount,
     pub(super) spans: [Length; BRANCH_CAP],
     pub(super) children: [ItemRefVariant<N>; BRANCH_CAP],
@@ -194,7 +194,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
         let branch = Self {
             inner: BranchInner {
-                parent: ChildRefIndex::dangling(),
+                parent: ChildCursor::dangling(),
                 occupied,
                 spans: Default::default(),
                 children: Default::default(),
@@ -340,7 +340,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
             let child = unsafe { self.inner.children.get_unchecked_mut(index) };
 
             unsafe {
-                child.set_parent::<ChildLayer>(ChildRefIndex {
+                child.set_parent::<ChildLayer>(ChildCursor {
                     item: self_variant,
                     index,
                 })
@@ -411,25 +411,25 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
     }
 
     #[inline(always)]
-    unsafe fn parent(&self) -> &ChildRefIndex<N> {
+    unsafe fn parent(&self) -> &ChildCursor<N> {
         unsafe { &self.as_ref().inner.parent }
     }
 
     #[inline(always)]
-    unsafe fn set_parent(&mut self, parent: ChildRefIndex<N>) {
+    unsafe fn set_parent(&mut self, parent: ChildCursor<N>) {
         unsafe { self.as_mut().inner.parent = parent };
     }
 
     #[inline(always)]
     unsafe fn parent_mut(&mut self) -> &mut BranchRef<BranchLayer, N> {
-        let parent_ref_index = unsafe { &mut self.as_mut().inner.parent };
+        let parent_entry_index = unsafe { &mut self.as_mut().inner.parent };
 
         debug_assert!(
-            !parent_ref_index.is_dangling(),
+            !parent_entry_index.is_dangling(),
             "An attempt to get parent from root.",
         );
 
-        unsafe { parent_ref_index.item.as_branch_mut() }
+        unsafe { parent_entry_index.item.as_branch_mut() }
     }
 
     #[inline(always)]
@@ -472,7 +472,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
 
                                 unsafe {
                                     children_split.left_item.set_parent::<ChildLayer>(
-                                        ChildRefIndex {
+                                        ChildCursor {
                                             item: left_parent_variant,
                                             index: from,
                                         },
@@ -532,7 +532,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
 
                                 unsafe {
                                     children_split.left_item.set_parent::<ChildLayer>(
-                                        ChildRefIndex {
+                                        ChildCursor {
                                             item: left_parent_variant,
                                             index: from,
                                         },
@@ -559,7 +559,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
 
                                 unsafe {
                                     children_split.right_item.set_parent::<ChildLayer>(
-                                        ChildRefIndex {
+                                        ChildCursor {
                                             item: right_parent_variant,
                                             index: 0,
                                         },
@@ -609,7 +609,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
                         unsafe {
                             children_split
                                 .left_item
-                                .set_parent::<ChildLayer>(ChildRefIndex {
+                                .set_parent::<ChildLayer>(ChildCursor {
                                     item: left_parent_variant,
                                     index: 0,
                                 });
@@ -629,7 +629,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
                         unsafe {
                             children_split
                                 .right_item
-                                .set_parent::<ChildLayer>(ChildRefIndex {
+                                .set_parent::<ChildLayer>(ChildCursor {
                                     item: right_parent_variant,
                                     index: 0,
                                 });
@@ -1017,20 +1017,20 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                 true => {
                     let branch_variant = ItemRefVariant::from_branch(this);
 
-                    let parent_ref_index = ChildRefIndex {
+                    let parent_entry_index = ChildCursor {
                         item: branch_variant,
                         index: 0,
                     };
 
                     match ChildLayer::descriptor() {
                         LayerDescriptor::Page => unsafe {
-                            item_variant.as_page_mut().set_parent(parent_ref_index)
+                            item_variant.as_page_mut().set_parent(parent_entry_index)
                         },
 
                         LayerDescriptor::Branch => unsafe {
                             item_variant
                                 .as_branch_mut::<()>()
-                                .set_parent(parent_ref_index)
+                                .set_parent(parent_entry_index)
                         },
                     }
 
@@ -1076,7 +1076,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                         new_sibling.inner.children[0] = item_variant;
 
                         unsafe {
-                            item_variant.set_parent::<ChildLayer>(ChildRefIndex {
+                            item_variant.set_parent::<ChildLayer>(ChildCursor {
                                 item: new_sibling_variant,
                                 index: 0,
                             });
@@ -1127,13 +1127,13 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                             let new_root_variant = unsafe { new_root_ref.into_variant() };
 
                             unsafe {
-                                new_sibling_ref.set_parent(ChildRefIndex {
+                                new_sibling_ref.set_parent(ChildCursor {
                                     item: new_root_variant,
                                     index: 0,
                                 });
                             }
 
-                            branch.inner.parent = ChildRefIndex {
+                            branch.inner.parent = ChildCursor {
                                 item: new_root_variant,
                                 index: 1,
                             };
@@ -1184,20 +1184,20 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
 
             match branch.inner.occupied < Branch::<ChildLayer, N>::CAP {
                 true => {
-                    let parent_ref_index = ChildRefIndex {
+                    let parent_entry_index = ChildCursor {
                         item: ItemRefVariant::from_branch(this),
                         index: branch.inner.occupied,
                     };
 
                     match ChildLayer::descriptor() {
                         LayerDescriptor::Page => unsafe {
-                            item_variant.as_page_mut().set_parent(parent_ref_index)
+                            item_variant.as_page_mut().set_parent(parent_entry_index)
                         },
 
                         LayerDescriptor::Branch => unsafe {
                             item_variant
                                 .as_branch_mut::<()>()
-                                .set_parent(parent_ref_index)
+                                .set_parent(parent_entry_index)
                         },
                     }
 
@@ -1253,7 +1253,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                         new_sibling.inner.children[Branch::<ChildLayer, N>::B - 1] = item_variant;
 
                         unsafe {
-                            item_variant.set_parent::<ChildLayer>(ChildRefIndex {
+                            item_variant.set_parent::<ChildLayer>(ChildCursor {
                                 item: new_sibling_variant,
                                 index: Branch::<ChildLayer, N>::B - 1,
                             });
@@ -1295,13 +1295,13 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
 
                             let new_root_variant = unsafe { new_root_ref.into_variant() };
 
-                            branch.inner.parent = ChildRefIndex {
+                            branch.inner.parent = ChildCursor {
                                 item: new_root_variant,
                                 index: 0,
                             };
 
                             unsafe {
-                                new_sibling_ref.set_parent(ChildRefIndex {
+                                new_sibling_ref.set_parent(ChildCursor {
                                     item: new_root_variant,
                                     index: 1,
                                 });

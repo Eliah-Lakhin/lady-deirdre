@@ -38,7 +38,7 @@
 use crate::{
     lexis::Token,
     std::*,
-    syntax::{Node, ParseError, RuleIndex, SyntaxSession},
+    syntax::{Children, Node, NodeRef, NodeRule, ParseError, SyntaxSession, NON_RULE},
 };
 
 /// A special marker that forcefully skips syntax parsing stage.
@@ -83,14 +83,42 @@ impl<T: Token> Node for NoSyntax<T> {
 
     #[inline(always)]
     fn parse<'code>(
-        _rule: RuleIndex,
         _session: &mut impl SyntaxSession<'code, Node = Self>,
+        _rule: NodeRule,
     ) -> Self {
         Self::nil()
     }
 
     #[inline(always)]
-    fn describe(_index: RuleIndex) -> Option<&'static str> {
+    fn index(&self) -> NodeRule {
+        NON_RULE
+    }
+
+    #[inline(always)]
+    fn node_ref(&self) -> NodeRef {
+        NodeRef::nil()
+    }
+
+    #[inline(always)]
+    fn parent_ref(&self) -> NodeRef {
+        NodeRef::nil()
+    }
+
+    #[inline(always)]
+    fn set_parent_ref(&mut self, _parent_ref: NodeRef) {}
+
+    #[inline(always)]
+    fn children(&self) -> Children {
+        Children::new()
+    }
+
+    #[inline(always)]
+    fn name(_rule: NodeRule) -> Option<&'static str> {
+        None
+    }
+
+    #[inline(always)]
+    fn describe(_rule: NodeRule) -> Option<&'static str> {
         None
     }
 }

@@ -40,10 +40,20 @@ extern crate lady_deirdre_derive;
 pub use lady_deirdre_derive::Node;
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
-    lexis::Token,
+    arena::{Entry, Id, Identifiable},
+    lexis::{Token, TokenRef},
     std::*,
-    syntax::{ClusterRef, ParseError, RuleIndex, SyntaxSession, SyntaxTree},
+    syntax::{
+        Children,
+        ClusterRef,
+        NodeRule,
+        ParseError,
+        PolyRef,
+        PolyVariant,
+        RefKind,
+        SyntaxSession,
+        SyntaxTree,
+    },
 };
 
 /// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
@@ -131,7 +141,7 @@ pub trait Node: Sized + 'static {
     ///     as needed to exactly match parsed `rule`.
     ///   - To descend into a parsing subrule the Algorithm calls `session`'s
     ///     [`descend`](crate::syntax::SyntaxSession::descend) function that consumes subrule's
-    ///     [kind](crate::syntax::RuleIndex) and returns a [`weak reference`](NodeRef) into the
+    ///     [kind](crate::syntax::NodeRule) and returns a [`weak reference`](NodeRef) into the
     ///     rule's parsed Node.
     ///   - The Algorithm never calls [`descend`](crate::syntax::SyntaxSession::descend) function
     ///     with [ROOT_RULE](crate::syntax::ROOT_RULE). The Root Rule is not a recursive rule
@@ -155,11 +165,12 @@ pub trait Node: Sized + 'static {
     ///         Node,
     ///         NodeRef,
     ///         SyntaxSession,
-    ///         RuleIndex,
+    ///         NodeRule,
     ///         ParseError,
     ///         SyntaxTree,
     ///         TreeContent,
-    ///         RuleSet,
+    ///         NodeSet,
+    ///         Children,
     ///         ROOT_RULE,
     ///         EMPTY_RULE_SET,
     ///     },
@@ -174,16 +185,16 @@ pub trait Node: Sized + 'static {
     ///    Other,
     /// };
     ///  
-    /// const PARENS_RULE: RuleIndex = 1;
-    /// const OTHER_RULE: RuleIndex = 2;
+    /// const PARENS_RULE: NodeRule = 1;
+    /// const OTHER_RULE: NodeRule = 2;
     ///
     /// impl Node for Parens {
     ///     type Token = SimpleToken;
     ///     type Error = ParseError;
     ///
     ///     fn parse<'code>(
-    ///         rule: RuleIndex,
     ///         session: &mut impl SyntaxSession<'code, Node = Self>,
+    ///         rule: NodeRule,
     ///     ) -> Self {
     ///         // Rule dispatcher that delegates parsing control flow to specialized parse
     ///         // functions.
@@ -201,8 +212,38 @@ pub trait Node: Sized + 'static {
     ///         Self::parse_other(session)
     ///     }
     ///
-    ///     fn describe(index: RuleIndex) -> Option<&'static str> {
-    ///         match index {
+    ///     fn index(&self) -> NodeRule {
+    ///         match self {
+    ///             Self::Root {..} => ROOT_RULE,
+    ///             Self::Parens {..} => PARENS_RULE,
+    ///             Self::Other {..} => OTHER_RULE,
+    ///         }
+    ///     }
+    ///
+    ///     fn node_ref(&self) -> NodeRef {
+    ///         NodeRef::nil()
+    ///     }
+    ///
+    ///     fn parent_ref(&self) -> NodeRef {
+    ///         NodeRef::nil()
+    ///     }
+    ///
+    ///     fn set_parent_ref(&mut self, _parent: NodeRef) {}
+    ///
+    ///     fn children(&self) -> Children {
+    ///         Children::new()
+    ///     }
+    ///
+    ///     fn name(rule: NodeRule) -> Option<&'static str> {
+    ///         match rule {
+    ///             PARENS_RULE => Some("Parens"),
+    ///             OTHER_RULE => Some("Other"),
+    ///             _ => None,
+    ///         }
+    ///     }
+    ///
+    ///     fn describe(rule: NodeRule) -> Option<&'static str> {
+    ///         match rule {
     ///             PARENS_RULE => Some("Parens"),
     ///             OTHER_RULE => Some("Other"),
     ///             _ => None,
@@ -266,7 +307,7 @@ pub trait Node: Sized + 'static {
     ///
     ///         // Registering a syntax error.
     ///         let span = session.site_ref(0)..session.site_ref(0);
-    ///         session.error(ParseError {
+    ///         session.attach_error(ParseError {
     ///             span,
     ///             context: PARENS_RULE,
     ///             expected_tokens: &EMPTY_TOKEN_SET,
@@ -305,9 +346,21 @@ pub trait Node: Sized + 'static {
     /// // The input text has been parsed without errors.
     /// assert_eq!(doc.errors().count(), 0);
     /// ```
-    fn parse<'code>(rule: RuleIndex, session: &mut impl SyntaxSession<'code, Node = Self>) -> Self;
+    fn parse<'code>(session: &mut impl SyntaxSession<'code, Node = Self>, rule: NodeRule) -> Self;
 
-    fn describe(index: RuleIndex) -> Option<&'static str>;
+    fn index(&self) -> NodeRule;
+
+    fn node_ref(&self) -> NodeRef;
+
+    fn parent_ref(&self) -> NodeRef;
+
+    fn set_parent_ref(&mut self, parent_ref: NodeRef);
+
+    fn children(&self) -> Children;
+
+    fn name(rule: NodeRule) -> Option<&'static str>;
+
+    fn describe(rule: NodeRule) -> Option<&'static str>;
 }
 
 /// A weak reference of the [Node] and its metadata inside the syntax structure of the compilation
@@ -332,16 +385,16 @@ pub struct NodeRef {
 
     /// An internal weak reference of the node's [Cluster](crate::syntax::Cluster) of the
     /// [SyntaxTree](crate::syntax::SyntaxTree) instance.
-    pub cluster_ref: Ref,
+    pub cluster_entry: Entry,
 
     /// An internal weak reference of the Node object in the
     /// [Cluster](crate::syntax::Cluster).
     ///
-    /// If `node_ref` is a [`Ref::Primary`](crate::arena::Ref::Primary) variant, the NodeRef object
+    /// If `node_ref` is a [`Ref::Primary`](crate::arena::Entry::Primary) variant, the NodeRef object
     /// refers [`Cluster::primary`](crate::syntax::Cluster::primary) object. Otherwise `node_ref` is
-    /// a [`Ref::Repository`] variant that refers an object from the
+    /// a [`Entry::Repo`] variant that refers an object from the
     /// [`Cluster::nodes`](crate::syntax::Cluster::nodes) repository.
-    pub node_ref: Ref,
+    pub node_entry: Entry,
 }
 
 impl Debug for NodeRef {
@@ -349,8 +402,8 @@ impl Debug for NodeRef {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
-                "NodeRef(ref: {:?}, cluster: {:?}, id: {:?})",
-                self.node_ref, self.cluster_ref, self.id,
+                "NodeRef(id: {:?}, cluster_entry: {:?}, node_entry: {:?})",
+                self.id, self.cluster_entry, self.node_entry,
             )),
             true => formatter.write_str("NodeRef(Nil)"),
         }
@@ -364,6 +417,35 @@ impl Identifiable for NodeRef {
     }
 }
 
+impl PolyRef for NodeRef {
+    #[inline(always)]
+    fn kind(&self) -> RefKind {
+        RefKind::Token
+    }
+
+    #[inline(always)]
+    fn is_nil(&self) -> bool {
+        self.id.is_nil() || self.cluster_entry.is_nil() || self.node_entry.is_nil()
+    }
+
+    #[inline(always)]
+    fn as_variant(&self) -> PolyVariant {
+        PolyVariant::Node(*self)
+    }
+
+    #[inline(always)]
+    fn as_token_ref(&self) -> &TokenRef {
+        static NIL: TokenRef = TokenRef::nil();
+
+        &NIL
+    }
+
+    #[inline(always)]
+    fn as_node_ref(&self) -> &NodeRef {
+        self
+    }
+}
+
 impl NodeRef {
     /// Returns an invalid instance of the NodeRef.
     ///
@@ -372,22 +454,9 @@ impl NodeRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            cluster_ref: Ref::Nil,
-            node_ref: Ref::Nil,
+            cluster_entry: Entry::Nil,
+            node_entry: Entry::Nil,
         }
-    }
-
-    /// Returns `true` if this instance will never resolve to valid [Node].
-    ///
-    /// It is guaranteed that `NodeRef::nil().is_nil()` is always `true`, but in general if
-    /// this function returns `false` it is not guaranteed that provided instance is a valid
-    /// reference.
-    ///
-    /// To determine reference validity per specified [SyntaxTree](crate::syntax::SyntaxTree)
-    /// instance use [is_valid_ref](NodeRef::is_valid_ref) function instead.
-    #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.cluster_ref.is_nil() || self.node_ref.is_nil()
     }
 
     /// Immutably dereferences weakly referred [Node] of specified
@@ -408,11 +477,11 @@ impl NodeRef {
             return None;
         }
 
-        match tree.get_cluster(&self.cluster_ref) {
-            Some(cluster) => match &self.node_ref {
-                Ref::Primary => Some(&cluster.primary),
+        match tree.get_cluster(&self.cluster_entry) {
+            Some(cluster) => match &self.node_entry {
+                Entry::Primary => Some(&cluster.primary),
 
-                _ => cluster.nodes.get(&self.node_ref),
+                _ => cluster.nodes.get(&self.node_entry),
             },
 
             _ => None,
@@ -438,12 +507,12 @@ impl NodeRef {
             return None;
         }
 
-        match tree.get_cluster_mut(&self.cluster_ref) {
+        match tree.get_cluster_mut(&self.cluster_entry) {
             None => None,
-            Some(data) => match &self.node_ref {
-                Ref::Primary => Some(&mut data.primary),
+            Some(data) => match &self.node_entry {
+                Entry::Primary => Some(&mut data.primary),
 
-                _ => data.nodes.get_mut(&self.node_ref),
+                _ => data.nodes.get_mut(&self.node_entry),
             },
         }
     }
@@ -453,7 +522,7 @@ impl NodeRef {
     pub fn cluster(&self) -> ClusterRef {
         ClusterRef {
             id: self.id,
-            cluster_ref: self.cluster_ref,
+            cluster_entry: self.cluster_entry,
         }
     }
 
@@ -474,9 +543,9 @@ impl NodeRef {
             return None;
         }
 
-        match tree.get_cluster_mut(&self.cluster_ref) {
+        match tree.get_cluster_mut(&self.cluster_entry) {
             None => None,
-            Some(data) => data.nodes.remove(&self.node_ref),
+            Some(data) => data.nodes.remove(&self.node_entry),
         }
     }
 
@@ -495,14 +564,14 @@ impl NodeRef {
             return false;
         }
 
-        match tree.get_cluster(&self.cluster_ref) {
+        match tree.get_cluster(&self.cluster_entry) {
             None => false,
             Some(cluster) => {
-                if let Ref::Primary = &self.node_ref {
+                if let Entry::Primary = &self.node_entry {
                     return true;
                 }
 
-                cluster.nodes.contains(&self.node_ref)
+                cluster.nodes.contains(&self.node_entry)
             }
         }
     }

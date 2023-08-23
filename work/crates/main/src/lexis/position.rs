@@ -155,7 +155,7 @@ impl Default for Position {
 impl Display for Position {
     #[inline(always)]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        formatter.write_fmt(format_args!("[{}:{}]", self.line, self.column))
+        formatter.write_fmt(format_args!("{}:{}", self.line, self.column))
     }
 }
 

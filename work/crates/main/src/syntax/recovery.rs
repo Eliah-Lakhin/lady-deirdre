@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Token, TokenIndex, TokenSet, EOI},
+    lexis::{Token, TokenRule, TokenSet, EOI},
     std::*,
     syntax::SyntaxSession,
 };
@@ -45,7 +45,7 @@ pub static UNLIMITED_RECOVERY: Recovery = Recovery::unlimited();
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct Recovery {
-    groups: [(TokenIndex, TokenIndex); Self::GROUPS_LIMIT as usize],
+    groups: [(TokenRule, TokenRule); Self::GROUPS_LIMIT as usize],
     groups_len: u8,
     unexpected: TokenSet,
 }
@@ -63,7 +63,7 @@ impl Recovery {
     }
 
     #[inline(always)]
-    pub const fn group(mut self, open: TokenIndex, close: TokenIndex) -> Self {
+    pub const fn group(mut self, open: TokenRule, close: TokenRule) -> Self {
         if open == close {
             panic!("Group open and close tokens must be different.");
         }
@@ -102,8 +102,8 @@ impl Recovery {
     }
 
     #[inline(always)]
-    pub const fn unexpected(mut self, token: TokenIndex) -> Self {
-        self.unexpected = self.unexpected.include(token);
+    pub const fn unexpected(mut self, rule: TokenRule) -> Self {
+        self.unexpected = self.unexpected.include(rule);
 
         self
     }
@@ -124,13 +124,13 @@ impl Recovery {
         let mut stack = GroupStack::new();
 
         loop {
-            let index = session.token(0).index();
+            let rule = session.token(0).rule();
 
-            if expectations.contains(index) {
+            if expectations.contains(rule) {
                 return true;
             }
 
-            if self.unexpected.contains(index) {
+            if self.unexpected.contains(rule) {
                 return false;
             }
 
@@ -138,7 +138,7 @@ impl Recovery {
             while group_id < self.groups_len {
                 let open = self.groups[group_id as usize].0;
 
-                if open == index {
+                if open == rule {
                     self.try_skip_group(session, &mut stack, group_id);
                 }
 
@@ -166,9 +166,9 @@ impl Recovery {
         'outer: loop {
             distance += 1;
 
-            let index = session.token(distance).index();
+            let rule = session.token(distance).rule();
 
-            if index == EOI {
+            if rule == EOI {
                 break;
             }
 
@@ -176,12 +176,12 @@ impl Recovery {
             while group_id < self.groups_len {
                 let (open, close) = self.groups[group_id as usize];
 
-                if open == index {
+                if open == rule {
                     stack.push(group_id);
                     break;
                 }
 
-                if close == index {
+                if close == rule {
                     let id = match stack.pop() {
                         None => break 'outer,
                         Some(id) => id,

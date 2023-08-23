@@ -36,14 +36,14 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::RefIndex,
+    arena::EntryIndex,
     lexis::{Length, SiteRef},
-    syntax::{Cluster, Node, RuleIndex},
+    syntax::{Cluster, Node, NodeRule},
 };
 
 pub(crate) struct ClusterCache<N: Node> {
     pub(crate) cluster: Cluster<N>,
-    pub(crate) rule: RuleIndex,
+    pub(crate) rule: NodeRule,
     pub(crate) parsed_end: SiteRef,
     pub(crate) lookahead: Length,
     pub(crate) successful: bool,
@@ -51,5 +51,5 @@ pub(crate) struct ClusterCache<N: Node> {
 
 pub(super) struct CacheEntry<N: Node> {
     pub(super) cache: ClusterCache<N>,
-    pub(super) ref_index: RefIndex,
+    pub(super) entry_index: EntryIndex,
 }

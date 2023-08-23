@@ -1,5 +1,42 @@
+////////////////////////////////////////////////////////////////////////////////
+// This file is a part of the "Lady Deirdre" Work,                            //
+// a compiler front-end foundation technology.                                //
+//                                                                            //
+// This Work is a proprietary software with source available code.            //
+//                                                                            //
+// To copy, use, distribute, and contribute into this Work you must agree to  //
+// the terms of the End User License Agreement:                               //
+//                                                                            //
+// https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
+//                                                                            //
+// The Agreement let you use this Work in commercial and non-commercial       //
+// purposes. Commercial use of the Work is free of charge to start,           //
+// but the Agreement obligates you to pay me royalties                        //
+// under certain conditions.                                                  //
+//                                                                            //
+// If you want to contribute into the source code of this Work,               //
+// the Agreement obligates you to assign me all exclusive rights to           //
+// the Derivative Work or contribution made by you                            //
+// (this includes GitHub forks and pull requests to my repository).           //
+//                                                                            //
+// The Agreement does not limit rights of the third party software developers //
+// as long as the third party software uses public API of this Work only,     //
+// and the third party software does not incorporate or distribute            //
+// this Work directly.                                                        //
+//                                                                            //
+// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
+// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
+// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+//                                                                            //
+// If you do not or cannot agree to the terms of this Agreement,              //
+// do not use this Work.                                                      //
+//                                                                            //
+// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// All rights reserved.                                                       //
+////////////////////////////////////////////////////////////////////////////////
+
 use crate::{
-    arena::{Ref, RefIndex, RefVersion},
+    arena::{Entry, EntryIndex, EntryVersion},
     report::{debug_assert, debug_unreachable},
     std::*,
 };
@@ -7,7 +44,7 @@ use crate::{
 /// A mutable versioned data collection.
 ///
 /// The interface provides a way to store, remove, update and mutate items in allocated memory, and
-/// to access stored items by weak [versioned references](crate::arena::Ref::Repository).
+/// to access stored items by weak [versioned references](crate::arena::Entry::Repo).
 ///
 /// All operations performed in "O(1)" constant time.
 ///
@@ -20,7 +57,7 @@ use crate::{
 /// corresponding entry turns into Vacant and is scheduled for the next insertion event in a queue
 /// of Vacant entries.
 ///
-/// Each Occupied(or Reserved) entry holds [version number](crate::arena::RefVersion) of
+/// Each Occupied(or Reserved) entry holds [version number](crate::arena::EntryVersion) of
 /// occupied(or possibly occupied) data. And the corresponding Ref object that refers this entry
 /// also holds this version value. If an API user removes an item from this collection, and later
 /// occupies the entry with a different data item, a new entry will hold a different version value,
@@ -39,37 +76,37 @@ use crate::{
 /// that avoids some minor check overhead to benefit performance.
 ///
 /// ```rust
-/// use lady_deirdre::arena::{Repository, Ref};
+/// use lady_deirdre::arena::{Repository, Entry};
 ///
 /// let mut repo = Repository::<&'static str>::default();
 ///
-/// let string_a_ref: Ref = repo.insert("foo");
-/// let string_b_ref: Ref = repo.insert("bar");
+/// let string_a_entry: Entry = repo.insert("foo");
+/// let string_b_entry: Entry = repo.insert("bar");
 ///
-/// assert_eq!(repo.get(&string_a_ref).unwrap(), &"foo");
-/// assert_eq!(repo.get(&string_b_ref).unwrap(), &"bar");
+/// assert_eq!(repo.get(&string_a_entry).unwrap(), &"foo");
+/// assert_eq!(repo.get(&string_b_entry).unwrap(), &"bar");
 ///
-/// repo.remove(&string_b_ref);
+/// repo.remove(&string_b_entry);
 ///
-/// assert_eq!(repo.get(&string_a_ref).unwrap(), &"foo");
-/// assert!(!repo.contains(&string_b_ref));
+/// assert_eq!(repo.get(&string_a_entry).unwrap(), &"foo");
+/// assert!(!repo.contains(&string_b_entry));
 ///
-/// let string_c_ref: Ref = repo.insert("baz");
+/// let string_c_entry: Entry = repo.insert("baz");
 ///
-/// assert_eq!(repo.get(&string_a_ref).unwrap(), &"foo");
-/// assert!(!repo.contains(&string_b_ref));
-/// assert_eq!(repo.get(&string_c_ref).unwrap(), &"baz");
+/// assert_eq!(repo.get(&string_a_entry).unwrap(), &"foo");
+/// assert!(!repo.contains(&string_b_entry));
+/// assert_eq!(repo.get(&string_c_entry).unwrap(), &"baz");
 ///
-/// *(repo.get_mut(&string_a_ref).unwrap()) = "foo2";
+/// *(repo.get_mut(&string_a_entry).unwrap()) = "foo2";
 ///
-/// assert_eq!(repo.get(&string_a_ref).unwrap(), &"foo2");
-/// assert!(!repo.contains(&string_b_ref));
-/// assert_eq!(repo.get(&string_c_ref).unwrap(), &"baz");
+/// assert_eq!(repo.get(&string_a_entry).unwrap(), &"foo2");
+/// assert!(!repo.contains(&string_b_entry));
+/// assert_eq!(repo.get(&string_c_entry).unwrap(), &"baz");
 /// ```
 pub struct Repository<T> {
     entries: Vec<RepositoryEntry<T>>,
-    next: RefIndex,
-    revision: RefVersion,
+    next: EntryIndex,
+    revision: EntryVersion,
     modified: bool,
 }
 
@@ -163,18 +200,18 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref = repo.insert(10);
+    /// let item_entry = repo.insert(10);
     ///
-    /// assert_eq!(repo.get(&item_ref).unwrap(), &10);
+    /// assert_eq!(repo.get(&item_entry).unwrap(), &10);
     /// ```
     #[inline]
-    pub fn insert(&mut self, data: T) -> Ref {
-        let index = self.insert_index(data);
+    pub fn insert(&mut self, data: T) -> Entry {
+        let index = self.insert_raw(data);
 
-        unsafe { self.make_ref(index) }
+        unsafe { self.entry_of(index) }
     }
 
-    /// Adds an item into this collection returning valid [RefIndex](crate::arena::RefIndex) to
+    /// Adds an item into this collection returning valid [RefIndex](crate::arena::EntryIndex) to
     /// access corresponding item from the inner array of this Repository.
     ///
     /// This is a low-level API.
@@ -187,30 +224,30 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref_index = repo.insert_index(10);
+    /// let item_entry_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_index` returns valid index.
     /// unsafe {
-    ///     assert_eq!(repo.get_unchecked(item_ref_index), &10);
+    ///     assert_eq!(repo.get_unchecked(item_entry_index), &10);
     /// }
     ///
     /// // This is safe because `insert_index` returns valid index.
-    /// let item_ref = unsafe {
-    ///     repo.make_ref(item_ref_index)
+    /// let item_entry = unsafe {
+    ///     repo.entry_of(item_entry_index)
     /// };
     ///
-    /// assert_eq!(repo.get(&item_ref).unwrap(), &10);
+    /// assert_eq!(repo.get(&item_entry).unwrap(), &10);
     ///
     /// // This is safe because `insert_index` returns valid index, and the item is still
     /// // in the `repo`.
     /// unsafe {
-    ///     repo.remove_unchecked(item_ref_index);
+    ///     repo.remove_unchecked(item_entry_index);
     /// };
     ///
     /// // From now on it would be unsafe to call e.g. `repo.get_unchecked(item_reference)`, because
     /// // the item is no longer exists in the `repo`.
     /// ```
-    pub fn insert_index(&mut self, data: T) -> RefIndex {
+    pub fn insert_raw(&mut self, data: T) -> EntryIndex {
         let index = self.next;
 
         if self.modified {
@@ -255,7 +292,7 @@ impl<T> Repository<T> {
     /// This is a low-level API.
     ///
     /// An API user can utilize low-level API to initialize referred entry later. In particular, the
-    /// user can crate a [Ref](crate::arena::Ref) from received index. This reference will be
+    /// user can crate a [Ref](crate::arena::Entry) from received index. This reference will be
     /// considered invalid, but once the entry initializes it will become valid to dereference.
     ///
     /// ```rust
@@ -263,26 +300,26 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref_index = repo.reserve();
+    /// let item_entry_index = repo.reserve();
     ///
     /// // This is safe because `reserve` returns valid index.
-    /// let item_ref = unsafe {
-    ///     repo.make_ref(item_ref_index)
+    /// let item_entry = unsafe {
+    ///     repo.entry_of(item_entry_index)
     /// };
     ///
     /// // Referred item is not yet initialized, so it cannot be dereferenced, but is it safe
     /// // to try to dereference.
-    /// assert!(repo.get(&item_ref).is_none());
+    /// assert!(repo.get(&item_entry).is_none());
     ///
     /// // This is safe because `reserve` returns valid index.
     /// unsafe {
-    ///     repo.set_unchecked(item_ref_index, 10);
+    ///     repo.set_unchecked(item_entry_index, 10);
     /// }
     ///
     /// // Since the item already initialized, from now on it is fine to dereference it.
-    /// assert_eq!(repo.get(&item_ref).unwrap(), &10);
+    /// assert_eq!(repo.get(&item_entry).unwrap(), &10);
     /// ```
-    pub fn reserve(&mut self) -> RefIndex {
+    pub fn reserve(&mut self) -> EntryIndex {
         let index = self.next;
 
         if self.modified {
@@ -329,19 +366,19 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref = repo.insert(10);
+    /// let item_entry = repo.insert(10);
     ///
-    /// assert_eq!(repo.get(&item_ref).unwrap(), &10);
+    /// assert_eq!(repo.get(&item_entry).unwrap(), &10);
     ///
-    /// assert_eq!(repo.remove(&item_ref).unwrap(), 10);
+    /// assert_eq!(repo.remove(&item_entry).unwrap(), 10);
     ///
     /// // Referred value no longer exists in the `repo`.
-    /// assert!(!repo.contains(&item_ref));
+    /// assert!(!repo.contains(&item_entry));
     /// ```
     #[inline]
-    pub fn remove(&mut self, reference: &Ref) -> Option<T> {
-        match reference {
-            Ref::Repository { index, version } => {
+    pub fn remove(&mut self, entry: &Entry) -> Option<T> {
+        match entry {
+            Entry::Repo { index, version } => {
                 let entry = self.entries.get_mut(*index)?;
 
                 match entry {
@@ -402,17 +439,17 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref = repo.insert(10);
+    /// let item_entry = repo.insert(10);
     ///
-    /// assert!(repo.contains(&item_ref));
+    /// assert!(repo.contains(&item_entry));
     ///
-    /// let _ = repo.remove(&item_ref);
+    /// let _ = repo.remove(&item_entry);
     ///
-    /// assert!(!repo.contains(&item_ref));
+    /// assert!(!repo.contains(&item_entry));
     #[inline]
-    pub fn contains(&self, reference: &Ref) -> bool {
-        match reference {
-            Ref::Repository { index, version } => match self.entries.get(*index) {
+    pub fn contains(&self, entry: &Entry) -> bool {
+        match entry {
+            Entry::Repo { index, version } => match self.entries.get(*index) {
                 Some(RepositoryEntry::Occupied { revision, .. }) => version == revision,
                 _ => false,
             },
@@ -430,17 +467,17 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref = repo.insert(10);
+    /// let item_entry = repo.insert(10);
     ///
-    /// assert_eq!(repo.get(&item_ref), Some(&10));
+    /// assert_eq!(repo.get(&item_entry), Some(&10));
     ///
-    /// let _ = repo.remove(&item_ref);
+    /// let _ = repo.remove(&item_entry);
     ///
-    /// assert_eq!(repo.get(&item_ref), None);
+    /// assert_eq!(repo.get(&item_entry), None);
     #[inline]
-    pub fn get(&self, reference: &Ref) -> Option<&T> {
-        match reference {
-            Ref::Repository { index, version } => match self.entries.get(*index) {
+    pub fn get(&self, entry: &Entry) -> Option<&T> {
+        match entry {
+            Entry::Repo { index, version } => match self.entries.get(*index) {
                 Some(RepositoryEntry::Occupied { data, revision, .. }) if version == revision => {
                     Some(data)
                 }
@@ -460,15 +497,15 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_ref = repo.insert(10);
+    /// let item_entry = repo.insert(10);
     ///
-    /// *(repo.get_mut(&item_ref).unwrap()) = 20;
+    /// *(repo.get_mut(&item_entry).unwrap()) = 20;
     ///
-    /// assert_eq!(repo.get(&item_ref), Some(&20));
+    /// assert_eq!(repo.get(&item_entry), Some(&20));
     #[inline]
-    pub fn get_mut(&mut self, reference: &Ref) -> Option<&mut T> {
-        match reference {
-            Ref::Repository { index, version } => match self.entries.get_mut(*index) {
+    pub fn get_mut(&mut self, entry: &Entry) -> Option<&mut T> {
+        match entry {
+            Entry::Repo { index, version } => match self.entries.get_mut(*index) {
                 Some(RepositoryEntry::Occupied { data, revision, .. }) if version == revision => {
                     Some(data)
                 }
@@ -483,7 +520,7 @@ impl<T> Repository<T> {
     ///
     /// This is a low-level API.
     ///
-    /// This index could be received, for example, from the [insert_index](Repository::insert_index)
+    /// This index could be received, for example, from the [insert_index](Repository::insert_raw)
     /// function.
     ///
     /// ```rust
@@ -491,16 +528,16 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_index = repo.insert_index(10);
+    /// let item_index = repo.insert_raw(10);
     ///
-    /// let item_ref = unsafe {
-    ///     repo.make_ref(item_index)
+    /// let item_entry = unsafe {
+    ///     repo.entry_of(item_index)
     /// };
     ///
-    /// assert_eq!(repo.get(&item_ref), Some(&10));
+    /// assert_eq!(repo.get(&item_entry), Some(&10));
     /// ```
     ///
-    /// Note that unlike [Ref](crate::arena::Ref), [RefIndex](crate::arena::RefIndex) is
+    /// Note that unlike [Ref](crate::arena::Entry), [RefIndex](crate::arena::EntryIndex) is
     /// version-independent "reference" into this collection. An API user should care not to misuse
     /// indices.
     ///
@@ -510,42 +547,42 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_a_index = repo.insert_index(10);
+    /// let item_a_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_index` returns valid index.
-    /// let item_a_ref = unsafe {
-    ///     repo.make_ref(item_a_index)
+    /// let item_a_entry = unsafe {
+    ///     repo.entry_of(item_a_index)
     /// };
     ///
-    /// assert_eq!(repo.get(&item_a_ref), Some(&10));
+    /// assert_eq!(repo.get(&item_a_entry), Some(&10));
     ///
     /// // Removing all items from this collection.
     /// repo.clear();
     ///
     /// // Inserting a new item inside this collection.
-    /// let item_b_index = repo.insert_index(20);
+    /// let item_b_index = repo.insert_raw(20);
     ///
-    /// // `item_a_ref` is history-dependent.
-    /// // An item previously referred by `item_a_ref` considered to be missing in this collection.
-    /// assert!(!repo.contains(&item_a_ref));
+    /// // `item_a_entry` is history-dependent.
+    /// // An item previously referred by `item_a_entry` considered to be missing in this collection.
+    /// assert!(!repo.contains(&item_a_entry));
     ///
     /// // However, Item B due to prior collection changes has the same index as removed Item A.
     /// assert_eq!(item_a_index, item_b_index);
     ///
     /// // Making a reference from `item_a_index` would return a reference to Item B.
-    /// let item_a_ref = unsafe {
-    ///     repo.make_ref(item_a_index)
+    /// let item_a_entry = unsafe {
+    ///     repo.entry_of(item_a_index)
     /// };
     ///
-    /// // A new `item_a_ref` actually refers Item B.
-    /// assert_eq!(repo.get(&item_a_ref), Some(&20));
+    /// // A new `item_a_entry` actually refers Item B.
+    /// assert_eq!(repo.get(&item_a_entry), Some(&20));
     /// ```  
     ///
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection either in Occupied, or in Reserved
     ///     state.
     #[inline(always)]
-    pub unsafe fn make_ref(&self, index: RefIndex) -> Ref {
+    pub unsafe fn entry_of(&self, index: EntryIndex) -> Entry {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         #[allow(unreachable_code)]
@@ -564,7 +601,7 @@ impl<T> Repository<T> {
             },
         };
 
-        Ref::Repository { index, version }
+        Entry::Repo { index, version }
     }
 
     /// Immutably derefers collection's item by internal index.
@@ -576,7 +613,7 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_index = repo.insert_index(10);
+    /// let item_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_item` occupies collection's entry.
     /// assert_eq!(unsafe { repo.get_unchecked(item_index) }, &10);
@@ -585,7 +622,7 @@ impl<T> Repository<T> {
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection in Occupied state.
     #[inline(always)]
-    pub unsafe fn get_unchecked(&self, index: RefIndex) -> &T {
+    pub unsafe fn get_unchecked(&self, index: EntryIndex) -> &T {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked(index) };
@@ -607,7 +644,7 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_index = repo.insert_index(10);
+    /// let item_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_item` occupies collection's entry.
     /// unsafe { *repo.get_unchecked_mut(item_index) = 20; }
@@ -618,7 +655,7 @@ impl<T> Repository<T> {
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection in Occupied state.
     #[inline(always)]
-    pub unsafe fn get_unchecked_mut(&mut self, index: RefIndex) -> &mut T {
+    pub unsafe fn get_unchecked_mut(&mut self, index: EntryIndex) -> &mut T {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
@@ -641,7 +678,7 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_index = repo.insert_index(10);
+    /// let item_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_item` occupies collection's entry.
     /// unsafe { repo.set_unchecked(item_index, 20); }
@@ -660,22 +697,22 @@ impl<T> Repository<T> {
     /// let item_index = repo.reserve();
     ///
     /// // This is safe because `reserve` returns valid index.
-    /// let item_ref = unsafe { repo.make_ref(item_index) };
+    /// let item_entry = unsafe { repo.entry_of(item_index) };
     ///
     /// // Referred item is not initialized yet(is not "Occupied).
-    /// assert!(!repo.contains(&item_ref));
+    /// assert!(!repo.contains(&item_entry));
     ///
     /// // Initializing reserved entry.
     /// unsafe { repo.set_unchecked(item_index, 10); }
     ///
     /// // From now on referred Item "exists" in this collection.
-    /// assert!(repo.contains(&item_ref));
+    /// assert!(repo.contains(&item_entry));
     /// ```
     ///
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
-    pub unsafe fn set_unchecked(&mut self, index: RefIndex, data: T) {
+    pub unsafe fn set_unchecked(&mut self, index: EntryIndex, data: T) {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
@@ -703,16 +740,16 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_index = repo.insert_index(10);
+    /// let item_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_index` returns valid index.
-    /// let item_ref = unsafe { repo.make_ref(item_index) };
+    /// let item_entry = unsafe { repo.entry_of(item_index) };
     ///
     /// // This is safe because `insert_item` returns valid index.
     /// unsafe { repo.remove_unchecked(item_index); }
     ///
     /// // From now on referred Item no longer "exists" in this collection.
-    /// assert!(!repo.contains(&item_ref));
+    /// assert!(!repo.contains(&item_entry));
     /// ```
     ///
     /// An API user can utilize this function to remove Reserved entry without initialization.
@@ -725,7 +762,7 @@ impl<T> Repository<T> {
     /// let item_index = repo.reserve();
     ///
     /// // This is safe because `reserve` returns valid index.
-    /// let item_ref = unsafe { repo.make_ref(item_index) };
+    /// let item_entry = unsafe { repo.entry_of(item_index) };
     ///
     /// // This is safe because `reserve` returns valid index, and the Item's Entry exists in this
     /// // collection in Reserved state.
@@ -738,7 +775,7 @@ impl<T> Repository<T> {
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
-    pub unsafe fn remove_unchecked(&mut self, index: RefIndex) {
+    pub unsafe fn remove_unchecked(&mut self, index: EntryIndex) {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
@@ -772,21 +809,21 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_a_ref = repo.insert(10);
-    /// let item_b_ref = repo.insert(20);
+    /// let item_a_entry = repo.insert(10);
+    /// let item_b_entry = repo.insert(20);
     ///
-    /// assert!(repo.contains(&item_a_ref));
-    /// assert!(repo.contains(&item_b_ref));
+    /// assert!(repo.contains(&item_a_entry));
+    /// assert!(repo.contains(&item_b_entry));
     ///
     /// // We do not change the content of referred items, but just re-inserting them.
-    /// let item_a_content = repo.remove(&item_a_ref).unwrap();
-    /// let item_b_content = repo.remove(&item_b_ref).unwrap();
-    /// let item_a_ref_2 = repo.insert(item_a_content);
-    /// let item_b_ref_2 = repo.insert(item_b_content);
+    /// let item_a_content = repo.remove(&item_a_entry).unwrap();
+    /// let item_b_content = repo.remove(&item_b_entry).unwrap();
+    /// let item_a_entry_2 = repo.insert(item_a_content);
+    /// let item_b_entry_2 = repo.insert(item_b_content);
     ///
     /// // Old weak references no longer valid.
-    /// assert!(!repo.contains(&item_a_ref));
-    /// assert!(!repo.contains(&item_b_ref));
+    /// assert!(!repo.contains(&item_a_entry));
+    /// assert!(!repo.contains(&item_b_entry));
     /// ```
     ///
     /// This is safe approach, however this approach involves certain performance overhead that
@@ -801,15 +838,15 @@ impl<T> Repository<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let item_a_index = repo.insert_index(10);
-    /// let item_b_index = repo.insert_index(20);
+    /// let item_a_index = repo.insert_raw(10);
+    /// let item_b_index = repo.insert_raw(20);
     ///
     /// // This is safe because `insert_index` returns valid index.
-    /// let item_a_ref = unsafe { repo.make_ref(item_a_index) };
-    /// let item_b_ref = unsafe { repo.make_ref(item_b_index) };
+    /// let item_a_entry = unsafe { repo.entry_of(item_a_index) };
+    /// let item_b_entry = unsafe { repo.entry_of(item_b_index) };
     ///
-    /// assert!(repo.contains(&item_a_ref));
-    /// assert!(repo.contains(&item_b_ref));
+    /// assert!(repo.contains(&item_a_entry));
+    /// assert!(repo.contains(&item_b_entry));
     ///
     /// // Forcefully raises Repository version.
     /// repo.commit();
@@ -821,15 +858,15 @@ impl<T> Repository<T> {
     /// }
     ///
     /// // Previously created weak references no longer valid.
-    /// assert!(!repo.contains(&item_a_ref));
-    /// assert!(!repo.contains(&item_b_ref));
+    /// assert!(!repo.contains(&item_a_entry));
+    /// assert!(!repo.contains(&item_b_entry));
     ///
     /// // We can still create new weak references using these indices.
-    /// let item_a_ref_2 = unsafe { repo.make_ref(item_a_index) };
-    /// let item_b_ref_2 = unsafe { repo.make_ref(item_b_index) };
+    /// let item_a_entry_2 = unsafe { repo.entry_of(item_a_index) };
+    /// let item_b_entry_2 = unsafe { repo.entry_of(item_b_index) };
     ///
-    /// assert!(repo.contains(&item_a_ref_2));
-    /// assert!(repo.contains(&item_b_ref_2));
+    /// assert!(repo.contains(&item_a_entry_2));
+    /// assert!(repo.contains(&item_b_entry_2));
     /// ```
     ///
     /// Note, if an API user misses to call Commit function, it will not lead to undefined behavior,
@@ -838,7 +875,7 @@ impl<T> Repository<T> {
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
-    pub unsafe fn upgrade(&mut self, index: RefIndex) {
+    pub unsafe fn upgrade(&mut self, index: EntryIndex) {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
@@ -858,7 +895,7 @@ impl<T> Repository<T> {
 
 #[doc(hidden)]
 pub enum RepositoryEntry<T> {
-    Vacant(RefIndex),
-    Occupied { data: T, revision: RefVersion },
-    Reserved { revision: RefVersion },
+    Vacant(EntryIndex),
+    Occupied { data: T, revision: EntryVersion },
+    Reserved { revision: EntryVersion },
 }

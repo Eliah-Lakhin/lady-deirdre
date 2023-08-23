@@ -36,22 +36,24 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref, Repository},
-    compiler::mutable::storage::{ChildRefIndex, ClusterCache, References, Tree},
+    arena::{Entry, Id, Identifiable, Repository},
+    compiler::mutable::storage::{ChildCursor, ClusterCache, References, Tree},
     lexis::{Length, Site, SiteRef, Token, TokenCount, TokenCursor, TokenRef},
     report::{debug_assert, debug_assert_eq},
     std::*,
-    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, RuleIndex, SyntaxSession, ROOT_RULE},
+    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, NodeRule, SyntaxSession, ROOT_RULE},
 };
 
 pub struct MutableSyntaxSession<'unit, N: Node> {
     id: Id,
     tree: &'unit mut Tree<N>,
     references: &'unit mut References<N>,
+    updates: Option<&'unit mut StdSet<NodeRef>>,
+    context: Vec<NodeRef>,
     pending: Pending<N>,
-    next_chunk_ref: ChildRefIndex<N>,
+    next_chunk_cursor: ChildCursor<N>,
     next_site: Site,
-    peek_chunk_ref: ChildRefIndex<N>,
+    peek_chunk_cursor: ChildCursor<N>,
     peek_distance: TokenCount,
     peek_site: Site,
 }
@@ -68,17 +70,17 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return false;
         }
 
-        self.next_site += unsafe { self.next_chunk_ref.span() };
+        self.next_site += unsafe { self.next_chunk_cursor.span() };
 
-        unsafe { self.next_chunk_ref.next() };
+        unsafe { self.next_chunk_cursor.next() };
 
         match self.peek_distance == 0 {
             true => {
-                self.peek_chunk_ref = self.next_chunk_ref;
+                self.peek_chunk_cursor = self.next_chunk_cursor;
                 self.peek_site = self.next_site;
             }
 
@@ -99,7 +101,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if distance == self.peek_distance {
-            self.next_chunk_ref = self.peek_chunk_ref;
+            self.next_chunk_cursor = self.peek_chunk_cursor;
             self.next_site = self.peek_site;
             self.peek_distance = 0;
             self.pending.leftmost = false;
@@ -117,7 +119,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
     #[inline(always)]
     fn token(&mut self, distance: TokenCount) -> Self::Token {
-        if unsafe { self.next_chunk_ref.is_dangling() } {
+        if unsafe { self.next_chunk_cursor.is_dangling() } {
             return <Self::Token as Token>::eoi();
         }
 
@@ -129,14 +131,14 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         self.pending.lookahead_end_site = self
             .pending
             .lookahead_end_site
-            .max(self.peek_site + unsafe { *self.peek_chunk_ref.span() });
+            .max(self.peek_site + unsafe { *self.peek_chunk_cursor.span() });
 
-        unsafe { self.peek_chunk_ref.token() }
+        unsafe { self.peek_chunk_cursor.token() }
     }
 
     #[inline(always)]
     fn site(&mut self, distance: TokenCount) -> Option<Site> {
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return None;
         }
 
@@ -148,14 +150,14 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         self.pending.lookahead_end_site = self
             .pending
             .lookahead_end_site
-            .max(self.peek_site + unsafe { *self.peek_chunk_ref.span() });
+            .max(self.peek_site + unsafe { *self.peek_chunk_cursor.span() });
 
-        Some(unsafe { self.tree.site_of(&self.peek_chunk_ref) })
+        Some(unsafe { self.tree.site_of(&self.peek_chunk_cursor) })
     }
 
     #[inline(always)]
     fn length(&mut self, distance: TokenCount) -> Option<Length> {
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return None;
         }
 
@@ -164,7 +166,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
             return None;
         }
 
-        let span = unsafe { *self.peek_chunk_ref.span() };
+        let span = unsafe { *self.peek_chunk_cursor.span() };
 
         self.pending.lookahead_end_site =
             self.pending.lookahead_end_site.max(self.peek_site + span);
@@ -174,7 +176,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
     #[inline(always)]
     fn string(&mut self, distance: TokenCount) -> Option<&'unit str> {
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return None;
         }
 
@@ -186,14 +188,14 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         self.pending.lookahead_end_site = self
             .pending
             .lookahead_end_site
-            .max(self.peek_site + unsafe { *self.peek_chunk_ref.span() });
+            .max(self.peek_site + unsafe { *self.peek_chunk_cursor.span() });
 
-        Some(unsafe { self.peek_chunk_ref.string() })
+        Some(unsafe { self.peek_chunk_cursor.string() })
     }
 
     #[inline(always)]
     fn token_ref(&mut self, distance: TokenCount) -> TokenRef {
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return TokenRef::nil();
         }
 
@@ -205,21 +207,21 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         self.pending.lookahead_end_site = self
             .pending
             .lookahead_end_site
-            .max(self.peek_site + unsafe { *self.peek_chunk_ref.span() });
+            .max(self.peek_site + unsafe { *self.peek_chunk_cursor.span() });
 
-        let ref_index = unsafe { self.peek_chunk_ref.chunk_ref_index() };
+        let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_ref = unsafe { self.references.chunks().make_ref(ref_index) };
+        let chunk_entry = unsafe { self.references.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.id,
-            chunk_ref,
+            chunk_entry,
         }
     }
 
     #[inline(always)]
     fn site_ref(&mut self, distance: TokenCount) -> SiteRef {
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return self.end_site_ref();
         }
 
@@ -231,15 +233,15 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         self.pending.lookahead_end_site = self
             .pending
             .lookahead_end_site
-            .max(self.peek_site + unsafe { *self.peek_chunk_ref.span() });
+            .max(self.peek_site + unsafe { *self.peek_chunk_cursor.span() });
 
-        let ref_index = unsafe { self.peek_chunk_ref.chunk_ref_index() };
+        let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_ref = unsafe { self.references.chunks().make_ref(ref_index) };
+        let chunk_entry = unsafe { self.references.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.id,
-            chunk_ref,
+            chunk_entry,
         }
         .site_ref()
     }
@@ -253,34 +255,52 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     type Node = N;
 
-    fn descend(&mut self, rule: RuleIndex) -> NodeRef {
+    fn descend(&mut self, rule: NodeRule) -> NodeRef {
         if self.pending.leftmost {
-            let node = N::parse(rule, self);
+            let index = self.pending.nodes.reserve();
 
-            let node_ref = self.pending.nodes.insert(node);
-
-            return NodeRef {
+            let node_ref = NodeRef {
                 id: self.id,
-                cluster_ref: self.pending.cluster_ref,
-                node_ref,
+                cluster_entry: self.pending.cluster_entry,
+                node_entry: unsafe { self.pending.nodes.entry_of(index) },
             };
+
+            self.context.push(node_ref);
+
+            let node = N::parse(self, rule);
+
+            #[allow(unused)]
+            let last = self.context.pop();
+
+            #[cfg(debug_assertions)]
+            if last != Some(node_ref) {
+                panic!("Inheritance imbalance.");
+            }
+
+            unsafe { self.pending.nodes.set_unchecked(index, node) };
+
+            return node_ref;
         }
 
-        if self.next_chunk_ref.is_dangling() {
+        if self.next_chunk_cursor.is_dangling() {
             return NodeRef::nil();
         }
 
-        if let Some(cache) = unsafe { self.next_chunk_ref.cache() } {
+        if let Some(cache) = unsafe { self.next_chunk_cursor.cache_mut() } {
             if cache.successful && cache.rule == rule {
-                let cluster_ref_index = unsafe { self.next_chunk_ref.cache_index() };
+                cache.cluster.primary.set_parent_ref(self.node_ref());
+
+                let cluster_entry_index = unsafe { self.next_chunk_cursor.cache_index() };
 
                 let result = NodeRef {
                     id: self.id,
-                    cluster_ref: unsafe { self.references.clusters().make_ref(cluster_ref_index) },
-                    node_ref: Ref::Primary,
+                    cluster_entry: unsafe {
+                        self.references.clusters().entry_of(cluster_entry_index)
+                    },
+                    node_entry: Entry::Primary,
                 };
 
-                let (end_site, end_chunk_ref) =
+                let (end_site, end_chunk_cursor) =
                     unsafe { cache.jump_to_end(self.tree, self.references) };
 
                 self.pending.lookahead_end_site = self
@@ -289,26 +309,30 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
                     .max(end_site + cache.lookahead);
                 self.pending.leftmost = false;
 
-                self.next_chunk_ref = end_chunk_ref;
+                self.next_chunk_cursor = end_chunk_cursor;
                 self.next_site = end_site;
-                self.peek_chunk_ref = end_chunk_ref;
+                self.peek_chunk_cursor = end_chunk_cursor;
                 self.peek_distance = 0;
                 self.peek_site = end_site;
+
+                if let Some(updates) = &mut self.updates {
+                    updates.insert(result);
+                }
 
                 return result;
             }
         };
 
-        let child_chunk_ref = self.next_chunk_ref;
+        let child_chunk_cursor = self.next_chunk_cursor;
 
-        let cluster_ref_index;
-        let cluster_ref;
+        let cluster_entry_index;
+        let cluster_entry;
 
         {
             let clusters = self.references.clusters_mut();
 
-            cluster_ref_index = clusters.insert_index(child_chunk_ref);
-            cluster_ref = unsafe { clusters.make_ref(cluster_ref_index) };
+            cluster_entry_index = clusters.insert_raw(child_chunk_cursor);
+            cluster_entry = unsafe { clusters.entry_of(cluster_entry_index) };
         };
 
         let parent = replace(
@@ -316,14 +340,34 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             Pending {
                 lookahead_end_site: self.next_site,
                 leftmost: true,
-                cluster_ref,
+                cluster_entry,
                 nodes: Repository::default(),
                 errors: Repository::default(),
                 successful: true,
             },
         );
 
-        let primary = N::parse(rule, self);
+        let node_ref = NodeRef {
+            id: self.id,
+            cluster_entry,
+            node_entry: Entry::Primary,
+        };
+
+        self.context.push(node_ref);
+
+        if let Some(updates) = &mut self.updates {
+            updates.insert(node_ref);
+        }
+
+        let primary = N::parse(self, rule);
+
+        #[allow(unused)]
+        let last = self.context.pop();
+
+        #[cfg(debug_assertions)]
+        if last != Some(node_ref) {
+            panic!("Inheritance imbalance.");
+        }
 
         let child = replace(&mut self.pending, parent);
 
@@ -336,9 +380,9 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
         let parsed_end = self.parsed_end();
 
-        let previous_ref_index = unsafe {
-            child_chunk_ref.set_cache(
-                cluster_ref_index,
+        let previous_entry_index = unsafe {
+            child_chunk_cursor.set_cache(
+                cluster_entry_index,
                 ClusterCache {
                     cluster: Cluster {
                         primary,
@@ -353,38 +397,86 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             )
         };
 
-        if let Some(previous_ref_index) = previous_ref_index {
+        if let Some(previous_entry_index) = previous_entry_index {
             unsafe {
                 self.references
                     .clusters_mut()
-                    .remove_unchecked(previous_ref_index)
+                    .remove_unchecked(previous_entry_index)
             };
         }
 
-        NodeRef {
+        node_ref
+    }
+
+    #[inline(always)]
+    fn enter_node(&mut self) -> NodeRef {
+        let index = self.pending.nodes.reserve();
+
+        let node_ref = NodeRef {
             id: self.id,
-            cluster_ref,
-            node_ref: Ref::Primary,
+            cluster_entry: self.pending.cluster_entry,
+            node_entry: unsafe { self.pending.nodes.entry_of(index) },
+        };
+
+        self.context.push(node_ref);
+
+        if let Some(updates) = &mut self.updates {
+            updates.insert(node_ref);
+        }
+
+        node_ref
+    }
+
+    #[inline(always)]
+    fn leave_node(&mut self, node: Self::Node) -> NodeRef {
+        #[cfg(debug_assertions)]
+        if self.context.len() <= 2 {
+            panic!("Inheritance imbalance.");
+        }
+
+        let node_ref = match self.context.pop() {
+            None => panic!("Inheritance imbalance."),
+            Some(node_ref) => node_ref,
+        };
+
+        if node_ref.cluster_entry != self.pending.cluster_entry {
+            panic!("Inheritance imbalance.");
+        }
+
+        let index = match &node_ref.node_entry {
+            Entry::Repo { index, .. } => *index,
+            _ => panic!("Inheritance imbalance."),
+        };
+
+        unsafe { self.pending.nodes.set_unchecked(index, node) };
+
+        node_ref
+    }
+
+    #[inline(always)]
+    fn node_ref(&self) -> NodeRef {
+        match self.context.last() {
+            Some(node_ref) => *node_ref,
+            None => panic!("Inheritance imbalance."),
         }
     }
 
     #[inline(always)]
-    fn node(&mut self, node: Self::Node) -> NodeRef {
-        NodeRef {
-            id: self.id,
-            cluster_ref: self.pending.cluster_ref,
-            node_ref: self.pending.nodes.insert(node),
+    fn parent_ref(&self) -> NodeRef {
+        match self.context.len().checked_sub(2) {
+            None => return NodeRef::nil(),
+            Some(depth) => *unsafe { self.context.get_unchecked(depth) },
         }
     }
 
     #[inline(always)]
-    fn error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
+    fn attach_error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
         self.pending.successful = false;
 
         ErrorRef {
             id: self.id,
-            cluster_ref: self.pending.cluster_ref,
-            error_ref: self.pending.errors.insert(error.into()),
+            cluster_entry: self.pending.cluster_entry,
+            error_entry: self.pending.errors.insert(error.into()),
         }
     }
 }
@@ -397,10 +489,11 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         id: Id,
         tree: &'unit mut Tree<N>,
         references: &'unit mut References<N>,
-        rule: RuleIndex,
+        updates: Option<&'unit mut StdSet<NodeRef>>,
+        rule: NodeRule,
         start: Site,
-        head: ChildRefIndex<N>,
-        cluster_ref: Ref,
+        head: ChildCursor<N>,
+        cluster_entry: Entry,
     ) -> (ClusterCache<N>, Site, Length) {
         if TypeId::of::<N>() == TypeId::of::<NoSyntax<<N as Node>::Token>>() {
             debug_assert_eq!(rule, ROOT_RULE, "An attempt to reparse void syntax.",);
@@ -425,25 +518,50 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         let pending = Pending {
             lookahead_end_site: start,
             leftmost: true,
-            cluster_ref,
+            cluster_entry,
             nodes: Repository::default(),
             errors: Repository::default(),
             successful: true,
+        };
+
+        let context = {
+            let parent_ref = match head.is_dangling() {
+                true => NodeRef::nil(),
+                false => match unsafe { head.cache() } {
+                    None => NodeRef::nil(),
+                    Some(cache) => cache.cluster.primary.parent_ref(),
+                },
+            };
+
+            let node_ref = NodeRef {
+                id,
+                cluster_entry,
+                node_entry: Entry::Primary,
+            };
+
+            let mut context = Vec::with_capacity(10);
+
+            context.push(parent_ref);
+            context.push(node_ref);
+
+            context
         };
 
         let mut session = Self {
             id,
             tree,
             references,
+            updates,
+            context,
             pending,
-            next_chunk_ref: head,
+            next_chunk_cursor: head,
             next_site: start,
-            peek_chunk_ref: head,
+            peek_chunk_cursor: head,
             peek_distance: 0,
             peek_site: start,
         };
 
-        let primary = N::parse(rule, &mut session);
+        let primary = N::parse(&mut session, rule);
         let parsed_end_site = session.next_site;
         let parsed_end = session.parsed_end();
         let lookahead = session.pending.lookahead_end_site - session.next_site;
@@ -470,14 +588,14 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
 
     #[inline(always)]
     fn parsed_end(&self) -> SiteRef {
-        match self.next_chunk_ref.is_dangling() {
+        match self.next_chunk_cursor.is_dangling() {
             false => {
-                let chunk_ref_index = unsafe { self.next_chunk_ref.chunk_ref_index() };
-                let chunk_ref = unsafe { self.references.chunks().make_ref(chunk_ref_index) };
+                let chunk_entry_index = unsafe { self.next_chunk_cursor.chunk_entry_index() };
+                let chunk_entry = unsafe { self.references.chunks().entry_of(chunk_entry_index) };
 
                 TokenRef {
                     id: self.id,
-                    chunk_ref,
+                    chunk_entry,
                 }
                 .site_ref()
             }
@@ -487,19 +605,19 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
     }
 
     // Returns `true` if jump has failed.
-    // Safety: `self.next_chunk_ref` is not dangling.
+    // Safety: `self.next_chunk_cursor` is not dangling.
     #[inline]
     unsafe fn jump(&mut self, target: TokenCount) -> bool {
         while self.peek_distance < target {
             self.peek_distance += 1;
-            self.peek_site += unsafe { *self.peek_chunk_ref.span() };
+            self.peek_site += unsafe { *self.peek_chunk_cursor.span() };
 
-            unsafe { self.peek_chunk_ref.next() };
+            unsafe { self.peek_chunk_cursor.next() };
 
-            if unsafe { self.peek_chunk_ref.is_dangling() } {
+            if unsafe { self.peek_chunk_cursor.is_dangling() } {
                 self.peek_distance = 0;
                 self.peek_site = self.next_site;
-                self.peek_chunk_ref = self.next_chunk_ref;
+                self.peek_chunk_cursor = self.next_chunk_cursor;
                 return true;
             }
         }
@@ -507,27 +625,27 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         if self.peek_distance > target * 2 {
             self.peek_distance = 0;
             self.peek_site = self.next_site;
-            self.peek_chunk_ref = self.next_chunk_ref;
+            self.peek_chunk_cursor = self.next_chunk_cursor;
 
             while self.peek_distance < target {
                 self.peek_distance += 1;
-                self.peek_site += unsafe { *self.peek_chunk_ref.span() };
+                self.peek_site += unsafe { *self.peek_chunk_cursor.span() };
 
-                unsafe { self.peek_chunk_ref.next() };
+                unsafe { self.peek_chunk_cursor.next() };
 
-                debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
+                debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
             }
 
             return false;
         }
 
         while self.peek_distance > target {
-            unsafe { self.peek_chunk_ref.back() }
+            unsafe { self.peek_chunk_cursor.back() }
 
-            debug_assert!(!self.peek_chunk_ref.is_dangling(), "Dangling peek ref.");
+            debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
 
             self.peek_distance -= 1;
-            self.peek_site -= unsafe { *self.peek_chunk_ref.span() };
+            self.peek_site -= unsafe { *self.peek_chunk_cursor.span() };
         }
 
         false
@@ -537,7 +655,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
 struct Pending<N: Node> {
     lookahead_end_site: Site,
     leftmost: bool,
-    cluster_ref: Ref,
+    cluster_entry: Entry,
     nodes: Repository<N>,
     errors: Repository<N::Error>,
     successful: bool,

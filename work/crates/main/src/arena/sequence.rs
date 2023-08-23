@@ -1,5 +1,42 @@
+////////////////////////////////////////////////////////////////////////////////
+// This file is a part of the "Lady Deirdre" Work,                            //
+// a compiler front-end foundation technology.                                //
+//                                                                            //
+// This Work is a proprietary software with source available code.            //
+//                                                                            //
+// To copy, use, distribute, and contribute into this Work you must agree to  //
+// the terms of the End User License Agreement:                               //
+//                                                                            //
+// https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
+//                                                                            //
+// The Agreement let you use this Work in commercial and non-commercial       //
+// purposes. Commercial use of the Work is free of charge to start,           //
+// but the Agreement obligates you to pay me royalties                        //
+// under certain conditions.                                                  //
+//                                                                            //
+// If you want to contribute into the source code of this Work,               //
+// the Agreement obligates you to assign me all exclusive rights to           //
+// the Derivative Work or contribution made by you                            //
+// (this includes GitHub forks and pull requests to my repository).           //
+//                                                                            //
+// The Agreement does not limit rights of the third party software developers //
+// as long as the third party software uses public API of this Work only,     //
+// and the third party software does not incorporate or distribute            //
+// this Work directly.                                                        //
+//                                                                            //
+// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
+// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
+// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+//                                                                            //
+// If you do not or cannot agree to the terms of this Agreement,              //
+// do not use this Work.                                                      //
+//                                                                            //
+// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// All rights reserved.                                                       //
+////////////////////////////////////////////////////////////////////////////////
+
 use crate::{
-    arena::{Ref, RefIndex},
+    arena::{Entry, EntryIndex},
     std::*,
 };
 
@@ -8,7 +45,7 @@ use crate::{
 /// This interface wraps a vector of items that supposed to grow as a FIFO stack on initialization,
 /// but later on will be used in mostly immutable way during lifetime.
 ///
-/// Sequence interface is compatible with [Ref](crate::arena::Ref) weak references framework.
+/// Sequence interface is compatible with [Ref](crate::arena::Entry) weak references framework.
 ///
 /// In contrast to [Repository](crate::arena::Repository) Sequence does not have a version
 /// management mechanism as the collection supposed to be immutable during lifetime. For the sake
@@ -26,9 +63,9 @@ use crate::{
 /// sequence.push(10);
 /// sequence.push(20);
 ///
-/// let first_item_ref = Sequence::<u8>::make_ref(0);
+/// let first_item_entry = Sequence::<u8>::entry_of(0);
 ///
-/// assert_eq!(sequence.get(&first_item_ref), Some(&10));
+/// assert_eq!(sequence.get(&first_item_entry), Some(&10));
 ///
 /// // Inner function returns a slice of the inner vector data.
 /// assert_eq!(&sequence.inner()[1], &20);
@@ -41,9 +78,9 @@ use crate::{
 ///
 /// let mut sequence = Sequence::<u8>::from(vec![10, 20]);
 ///
-/// let first_item_ref = Sequence::<u8>::make_ref(0);
+/// let first_item_entry = Sequence::<u8>::entry_of(0);
 ///
-/// assert_eq!(sequence.get(&first_item_ref), Some(&10));
+/// assert_eq!(sequence.get(&first_item_entry), Some(&10));
 ///
 /// // Receiving original inner vector from this collection.
 /// let original_vector = sequence.into_vec();
@@ -93,7 +130,7 @@ impl<T> Sequence<T> {
     /// This function is supposed to be used on the instance initialization stage only.
     ///
     /// Returns valid reference index to refer added item. This index can be used to create valid
-    /// [Ref](crate::arena::Ref) instance using [make_ref](crate::arena::Sequence::make_ref)
+    /// [Ref](crate::arena::Entry) instance using [entry_of](crate::arena::Sequence::entry_of)
     /// function.
     ///
     /// ```rust
@@ -102,12 +139,12 @@ impl<T> Sequence<T> {
     /// let mut sequence = Sequence::<u8>::default();
     ///
     /// let item_index = sequence.push(10);
-    /// let item_ref = Sequence::<u8>::make_ref(item_index);
+    /// let item_entry = Sequence::<u8>::entry_of(item_index);
     ///
-    /// assert_eq!(sequence.get(&item_ref), Some(&10));
+    /// assert_eq!(sequence.get(&item_entry), Some(&10));
     /// ```
     #[inline(always)]
-    pub fn push(&mut self, data: T) -> RefIndex {
+    pub fn push(&mut self, data: T) -> EntryIndex {
         let index = self.entries.len();
 
         self.entries.push(data);
@@ -152,22 +189,22 @@ impl<T> Sequence<T> {
     ///
     /// let mut repo = Repository::<u8>::default();
     ///
-    /// let repo_item_ref = repo.insert(10);
+    /// let repo_item_entry = repo.insert(10);
     ///
     /// let mut seq = Sequence::<u8>::default();
     ///
     /// let seq_item_index = seq.push(20);
-    /// let seq_item_ref = Sequence::<u8>::make_ref(seq_item_index);
+    /// let seq_item_entry = Sequence::<u8>::entry_of(seq_item_index);
     ///
     /// // Repository item reference is invalid to the Sequence collection.
-    /// assert!(!seq.contains(&repo_item_ref));
+    /// assert!(!seq.contains(&repo_item_entry));
     ///
     /// // Inserted Sequence item reference is a valid reference for this Sequence collection.
-    /// assert!(seq.contains(&seq_item_ref));
+    /// assert!(seq.contains(&seq_item_entry));
     #[inline]
-    pub fn contains(&self, reference: &Ref) -> bool {
+    pub fn contains(&self, reference: &Entry) -> bool {
         match reference {
-            Ref::Sequence { index } if self.entries.len() > *index => true,
+            Entry::Seq { index } if self.entries.len() > *index => true,
 
             _ => false,
         }
@@ -183,18 +220,18 @@ impl<T> Sequence<T> {
     /// let mut seq = Sequence::<u8>::default();
     ///
     /// let item_index = seq.push(10);
-    /// let item_ref = Sequence::<u8>::make_ref(item_index);
+    /// let item_entry = Sequence::<u8>::entry_of(item_index);
     ///
-    /// assert_eq!(seq.get(&item_ref), Some(&10));
+    /// assert_eq!(seq.get(&item_entry), Some(&10));
     ///
     /// let _ = seq.pop();
     ///
     /// // Referred item no longer exists in this collection.
-    /// assert_eq!(seq.get(&item_ref), None);
+    /// assert_eq!(seq.get(&item_entry), None);
     #[inline]
-    pub fn get(&self, reference: &Ref) -> Option<&T> {
+    pub fn get(&self, reference: &Entry) -> Option<&T> {
         match reference {
-            Ref::Sequence { index } => self.entries.get(*index),
+            Entry::Seq { index } => self.entries.get(*index),
 
             _ => None,
         }
@@ -210,15 +247,15 @@ impl<T> Sequence<T> {
     /// let mut seq = Sequence::<u8>::default();
     ///
     /// let item_index = seq.push(10);
-    /// let item_ref = Sequence::<u8>::make_ref(item_index);
+    /// let item_entry = Sequence::<u8>::entry_of(item_index);
     ///
-    /// *(seq.get_mut(&item_ref).unwrap()) = 20;
+    /// *(seq.get_mut(&item_entry).unwrap()) = 20;
     ///
-    /// assert_eq!(seq.get(&item_ref), Some(&20));
+    /// assert_eq!(seq.get(&item_entry), Some(&20));
     #[inline]
-    pub fn get_mut(&mut self, reference: &Ref) -> Option<&mut T> {
+    pub fn get_mut(&mut self, reference: &Entry) -> Option<&mut T> {
         match reference {
-            Ref::Sequence { index } => self.entries.get_mut(*index),
+            Entry::Seq { index } => self.entries.get_mut(*index),
 
             _ => None,
         }
@@ -250,24 +287,24 @@ impl<T> Sequence<T> {
     /// let mut seq = Sequence::<u8>::default();
     ///
     /// let item_index = seq.push(10);
-    /// let item_ref = Sequence::<u8>::make_ref(item_index);
+    /// let item_entry = Sequence::<u8>::entry_of(item_index);
     ///
-    /// assert_eq!(seq.get(&item_ref), Some(&10));
+    /// assert_eq!(seq.get(&item_entry), Some(&10));
     ///
     /// let _ = seq.pop();
     ///
     /// // Referred item no longer exists in this collection.
-    /// assert_eq!(seq.get(&item_ref), None);
+    /// assert_eq!(seq.get(&item_entry), None);
     ///
     /// // Note that however Sequence collection does not manage versions, as such inserting a new
     /// // item inside this collection would turn previously created weak reference to a valid
     /// // reference again, and that old reference would refer a new item instance.
     ///
     /// let _ = seq.push(20);
-    /// assert_eq!(seq.get(&item_ref), Some(&20));
+    /// assert_eq!(seq.get(&item_entry), Some(&20));
     #[inline(always)]
-    pub fn make_ref(index: RefIndex) -> Ref {
-        Ref::Sequence { index }
+    pub fn entry_of(index: EntryIndex) -> Entry {
+        Entry::Seq { index }
     }
 
     /// Returns an immutable slice of all items inside this collection.

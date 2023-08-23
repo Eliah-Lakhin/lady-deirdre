@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Ref, Repository},
+    arena::{Entry, Id, Identifiable, Repository},
     lexis::{SiteRef, SiteRefSpan},
     std::*,
     syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
@@ -86,7 +86,7 @@ pub struct Cluster<N: Node> {
     /// There are no particular rules on how to select this node, but it is assumed that the
     /// [`secondary nodes`](Cluster::nodes) are logically closely related to the Primary one.
     ///
-    /// By convention this node is referred within the [`Ref::Primary`](crate::arena::Ref::Primary)
+    /// By convention this node is referred within the [`Ref::Primary`](crate::arena::Entry::Primary)
     /// low-level reference.
     pub primary: N,
 
@@ -94,13 +94,13 @@ pub struct Cluster<N: Node> {
     /// a part of the syntax tree.
     ///
     /// By convention this node is referred within the
-    /// [`Ref::Repository`](crate::arena::Ref::Repository) low-level reference.
+    /// [`Ref::Repository`](crate::arena::Entry::Repo) low-level reference.
     pub nodes: Repository<N>,
 
     /// A set of syntax and semantic errors logically related to the nodes of this cluster.
     ///
     /// By convention this node is referred within the
-    /// [`Ref::Repository`](crate::arena::Ref::Repository) low-level reference.
+    /// [`Ref::Repository`](crate::arena::Entry::Repo) low-level reference.
     pub errors: Repository<N::Error>,
 }
 
@@ -150,10 +150,10 @@ pub struct ClusterRef {
     /// An internal weak reference of the cluster into the [SyntaxTree](crate::syntax::SyntaxTree)
     /// instance.
     ///
-    /// This low-level [Ref](crate::arena::Ref) object used by the ClusterRef under the hood to
+    /// This low-level [Ref](crate::arena::Entry) object used by the ClusterRef under the hood to
     /// fetch particular values from the SyntaxTree dereferencing functions(e.g.
     /// [`SyntaxTree::get_cluster`](crate::syntax::SyntaxTree::get_cluster)).
-    pub cluster_ref: Ref,
+    pub cluster_entry: Entry,
 }
 
 impl Debug for ClusterRef {
@@ -161,8 +161,8 @@ impl Debug for ClusterRef {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
-                "ClusterRef(ref: {:?}, id: {:?})",
-                self.cluster_ref, self.id,
+                "ClusterRef(id: {:?}, cluster_entry: {:?})",
+                self.id, self.cluster_entry
             )),
             true => formatter.write_str("ClusterRef(Nil)"),
         }
@@ -184,7 +184,7 @@ impl ClusterRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            cluster_ref: Ref::Nil,
+            cluster_entry: Entry::Nil,
         }
     }
 
@@ -198,7 +198,7 @@ impl ClusterRef {
     /// instance use [is_valid_ref](crate::syntax::ClusterRef::is_valid_ref) function instead.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.cluster_ref.is_nil()
+        self.id.is_nil() || self.cluster_entry.is_nil()
     }
 
     /// Immutably dereferences weakly referred [Cluster] of specified
@@ -219,7 +219,7 @@ impl ClusterRef {
             return None;
         }
 
-        tree.get_cluster(&self.cluster_ref)
+        tree.get_cluster(&self.cluster_entry)
     }
 
     /// Mutably dereferences weakly referred [Cluster] of specified
@@ -241,7 +241,7 @@ impl ClusterRef {
             return None;
         }
 
-        tree.get_cluster_mut(&self.cluster_ref)
+        tree.get_cluster_mut(&self.cluster_entry)
     }
 
     #[inline(always)]
@@ -250,7 +250,7 @@ impl ClusterRef {
             return SiteRef::nil()..SiteRef::nil();
         }
 
-        tree.get_cluster_span(&self.cluster_ref)
+        tree.get_cluster_span(&self.cluster_entry)
     }
 
     #[inline(always)]
@@ -259,12 +259,12 @@ impl ClusterRef {
             return Self::nil();
         }
 
-        match tree.get_next_cluster(&self.cluster_ref) {
-            Ref::Nil => Self::nil(),
+        match tree.get_next_cluster(&self.cluster_entry) {
+            Entry::Nil => Self::nil(),
 
             other => ClusterRef {
                 id: self.id,
-                cluster_ref: other,
+                cluster_entry: other,
             },
         }
     }
@@ -275,12 +275,12 @@ impl ClusterRef {
             return Self::nil();
         }
 
-        match tree.get_previous_cluster(&self.cluster_ref) {
-            Ref::Nil => Self::nil(),
+        match tree.get_previous_cluster(&self.cluster_entry) {
+            Entry::Nil => Self::nil(),
 
             other => ClusterRef {
                 id: self.id,
-                cluster_ref: other,
+                cluster_entry: other,
             },
         }
     }
@@ -291,7 +291,7 @@ impl ClusterRef {
             return None;
         }
 
-        tree.remove_cluster(&self.cluster_ref)
+        tree.remove_cluster(&self.cluster_entry)
     }
 
     /// Adds new `node` into the weakly referred [Cluster] of specified `tree` instance.
@@ -316,18 +316,18 @@ impl ClusterRef {
             return NodeRef::nil();
         }
 
-        let cluster = match tree.get_cluster_mut(&self.cluster_ref) {
+        let cluster = match tree.get_cluster_mut(&self.cluster_entry) {
             Some(cluster) => cluster,
 
             None => return NodeRef::nil(),
         };
 
-        let node_ref = cluster.nodes.insert(node);
+        let node_entry = cluster.nodes.insert(node);
 
         NodeRef {
             id: self.id,
-            cluster_ref: self.cluster_ref,
-            node_ref,
+            cluster_entry: self.cluster_entry,
+            node_entry,
         }
     }
 
@@ -357,18 +357,18 @@ impl ClusterRef {
             return ErrorRef::nil();
         }
 
-        let cluster = match tree.get_cluster_mut(&self.cluster_ref) {
+        let cluster = match tree.get_cluster_mut(&self.cluster_entry) {
             Some(cluster) => cluster,
 
             None => return ErrorRef::nil(),
         };
 
-        let error_ref = cluster.errors.insert(error);
+        let error_entry = cluster.errors.insert(error);
 
         ErrorRef {
             id: self.id,
-            cluster_ref: self.cluster_ref,
-            error_ref,
+            cluster_entry: self.cluster_entry,
+            error_entry,
         }
     }
 
@@ -384,6 +384,6 @@ impl ClusterRef {
             return false;
         }
 
-        tree.contains_cluster(&self.cluster_ref)
+        tree.contains_cluster(&self.cluster_entry)
     }
 }

@@ -48,7 +48,7 @@ mod utils;
 
 pub(crate) use crate::compiler::mutable::storage::{
     cache::ClusterCache,
-    child::ChildRefIndex,
+    child::ChildCursor,
     references::References,
     tree::Tree,
 };
@@ -77,9 +77,9 @@ mod tests {
             references::References,
             tree::Tree,
         },
-        lexis::{LexisSession, Token, TokenIndex},
+        lexis::{LexisSession, Token, TokenRule},
         std::*,
-        syntax::{Node, ParseError, RuleIndex, SyntaxSession},
+        syntax::{Children, Node, NodeRef, NodeRule, ParseError, SyntaxSession},
     };
 
     #[test]
@@ -590,19 +590,19 @@ mod tests {
                 let length = tree.length();
 
                 for site in 1..length {
-                    let chunk_ref = {
+                    let chunk_cursor = {
                         let mut site = site;
 
-                        let chunk_ref = tree.lookup(&mut site);
+                        let chunk_cursor = tree.lookup(&mut site);
 
                         assert_eq!(site, 0);
 
-                        chunk_ref
+                        chunk_cursor
                     };
 
-                    let start = unsafe { chunk_ref.token().0 };
+                    let start = unsafe { chunk_cursor.token().0 };
 
-                    let right = unsafe { tree.split(&mut references, chunk_ref) };
+                    let right = unsafe { tree.split(&mut references, chunk_cursor) };
 
                     assert_eq!(tree.length(), site);
                     assert_eq!(right.length(), length - site);
@@ -822,18 +822,18 @@ mod tests {
         }
 
         for site in 0..tree.length {
-            let chunk_ref = {
+            let chunk_cursor = {
                 let mut site = site;
 
-                let chunk_ref = tree.lookup(&mut site);
+                let chunk_cursor = tree.lookup(&mut site);
 
                 assert_eq!(site, 0);
 
-                chunk_ref
+                chunk_cursor
             };
 
             assert_eq!(
-                unsafe { chunk_ref.string() },
+                unsafe { chunk_cursor.string() },
                 format!("{}", (site + start)).as_str(),
             );
         }
@@ -846,13 +846,35 @@ mod tests {
         type Error = ParseError;
 
         fn parse<'code>(
-            _rule: RuleIndex,
             _session: &mut impl SyntaxSession<'code, Node = Self>,
+            _rule: NodeRule,
         ) -> Self {
             unimplemented!()
         }
 
-        fn describe(_index: RuleIndex) -> Option<&'static str> {
+        fn index(&self) -> NodeRule {
+            unimplemented!()
+        }
+
+        fn node_ref(&self) -> NodeRef {
+            unimplemented!()
+        }
+
+        fn parent_ref(&self) -> NodeRef {
+            unimplemented!()
+        }
+
+        fn set_parent_ref(&mut self, parent: NodeRef) {}
+
+        fn children(&self) -> Children {
+            unimplemented!()
+        }
+
+        fn name(_rule: NodeRule) -> Option<&'static str> {
+            unimplemented!()
+        }
+
+        fn describe(_rule: NodeRule) -> Option<&'static str> {
             unimplemented!()
         }
     }
@@ -873,11 +895,15 @@ mod tests {
             unimplemented!()
         }
 
-        fn index(self) -> TokenIndex {
+        fn rule(self) -> TokenRule {
             unimplemented!()
         }
 
-        fn describe(_index: TokenIndex) -> Option<&'static str> {
+        fn name(index: TokenRule) -> Option<&'static str> {
+            unimplemented!()
+        }
+
+        fn describe(_index: TokenRule) -> Option<&'static str> {
             unimplemented!()
         }
     }

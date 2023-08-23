@@ -40,6 +40,7 @@ mod constructor;
 mod generics;
 mod globals;
 mod index;
+mod inheritance;
 mod input;
 mod leftmost;
 mod recovery;

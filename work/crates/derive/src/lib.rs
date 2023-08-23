@@ -83,6 +83,9 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         secondary,
         parser,
         default,
+        node,
+        parent,
+        child,
         describe,
         dump,
     )

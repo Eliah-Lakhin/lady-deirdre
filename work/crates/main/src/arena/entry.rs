@@ -1,11 +1,48 @@
+////////////////////////////////////////////////////////////////////////////////
+// This file is a part of the "Lady Deirdre" Work,                            //
+// a compiler front-end foundation technology.                                //
+//                                                                            //
+// This Work is a proprietary software with source available code.            //
+//                                                                            //
+// To copy, use, distribute, and contribute into this Work you must agree to  //
+// the terms of the End User License Agreement:                               //
+//                                                                            //
+// https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
+//                                                                            //
+// The Agreement let you use this Work in commercial and non-commercial       //
+// purposes. Commercial use of the Work is free of charge to start,           //
+// but the Agreement obligates you to pay me royalties                        //
+// under certain conditions.                                                  //
+//                                                                            //
+// If you want to contribute into the source code of this Work,               //
+// the Agreement obligates you to assign me all exclusive rights to           //
+// the Derivative Work or contribution made by you                            //
+// (this includes GitHub forks and pull requests to my repository).           //
+//                                                                            //
+// The Agreement does not limit rights of the third party software developers //
+// as long as the third party software uses public API of this Work only,     //
+// and the third party software does not incorporate or distribute            //
+// this Work directly.                                                        //
+//                                                                            //
+// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
+// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
+// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+//                                                                            //
+// If you do not or cannot agree to the terms of this Agreement,              //
+// do not use this Work.                                                      //
+//                                                                            //
+// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// All rights reserved.                                                       //
+////////////////////////////////////////////////////////////////////////////////
+
 use crate::std::*;
 
 /// An index into the inner array of items of the [Sequence](crate::arena::Sequence) collection, or
 /// into the inner array of entries of the [Repository](crate::arena::Repository) collection.
-pub type RefIndex = usize;
+pub type EntryIndex = usize;
 
 /// A revision version of the entry inside [Repository](crate::arena::Repository) collection.
-pub type RefVersion = usize;
+pub type EntryVersion = usize;
 
 /// A generic homogeneous weak reference into the Arena collection items.
 ///
@@ -30,7 +67,7 @@ pub type RefVersion = usize;
 /// See [module documentation](crate::arena) for details on how to avoid this problem in the end
 /// API design.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Ref {
+pub enum Entry {
     /// Indicates invalid reference.
     ///
     /// This type of reference cannot be dereferenced.
@@ -48,17 +85,17 @@ pub enum Ref {
     ///
     /// An example of such container is a [Cluster](crate::syntax::Cluster) container that has a
     /// [Cluster::primary](crate::syntax::Cluster::primary) field that resides near the
-    /// [Cluster::nodes](crate::syntax::Cluster::nodes) collection field. A [Ref::Primary] variant
+    /// [Cluster::nodes](crate::syntax::Cluster::nodes) collection field. A [Entry::Primary] variant
     /// would refer the "primary" field value of the Cluster instance in this case.
     Primary,
 
     /// Indicates a references to the Item inside the [Sequence](crate::arena::Sequence) collection.
-    Sequence {
+    Seq {
         /// An index into the inner array of the [Sequence](crate::arena::Sequence) collection.
         ///
         /// If the index is outside of array's bounds, the reference considered to be invalid, and
         /// is interpreted as a [Ref::Nil] variant. Otherwise the reference considered to be valid.
-        index: RefIndex,
+        index: EntryIndex,
     },
 
     /// Indicates a references to the Item inside the [Repository](crate::arena::Repository)
@@ -68,13 +105,13 @@ pub enum Ref {
     /// and the version of the reference equals to the version of the indexed entry.
     ///
     /// For details see [Repository documentation](crate::arena::Repository).
-    Repository {
+    Repo {
         /// An index into the inner array of entries inside the
         /// [Repository](crate::arena::Repository) collection.
         ///
         /// If the index is outside of the Repository inner array bounds, the reference considered
         /// to be invalid, and is interpreted as a [Ref::Nil] variant.
-        index: RefIndex,
+        index: EntryIndex,
 
         /// A version of the entry indexed by this variant into the inner array of entries inside
         /// the [Repository](crate::arena::Repository) collection.
@@ -82,30 +119,30 @@ pub enum Ref {
         /// If the version held by this variant differs from the version of occupied entry in
         /// specified Repository instance, the reference considered to be invalid, and is
         /// interpreted as a [Ref::Nil] variant.
-        version: RefVersion,
+        version: EntryVersion,
     },
 }
 
-impl Debug for Ref {
+impl Debug for Entry {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Ref::Nil => formatter.write_str("Nil"),
-            Ref::Primary => formatter.write_str("Primary"),
-            Ref::Sequence { index } => formatter.write_fmt(format_args!("Ref({index})")),
-            Ref::Repository { index, version } => {
-                formatter.write_fmt(format_args!("Ref({index}:{version})"))
+            Entry::Nil => formatter.write_str("Nil"),
+            Entry::Primary => formatter.write_str("Primary"),
+            Entry::Seq { index } => formatter.write_fmt(format_args!("Entry({index})")),
+            Entry::Repo { index, version } => {
+                formatter.write_fmt(format_args!("Entry({index}:{version})"))
             }
         }
     }
 }
 
-impl Ref {
-    /// Returns true if the reference enum is a [Ref::Nil] variant.
+impl Entry {
+    /// Returns true if the reference enum is a [Entry::Nil] variant.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
         match &self {
-            Ref::Nil => true,
+            Entry::Nil => true,
             _ => false,
         }
     }

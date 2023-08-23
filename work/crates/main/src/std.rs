@@ -42,10 +42,9 @@ pub use ::alloc::{
     borrow::{Cow, ToOwned},
     boxed::Box,
     collections::{
-        btree_map::Iter as BTreeMapIter,
-        btree_map::Range as BTreeMapRange,
-        btree_map::RangeMut as BTreeMapRangeMut,
-        BTreeMap,
+        btree_set::Iter as StdSetIter,
+        BTreeMap as StdMap,
+        BTreeSet as StdSet,
         LinkedList,
         VecDeque,
     },
@@ -69,6 +68,7 @@ pub use ::core::{
     file,
     fmt::{Arguments as FmtArguments, Debug, Display, Formatter, Result as FmtResult},
     format_args,
+    hash::Hash,
     hint::unreachable_unchecked,
     iter::{
         Copied,
@@ -129,10 +129,9 @@ pub use std::{
     clone::Clone,
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     collections::{
-        btree_map::Iter as BTreeMapIter,
-        btree_map::Range as BTreeMapRange,
-        btree_map::RangeMut as BTreeMapRangeMut,
-        BTreeMap,
+        hash_set::Iter as StdSetIter,
+        HashMap as StdMap,
+        HashSet as StdSet,
         LinkedList,
         VecDeque,
     },
@@ -150,6 +149,7 @@ pub use std::{
     },
     format,
     format_args,
+    hash::Hash,
     hint::unreachable_unchecked,
     iter::{
         Copied,

@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::Ref,
+    arena::Entry,
     lexis::{SiteSpan, SourceCode, ToSpan},
     std::*,
     syntax::{ClusterRef, Node, NodeRef, SyntaxTree, TreeContent},
@@ -47,8 +47,8 @@ impl ClusterRef {
     pub fn primary_node_ref(&self) -> NodeRef {
         NodeRef {
             id: self.id,
-            cluster_ref: self.cluster_ref,
-            node_ref: Ref::Primary,
+            cluster_entry: self.cluster_entry,
+            node_entry: Entry::Primary,
         }
     }
 
@@ -61,7 +61,7 @@ impl ClusterRef {
             return None;
         }
 
-        let span = storage.get_cluster_span(&self.cluster_ref);
+        let span = storage.get_cluster_span(&self.cluster_entry);
 
         span.to_span(storage)
     }
