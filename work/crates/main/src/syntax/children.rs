@@ -36,9 +36,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::TokenRef,
+    compiler::CompilationUnit,
+    lexis::{Site, SiteSpan, TokenRef},
     std::*,
-    syntax::{NodeRef, PolyRef, PolyVariant},
+    syntax::{node::Node, NodeRef, PolyRef, PolyVariant},
 };
 
 #[derive(Clone)]
@@ -162,6 +163,14 @@ impl Children {
         self.vector.len()
     }
 
+    #[inline]
+    pub fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
+        let start = self.start(unit)?;
+        let end = self.end(unit)?;
+
+        Some(start..end)
+    }
+
     pub fn set(&mut self, key: &'static str, value: impl Into<Child>) {
         let value = value.into();
 
@@ -191,6 +200,28 @@ impl Children {
     #[inline(always)]
     pub fn into_entries(self) -> Vec<(&'static str, Child)> {
         self.vector
+    }
+
+    fn start(&self, unit: &impl CompilationUnit) -> Option<Site> {
+        for (_, child) in self.vector.iter() {
+            match child.start(unit) {
+                None => continue,
+                Some(site) => return Some(site),
+            }
+        }
+
+        None
+    }
+
+    fn end(&self, unit: &impl CompilationUnit) -> Option<Site> {
+        for (_, child) in self.vector.iter().rev() {
+            match child.end(unit) {
+                None => continue,
+                Some(site) => return Some(site),
+            }
+        }
+
+        None
     }
 }
 
@@ -387,19 +418,39 @@ impl Child {
 
     pub fn get(&self, index: usize) -> Option<&dyn PolyRef> {
         match self {
-            Self::Token(singleton) => match index == 0 {
-                true => Some(singleton),
+            Self::Token(child) => match index == 0 {
+                true => Some(child),
                 false => None,
             },
 
-            Self::TokenSeq(seq) => seq.get(index).map(|poly_ref| poly_ref as &dyn PolyRef),
+            Self::TokenSeq(child) => child.get(index).map(|poly_ref| poly_ref as &dyn PolyRef),
 
-            Self::Node(singleton) => match index == 0 {
-                true => Some(singleton),
+            Self::Node(child) => match index == 0 {
+                true => Some(child),
                 false => None,
             },
 
-            Self::NodeSeq(seq) => seq.get(index).map(|poly_ref| poly_ref as &dyn PolyRef),
+            Self::NodeSeq(child) => child.get(index).map(|poly_ref| poly_ref as &dyn PolyRef),
+        }
+    }
+
+    #[inline]
+    fn start(&self, unit: &impl CompilationUnit) -> Option<Site> {
+        match self {
+            Child::Token(child) => Some(child.chunk(unit)?.start()),
+            Child::TokenSeq(child) => Some(child.first()?.chunk(unit)?.start()),
+            Child::Node(child) => child.deref(unit)?.children().start(unit),
+            Child::NodeSeq(child) => child.first()?.deref(unit)?.children().start(unit),
+        }
+    }
+
+    #[inline]
+    fn end(&self, unit: &impl CompilationUnit) -> Option<Site> {
+        match self {
+            Child::Token(child) => Some(child.chunk(unit)?.end()),
+            Child::TokenSeq(child) => Some(child.last()?.chunk(unit)?.end()),
+            Child::Node(child) => child.deref(unit)?.children().end(unit),
+            Child::NodeSeq(child) => child.last()?.deref(unit)?.children().end(unit),
         }
     }
 }
