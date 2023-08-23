@@ -41,7 +41,6 @@ use proc_macro2::{Span, TokenStream};
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    spanned::Spanned,
     token::Bracket,
     Result,
     Type,

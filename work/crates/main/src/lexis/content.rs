@@ -147,7 +147,7 @@ impl<C: SourceCode> CodeContent for C {
 
     #[inline(always)]
     fn chunks(&self, span: impl ToSpan) -> Self::ChunkIterator<'_> {
-        let span = match span.to_span(self) {
+        let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
             Some(span) => span,
         };
@@ -162,7 +162,7 @@ impl<C: SourceCode> CodeContent for C {
 
     #[inline(always)]
     fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
-        let span = match span.to_span(self) {
+        let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
             Some(span) => span,
         };

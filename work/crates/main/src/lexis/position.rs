@@ -162,8 +162,8 @@ impl Display for Position {
 impl<I: Iterator<Item = char>> AddAssign<I> for Position {
     #[inline]
     fn add_assign(&mut self, rhs: I) {
-        for character in rhs {
-            match character {
+        for ch in rhs {
+            match ch {
                 '\n' => {
                     self.line += 1;
                     self.column = 1;
@@ -230,43 +230,6 @@ impl Position {
     pub fn new(line: Line, column: Column) -> Self {
         Self { line, column }
     }
-
-    pub(super) fn from_site(code: &impl SourceCode, site: Site) -> Self {
-        if site == 0 {
-            return Self::default();
-        }
-
-        let mut line = 1;
-        let mut column = 1;
-        let mut candidate = 0;
-        let mut slice = code.chars(..);
-
-        loop {
-            let next = match slice.next() {
-                None => break,
-                Some(character) => character,
-            };
-
-            candidate += 1;
-
-            match next {
-                '\n' => {
-                    line += 1;
-                    column = 1;
-                }
-
-                _ => {
-                    column += 1;
-                }
-            }
-
-            if candidate >= site {
-                break;
-            }
-        }
-
-        Self { line, column }
-    }
 }
 
 /// An auto-implemented trait that turns any [ToSite](crate::lexis::ToSite) implementation
@@ -297,14 +260,45 @@ pub trait ToPosition: ToSite {
 }
 
 impl<S: ToSite> ToPosition for S {
-    #[inline(always)]
     fn to_position(&self, code: &impl SourceCode) -> Option<Position> {
         let site = match self.to_site(code) {
             None => return None,
-
             Some(site) => site,
         };
 
-        Some(Position::from_site(code, site))
+        if site == 0 {
+            return Some(Position::default());
+        }
+
+        let mut line = 1;
+        let mut column = 1;
+        let mut cursor = 0;
+        let mut chars = code.chars(..);
+
+        loop {
+            let ch = match chars.next() {
+                None => break,
+                Some(ch) => ch,
+            };
+
+            cursor += 1;
+
+            match ch {
+                '\n' => {
+                    line += 1;
+                    column = 1;
+                }
+
+                _ => {
+                    column += 1;
+                }
+            }
+
+            if cursor >= site {
+                break;
+            }
+        }
+
+        Some(Position { line, column })
     }
 }

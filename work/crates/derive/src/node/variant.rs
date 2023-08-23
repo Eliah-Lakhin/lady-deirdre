@@ -51,7 +51,7 @@ use crate::{
         recovery::Recovery,
         rule::Rule,
     },
-    utils::{error, expect_some, Dump, Facade},
+    utils::{error, expect_some, Dump},
 };
 
 pub(super) struct NodeVariant {

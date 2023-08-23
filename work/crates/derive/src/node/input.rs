@@ -944,6 +944,7 @@ impl ToTokens for NodeInput {
                 }
 
                 #[inline(always)]
+                #[allow(unused_variables)]
                 fn set_parent_ref(&mut self, parent_ref: #core::syntax::NodeRef) {
                     match self {
                         #( #parent_setters )*

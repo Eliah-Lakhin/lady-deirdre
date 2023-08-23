@@ -528,6 +528,7 @@ impl ExpressionOperand<Operator> for Operand {
 
                 let name = ident.to_string();
 
+                //todo review if these keywords required to be reserved
                 let fits = match ident.to_string().as_str() {
                     "node" | "node_ref" | "parent" | "parent_ref" | "child" | "rule"
                     | "constructor" | "default" | "session" | "skip_trivia" => false,

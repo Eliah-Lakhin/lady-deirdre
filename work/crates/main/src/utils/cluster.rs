@@ -63,7 +63,7 @@ impl ClusterRef {
 
         let span = storage.get_cluster_span(&self.cluster_entry);
 
-        span.to_span(storage)
+        span.to_site_span(storage)
     }
 
     pub fn parent<N: Node>(

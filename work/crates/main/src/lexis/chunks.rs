@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Length, PositionSpan, Site, SiteSpan, SourceCode, ToPosition, Token},
+    lexis::{Length, Site, SiteSpan, SourceCode, ToSite, ToSpan, Token},
     std::*,
 };
 
@@ -72,24 +72,19 @@ impl<'source, T: Token> Chunk<'source, T> {
     pub fn end(&self) -> Site {
         self.site + self.length
     }
+}
 
+unsafe impl<'source, T: Token> ToSpan for Chunk<'source, T> {
     #[inline(always)]
-    pub fn site_span(&self) -> SiteSpan {
-        self.start()..self.end()
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+        let start = unsafe { self.start().to_site(code).unwrap_unchecked() };
+        let end = unsafe { self.end().to_site(code).unwrap_unchecked() };
+
+        Some(start..end)
     }
 
     #[inline(always)]
-    pub fn position_span(&self, code: &impl SourceCode) -> PositionSpan {
-        let start = self
-            .start()
-            .to_position(code)
-            .expect("Site to Position transformation failure.");
-
-        let end = self
-            .end()
-            .to_position(code)
-            .expect("Site to Position transformation failure.");
-
-        start..end
+    fn is_valid_span(&self, _code: &impl SourceCode) -> bool {
+        true
     }
 }

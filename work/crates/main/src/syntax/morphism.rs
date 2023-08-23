@@ -37,10 +37,9 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    compiler::CompilationUnit,
-    lexis::{Chunk, SourceCode, Token, TokenCursor, TokenRef},
+    lexis::TokenRef,
     std::*,
-    syntax::{Child, Node, NodeRef, SyntaxTree},
+    syntax::NodeRef,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

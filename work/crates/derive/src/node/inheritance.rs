@@ -35,8 +35,8 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::{Ident, Span, TokenStream};
-use syn::{spanned::Spanned, AttrStyle, Error, Fields, LitStr, Result, Variant};
+use proc_macro2::{Ident, TokenStream};
+use syn::{spanned::Spanned, AttrStyle, Error, LitStr, Result, Variant};
 
 use crate::utils::{error, expect_some, Facade};
 

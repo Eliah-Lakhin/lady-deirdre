@@ -39,16 +39,7 @@ use crate::{
     arena::{Entry, Id, Identifiable, Repository},
     lexis::{SiteRef, SiteRefSpan, ToSpan, TokenCursor},
     std::*,
-    syntax::{
-        session::SequentialSyntaxSession,
-        Cluster,
-        ClusterRef,
-        Node,
-        NodeRef,
-        SyntaxSession,
-        SyntaxTree,
-        ROOT_RULE,
-    },
+    syntax::{session::SequentialSyntaxSession, Cluster, ClusterRef, Node, SyntaxTree},
 };
 
 /// A non-incrementally managed syntax structure of a compilation unit.

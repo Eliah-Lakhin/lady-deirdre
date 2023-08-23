@@ -39,13 +39,11 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
 use syn::{
     parse::ParseStream,
-    punctuated::Punctuated,
     spanned::Spanned,
     AttrStyle,
     Attribute,
     Error,
     Expr,
-    Fields,
     Meta,
     Result,
     Type,

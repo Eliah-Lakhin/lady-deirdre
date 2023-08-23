@@ -405,7 +405,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 
     #[inline(always)]
     fn cursor(&self, span: impl ToSpan) -> Self::Cursor<'_> {
-        let span = match span.to_span(self) {
+        let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
 
             Some(span) => span,
@@ -430,7 +430,7 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
 
     #[inline(always)]
     fn cover(&self, span: impl ToSpan) -> ClusterRef {
-        let span = match span.to_span(self) {
+        let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
 
             Some(span) => span,
@@ -754,7 +754,7 @@ impl<N: Node> MutableUnit<N> {
     ///
     #[inline(never)]
     pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) -> NodeRef {
-        let span = match span.to_span(self) {
+        let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
 
             Some(span) => span,

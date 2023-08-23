@@ -202,8 +202,8 @@ impl<T> Sequence<T> {
     /// // Inserted Sequence item reference is a valid reference for this Sequence collection.
     /// assert!(seq.contains(&seq_item_entry));
     #[inline]
-    pub fn contains(&self, reference: &Entry) -> bool {
-        match reference {
+    pub fn contains(&self, entry: &Entry) -> bool {
+        match entry {
             Entry::Seq { index } if self.entries.len() > *index => true,
 
             _ => false,
@@ -229,8 +229,8 @@ impl<T> Sequence<T> {
     /// // Referred item no longer exists in this collection.
     /// assert_eq!(seq.get(&item_entry), None);
     #[inline]
-    pub fn get(&self, reference: &Entry) -> Option<&T> {
-        match reference {
+    pub fn get(&self, entry: &Entry) -> Option<&T> {
+        match entry {
             Entry::Seq { index } => self.entries.get(*index),
 
             _ => None,
@@ -253,8 +253,8 @@ impl<T> Sequence<T> {
     ///
     /// assert_eq!(seq.get(&item_entry), Some(&20));
     #[inline]
-    pub fn get_mut(&mut self, reference: &Entry) -> Option<&mut T> {
-        match reference {
+    pub fn get_mut(&mut self, entry: &Entry) -> Option<&mut T> {
+        match entry {
             Entry::Seq { index } => self.entries.get_mut(*index),
 
             _ => None,

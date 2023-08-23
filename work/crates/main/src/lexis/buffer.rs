@@ -199,7 +199,7 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
 
     #[inline(always)]
     fn cursor(&self, span: impl ToSpan) -> TokenBufferCursor<'_, Self::Token> {
-        let span = match span.to_span(self) {
+        let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
             Some(span) => span,
         };

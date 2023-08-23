@@ -252,18 +252,14 @@ where
 
                 let rule = chunk.token.rule();
                 let name = <U::Token as Token>::name(rule).unwrap_or("TokenRef");
-                let span = chunk.position_span(self.unit);
 
                 let mut debug_struct = formatter
                     .debug_struct(&format!("${name}(chunk_entry: {:?})", variant.chunk_entry));
 
                 debug_struct.field("string", &chunk.string);
                 debug_struct.field("length", &chunk.length);
-                debug_struct.field("site_span", &chunk.site_span());
-                debug_struct.field(
-                    "position_span",
-                    &format_args!("{}..{}", span.start, span.end),
-                );
+                debug_struct.field("site_span", &chunk.to_site_span(self.unit));
+                debug_struct.field("position_span", &chunk.display(self.unit));
 
                 debug_struct.finish()
             }

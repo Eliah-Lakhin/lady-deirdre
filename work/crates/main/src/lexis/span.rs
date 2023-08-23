@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Position, Site, SiteRef, SourceCode, ToPosition, ToSite},
+    lexis::{CodeContent, Position, Site, SiteRef, SourceCode, ToSite},
     std::*,
 };
 
@@ -114,7 +114,7 @@ pub type PositionSpan = Range<Position>;
 /// The underlying object may be a valid or invalid Span representation for particular
 /// [SourceCode](crate::lexis::SourceCode) instance. If the object considered to be not valid,
 /// [is_valid_span](ToSpan::is_valid_span) function returns `false`, and
-/// [to_span](ToSpan::to_span) function returns [None]. Otherwise "is_valid_span" returns `true`,
+/// [to_span](ToSpan::to_site_span) function returns [None]. Otherwise "is_valid_span" returns `true`,
 /// and "to_span" returns meaningful [SiteSpan](crate::lexis::SiteSpan) value.
 ///
 /// It is up to implementation to decide whether particular instance considered to be valid or not.
@@ -149,7 +149,7 @@ pub type PositionSpan = Range<Position>;
 /// // This is safe because "to_span" always returns SiteSpan within the source code text
 /// // character bounds.
 /// unsafe impl ToSpan for Half {
-///     fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+///     fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
 ///         Some(0..code.length() / 2)
 ///     }
 ///
@@ -164,7 +164,7 @@ pub type PositionSpan = Range<Position>;
 /// // This is safe because "to_site" implementation checks underlying value .
 /// unsafe impl ToSite for OneBaseSite {
 ///     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
-///         if self.0 == 0 || self.0 > code.length() { return None }
+///         if self.0 == 0 || self.0 > code.length() { return None; }
 ///
 ///         Some(self.0 - 1)
 ///     }
@@ -192,9 +192,76 @@ pub unsafe trait ToSpan {
     ///
     /// The returning SiteSpan [Range](::std::ops::Range) start bound value does not exceed end
     /// bound value, and the range's end bound does not exceed `SourceCode::length(code)` value.   
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan>;
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan>;
 
-    /// Returns `true` if and only if the [to_span](ToSpan::to_span) function would return
+    fn to_position_span(&self, code: &impl SourceCode) -> Option<PositionSpan> {
+        let span = self.to_site_span(code)?;
+
+        let mut line = 1;
+        let mut column = 1;
+        let mut cursor = 0;
+        let mut chars = code.chars(..);
+
+        let mut start = Position::default();
+
+        loop {
+            if cursor >= span.start {
+                start.line = line;
+                start.column = column;
+                break;
+            }
+
+            let ch = match chars.next() {
+                None => break,
+                Some(ch) => ch,
+            };
+
+            cursor += 1;
+
+            match ch {
+                '\n' => {
+                    line += 1;
+                    column = 1;
+                }
+
+                _ => {
+                    column += 1;
+                }
+            }
+        }
+
+        let mut end = start;
+
+        loop {
+            if cursor >= span.end {
+                end.line = line;
+                end.column = column;
+                break;
+            }
+
+            let ch = match chars.next() {
+                None => break,
+                Some(ch) => ch,
+            };
+
+            cursor += 1;
+
+            match ch {
+                '\n' => {
+                    line += 1;
+                    column = 1;
+                }
+
+                _ => {
+                    column += 1;
+                }
+            }
+        }
+
+        Some(start..end)
+    }
+
+    /// Returns `true` if and only if the [to_span](ToSpan::to_site_span) function would return
     /// [Some] value for specified `code` parameter.
     fn is_valid_span(&self, code: &impl SourceCode) -> bool;
 
@@ -214,25 +281,23 @@ pub unsafe trait ToSpan {
     /// ```
     #[inline]
     fn display(&self, code: &impl SourceCode) -> DisplayPositionSpan {
-        let Range { start, end } = match self.to_span(code) {
+        let mut span = match self.to_site_span(code) {
             None => return DisplayPositionSpan(None),
             Some(span) => span,
         };
 
-        let start_position = unsafe { start.to_position(code).unwrap_unchecked() };
+        match span.start + 1 < span.end {
+            true => span.end -= 1,
+            false => span.end = span.start,
+        }
 
-        let end_position = match start + 1 < end {
-            true => unsafe { (end - 1).to_position(code).unwrap_unchecked() },
-            false => start_position,
-        };
-
-        DisplayPositionSpan(Some(start_position..end_position))
+        DisplayPositionSpan(span.to_position_span(code))
     }
 }
 
 unsafe impl ToSpan for RangeFull {
     #[inline(always)]
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
         Some(0..code.length())
     }
 
@@ -244,7 +309,7 @@ unsafe impl ToSpan for RangeFull {
 
 unsafe impl<Site: ToSite> ToSpan for Range<Site> {
     #[inline]
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
         let start = self.start.to_site(code);
         let end = self.end.to_site(code);
 
@@ -268,7 +333,7 @@ unsafe impl<Site: ToSite> ToSpan for Range<Site> {
 
 unsafe impl<Site: ToSite> ToSpan for RangeInclusive<Site> {
     #[inline]
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
         let start = self.start().to_site(code);
         let end = self.end().to_site(code);
 
@@ -298,7 +363,7 @@ unsafe impl<Site: ToSite> ToSpan for RangeInclusive<Site> {
 
 unsafe impl<Site: ToSite> ToSpan for RangeFrom<Site> {
     #[inline]
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
         let start = match self.start.to_site(code) {
             None => return None,
             Some(site) => site,
@@ -317,7 +382,7 @@ unsafe impl<Site: ToSite> ToSpan for RangeFrom<Site> {
 
 unsafe impl<Site: ToSite> ToSpan for RangeTo<Site> {
     #[inline]
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
         let end = match self.end.to_site(code) {
             None => return None,
             Some(site) => site,
@@ -334,7 +399,7 @@ unsafe impl<Site: ToSite> ToSpan for RangeTo<Site> {
 
 unsafe impl<Site: ToSite> ToSpan for RangeToInclusive<Site> {
     #[inline]
-    fn to_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
         let end = match self.end.to_site(code) {
             None => return None,
             Some(site) => {
@@ -357,6 +422,13 @@ unsafe impl<Site: ToSite> ToSpan for RangeToInclusive<Site> {
 
 #[repr(transparent)]
 pub struct DisplayPositionSpan(Option<PositionSpan>);
+
+impl Debug for DisplayPositionSpan {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self, formatter)
+    }
+}
 
 impl Display for DisplayPositionSpan {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {

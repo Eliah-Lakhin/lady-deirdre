@@ -36,11 +36,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable},
-    compiler::CompilationUnit,
-    lexis::{Chunk, SourceCode, Token, TokenCursor, TokenRef},
+    lexis::TokenRef,
     std::*,
-    syntax::{Node, NodeRef, PolyRef, PolyVariant, RefKind, SyntaxTree},
+    syntax::{NodeRef, PolyRef, PolyVariant},
 };
 
 #[derive(Clone)]
