@@ -83,8 +83,8 @@ name = "balance"
 path = "tests/balance.rs"
 
 [[test]]
-name = "cluster"
-path = "tests/cluster.rs"
+name = "cover"
+path = "tests/cover.rs"
 
 [dependencies.lady-deirdre]
 version = "1.0"

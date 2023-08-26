@@ -816,7 +816,7 @@ impl ToTokens for NodeInput {
 
         descriptions.sort_by_key(|(index, _, _)| index.get());
 
-        let get_index = descriptions
+        let get_rule = descriptions
             .iter()
             .map(|(index, ident, _)| quote_spanned!(index.span() => Self::#ident { .. } => #index,))
             .collect::<Vec<_>>();
@@ -912,10 +912,10 @@ impl ToTokens for NodeInput {
                 }
 
                 #[inline(always)]
-                fn index(&self) -> #core::syntax::NodeRule {
+                fn rule(&self) -> #core::syntax::NodeRule {
                     match self {
                         #(
-                        #get_index
+                        #get_rule
                         )*
 
                         #[allow(unreachable_patterns)]

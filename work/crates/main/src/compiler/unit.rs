@@ -38,11 +38,13 @@
 use crate::{
     arena::{Entry, Identifiable},
     compiler::{ImmutableUnit, MutableUnit},
+    format::Delimited,
     lexis::{
         Chunk,
         Length,
         Site,
         SiteRefSpan,
+        SiteSpan,
         SourceCode,
         ToSpan,
         Token,
@@ -51,7 +53,7 @@ use crate::{
         TokenCursor,
     },
     std::*,
-    syntax::{Child, Cluster, ClusterRef, Node, PolyRef, PolyVariant, SyntaxTree},
+    syntax::{Child, Cluster, ClusterRef, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
     Document,
 };
 
@@ -95,6 +97,25 @@ pub trait CompilationUnit:
     }
 
     #[inline(always)]
+    fn cover(&self, span: impl ToSpan) -> NodeRef
+    where
+        Self: Sized,
+    {
+        let span = match span.to_site_span(self) {
+            None => panic!("Specified span is invalid."),
+
+            Some(span) => span,
+        };
+
+        let root = self.root_node_ref();
+
+        match NodeCoverage::cover(self, &root, &span) {
+            NodeCoverage::Fit(result) => result,
+            _ => root,
+        }
+    }
+
+    #[inline(always)]
     fn debug_tree(
         &self,
         poly_ref: &impl PolyRef,
@@ -122,8 +143,8 @@ impl<F: Lexis> SourceCode for F {
         where Self: 'code;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
-        self.lexis().contains_chunk(chunk_entry)
+    fn has_chunk(&self, chunk_entry: &Entry) -> bool {
+        self.lexis().has_chunk(chunk_entry)
     }
 
     #[inline(always)]
@@ -174,13 +195,8 @@ impl<F: Syntax> SyntaxTree for F {
     type Node = <F::Syntax as SyntaxTree>::Node;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> ClusterRef {
-        self.syntax().cover(span)
-    }
-
-    #[inline(always)]
-    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
-        self.syntax().contains_cluster(cluster_entry)
+    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
+        self.syntax().has_cluster(cluster_entry)
     }
 
     #[inline(always)]
@@ -191,11 +207,6 @@ impl<F: Syntax> SyntaxTree for F {
     #[inline(always)]
     fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
         self.syntax_mut().get_cluster_mut(cluster_entry)
-    }
-
-    #[inline(always)]
-    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
-        self.syntax().get_cluster_span(cluster_entry)
     }
 
     #[inline(always)]
@@ -270,7 +281,7 @@ where
                     Some(node) => node,
                 };
 
-                let rule = node.index();
+                let rule = node.rule();
                 let name = N::name(rule).unwrap_or("NodeRef");
 
                 let alternate = formatter.alternate();
@@ -319,5 +330,55 @@ where
                 debug_struct.finish()
             }
         }
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum NodeCoverage {
+    Nil,
+    Fit(NodeRef),
+    Misfit(Site),
+}
+
+impl NodeCoverage {
+    pub(super) fn cover<
+        'unit,
+        N: Node,
+        C: TokenCursor<'unit>,
+        U: CompilationUnit<Cursor<'unit> = C, Node = N>,
+    >(
+        unit: &'unit U,
+        node_ref: &NodeRef,
+        span: &SiteSpan,
+    ) -> Self {
+        let node: &N = match node_ref.deref(unit) {
+            None => return Self::Nil,
+            Some(node) => node,
+        };
+
+        let children = node.children();
+
+        let node_span = match children.span(unit) {
+            None => return Self::Nil,
+            Some(span) => span,
+        };
+
+        if node_span.start > span.start || node_span.end < span.end {
+            return Self::Misfit(node_span.start);
+        }
+
+        for child in children.nodes() {
+            match Self::cover(unit, child, span) {
+                Self::Nil => continue,
+                Self::Misfit(start) => {
+                    if start > span.start {
+                        break;
+                    }
+                }
+                other => return other,
+            }
+        }
+
+        Self::Fit(*node_ref)
     }
 }

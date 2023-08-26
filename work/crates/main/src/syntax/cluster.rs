@@ -222,6 +222,15 @@ impl ClusterRef {
         tree.get_cluster(&self.cluster_entry)
     }
 
+    #[inline(always)]
+    pub fn primary_node_ref(&self) -> NodeRef {
+        NodeRef {
+            id: self.id,
+            cluster_entry: self.cluster_entry,
+            node_entry: Entry::Primary,
+        }
+    }
+
     /// Mutably dereferences weakly referred [Cluster] of specified
     /// [SyntaxTree](crate::syntax::SyntaxTree).
     ///
@@ -242,15 +251,6 @@ impl ClusterRef {
         }
 
         tree.get_cluster_mut(&self.cluster_entry)
-    }
-
-    #[inline(always)]
-    pub fn site_ref_span(&self, tree: &impl SyntaxTree) -> SiteRefSpan {
-        if self.id != tree.id() {
-            return SiteRef::nil()..SiteRef::nil();
-        }
-
-        tree.get_cluster_span(&self.cluster_entry)
     }
 
     #[inline(always)]
@@ -376,7 +376,7 @@ impl ClusterRef {
     /// [SyntaxTree](crate::syntax::SyntaxTree), and referred Cluster exists in this SyntaxTree
     /// instance.
     ///
-    /// This function uses [`SyntaxTree::contains`](crate::syntax::SyntaxTree::contains_cluster)
+    /// This function uses [`SyntaxTree::contains`](crate::syntax::SyntaxTree::has_cluster)
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
@@ -384,6 +384,6 @@ impl ClusterRef {
             return false;
         }
 
-        tree.contains_cluster(&self.cluster_entry)
+        tree.has_cluster(&self.cluster_entry)
     }
 }

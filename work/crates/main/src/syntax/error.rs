@@ -321,7 +321,7 @@ impl ParseError {
 ///
 /// let mut doc = Document::<SimpleNode>::from("foo bar");
 ///
-/// let new_custom_error_ref = doc.root_node_ref().cluster().link_error(
+/// let new_custom_error_ref = doc.root_node_ref().cluster_ref().link_error(
 ///     &mut doc,
 ///     ParseError {
 ///         span: SiteRef::nil()..SiteRef::nil(),

@@ -44,6 +44,7 @@ use crate::{
             storage::{ChildCursor, ClusterCache, References, Tree},
             syntax::MutableSyntaxSession,
         },
+        unit::NodeCoverage,
         CompilationUnit,
     },
     lexis::{
@@ -294,7 +295,7 @@ use crate::{
 /// // Adding artificial empty braces Node to the Root.
 /// {
 ///     let new_node = SimpleNode::Braces { inner: vec![] };
-///     let new_node_ref = root_ref.cluster().link_node(&mut doc, new_node);
+///     let new_node_ref = root_ref.cluster_ref().link_node(&mut doc, new_node);
 ///
 ///     match root_ref.deref_mut(&mut doc).unwrap() {
 ///         SimpleNode::Root { inner } => { inner.push(new_node_ref) }
@@ -356,7 +357,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     type Cursor<'code> = MutableCursor<'code, N>;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
+    fn has_chunk(&self, chunk_entry: &Entry) -> bool {
         self.references.chunks().contains(chunk_entry)
     }
 
@@ -429,56 +430,7 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> ClusterRef {
-        let span = match span.to_site_span(self) {
-            None => panic!("Specified span is invalid."),
-
-            Some(span) => span,
-        };
-
-        let mut chunk_cursor = match span.start == 0 && span.end == self.tree.length() {
-            true => ChildCursor::dangling(),
-
-            false => {
-                let mut start = span.start;
-
-                let mut chunk_cursor = self.tree.lookup(&mut start);
-
-                if start == 0 && !chunk_cursor.is_dangling() {
-                    unsafe { chunk_cursor.back() }
-                }
-
-                chunk_cursor
-            }
-        };
-
-        while !chunk_cursor.is_dangling() {
-            if let Some(cache) = unsafe { chunk_cursor.cache() } {
-                if let Some(end) = unsafe { cache.end_site(self) } {
-                    if end >= span.end {
-                        let cluster_index = unsafe { chunk_cursor.cache_index() };
-
-                        return ClusterRef {
-                            id: self.id,
-                            cluster_entry: unsafe {
-                                self.references.clusters().entry_of(cluster_index)
-                            },
-                        };
-                    }
-                }
-            }
-
-            unsafe { chunk_cursor.back() };
-        }
-
-        ClusterRef {
-            id: self.id,
-            cluster_entry: Entry::Primary,
-        }
-    }
-
-    #[inline(always)]
-    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
+    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
         match cluster_entry {
             Entry::Primary => true,
 
@@ -520,57 +472,6 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
 
             _ => None,
         }
-    }
-
-    #[inline]
-    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
-        match cluster_entry {
-            Entry::Primary => {
-                let first_chunk = self.tree.first();
-
-                let end = self.end_site_ref();
-
-                let start = match first_chunk.is_dangling() {
-                    true => end,
-
-                    false => {
-                        let entry_index = unsafe { first_chunk.chunk_entry_index() };
-
-                        TokenRef {
-                            id: self.id,
-                            chunk_entry: unsafe { self.references.chunks().entry_of(entry_index) },
-                        }
-                        .site_ref()
-                    }
-                };
-
-                return start..self.end_site_ref();
-            }
-
-            Entry::Repo { .. } => {
-                if let Some(child_cursor) = self.references.clusters().get(cluster_entry) {
-                    if let Some(cluster_cache) = unsafe { child_cursor.cache() } {
-                        let start = {
-                            let entry_index = unsafe { child_cursor.chunk_entry_index() };
-
-                            TokenRef {
-                                id: self.id,
-                                chunk_entry: unsafe {
-                                    self.references.chunks().entry_of(entry_index)
-                                },
-                            }
-                            .site_ref()
-                        };
-
-                        return start..cluster_cache.parsed_end;
-                    }
-                }
-            }
-
-            _ => (),
-        }
-
-        SiteRef::nil()..SiteRef::nil()
     }
 
     #[inline(always)]
@@ -705,6 +606,22 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
     fn into_mutable_unit(self) -> MutableUnit<N> {
         self
     }
+
+    #[inline(always)]
+    fn cover(&self, span: impl ToSpan) -> NodeRef {
+        let span = match span.to_site_span(self) {
+            None => panic!("Specified span is invalid."),
+
+            Some(span) => span,
+        };
+
+        let node_ref = self.cluster_cover(&span).primary_node_ref();
+
+        match NodeCoverage::cover(self, &node_ref, &span) {
+            NodeCoverage::Fit(result) => result,
+            _ => node_ref,
+        }
+    }
 }
 
 impl<N: Node> MutableUnit<N> {
@@ -801,6 +718,48 @@ impl<N: Node> MutableUnit<N> {
     #[inline(always)]
     pub(super) fn tree(&self) -> &Tree<N> {
         &self.tree
+    }
+
+    fn cluster_cover(&self, span: &SiteSpan) -> ClusterRef {
+        let mut chunk_cursor = match span.start == 0 && span.end == self.tree.length() {
+            true => ChildCursor::dangling(),
+
+            false => {
+                let mut start = span.start;
+
+                let mut chunk_cursor = self.tree.lookup(&mut start);
+
+                if start == 0 && !chunk_cursor.is_dangling() {
+                    unsafe { chunk_cursor.back() }
+                }
+
+                chunk_cursor
+            }
+        };
+
+        while !chunk_cursor.is_dangling() {
+            if let Some(cache) = unsafe { chunk_cursor.cache() } {
+                if let Some(end) = unsafe { cache.end_site(self) } {
+                    if end >= span.end {
+                        let cluster_index = unsafe { chunk_cursor.cache_index() };
+
+                        return ClusterRef {
+                            id: self.id,
+                            cluster_entry: unsafe {
+                                self.references.clusters().entry_of(cluster_index)
+                            },
+                        };
+                    }
+                }
+            }
+
+            unsafe { chunk_cursor.back() };
+        }
+
+        ClusterRef {
+            id: self.id,
+            cluster_entry: Entry::Primary,
+        }
     }
 
     fn update_lexis(&mut self, mut span: SiteSpan, text: &str) -> Cover<N> {

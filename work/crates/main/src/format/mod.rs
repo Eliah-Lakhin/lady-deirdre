@@ -35,4 +35,6 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod cluster;
+mod delimited;
+
+pub use crate::format::delimited::{Delimited, DelimitedItem};

@@ -39,7 +39,7 @@ use std::fmt::{Display, Formatter};
 
 use lady_deirdre::{
     lexis::{SourceCode, TokenRef},
-    syntax::{NodeRef, SyntaxBuffer, SyntaxTree, TreeContent},
+    syntax::{NodeRef, SyntaxBuffer, SyntaxTree},
 };
 
 use crate::json::{lexis::JsonToken, syntax::JsonNode};

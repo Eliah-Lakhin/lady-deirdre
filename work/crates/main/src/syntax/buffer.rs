@@ -122,15 +122,7 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, _span: impl ToSpan) -> ClusterRef {
-        ClusterRef {
-            id: self.id,
-            cluster_entry: Entry::Primary,
-        }
-    }
-
-    #[inline(always)]
-    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
+    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
         match cluster_entry {
             Entry::Primary => true,
             _ => false,
@@ -152,15 +144,6 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
             Entry::Primary => Some(&mut self.cluster),
 
             _ => None,
-        }
-    }
-
-    #[inline(always)]
-    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
-        match cluster_entry {
-            Entry::Primary => self.span.clone(),
-
-            _ => SiteRef::nil()..SiteRef::nil(),
         }
     }
 

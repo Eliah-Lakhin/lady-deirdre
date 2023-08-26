@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{CodeContent, SimpleToken},
-    syntax::{Node, NodeRef, ParseError, SyntaxTree, TreeContent},
+    syntax::{Node, NodeRef, ParseError, SyntaxTree},
     Document,
 };
 

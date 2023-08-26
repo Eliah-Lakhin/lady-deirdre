@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{CodeContent, TokenBuffer, TokenRef},
-    syntax::{Child, Node, NodeRef, ParseError, TreeContent},
+    syntax::{Child, Node, NodeRef, ParseError, PolyRef, SyntaxTree},
     Document,
 };
 use lady_deirdre_examples::json::{formatter::ToJsonString, lexis::JsonToken, syntax::JsonNode};
@@ -244,7 +244,7 @@ fn test_json_incremental() {
             object: NodeRef,
         },
 
-        #[rule($BraceOpen & (entries: Entry)*{$Comma} & $BraceClose)]
+        #[rule(start: $BraceOpen & (entries: Entry)*{$Comma} & end: $BraceClose)]
         #[recovery(
             [$BraceOpen..$BraceClose],
             [$BracketOpen..$BracketClose],
@@ -257,7 +257,11 @@ fn test_json_incremental() {
             #[default(unsafe { VERSION })]
             version: usize,
             #[child]
+            start: TokenRef,
+            #[child]
             entries: Vec<NodeRef>,
+            #[child]
+            end: TokenRef,
         },
 
         #[rule(key: $String & $Colon & value: ANY)]
@@ -274,7 +278,7 @@ fn test_json_incremental() {
             value: NodeRef,
         },
 
-        #[rule($BracketOpen & (items: ANY)*{$Comma} & $BracketClose)]
+        #[rule(start: $BracketOpen & (items: ANY)*{$Comma} & end: $BracketClose)]
         #[recovery(
             [$BraceOpen..$BraceClose],
             [$BracketOpen..$BracketClose],
@@ -287,7 +291,11 @@ fn test_json_incremental() {
             #[default(unsafe { VERSION })]
             version: usize,
             #[child]
+            start: TokenRef,
+            #[child]
             items: Vec<NodeRef>,
+            #[child]
+            end: TokenRef,
         },
 
         #[rule(value: $String)]
@@ -379,13 +387,21 @@ fn test_json_incremental() {
                     }
 
                     DebugNode::Object {
-                        version, entries, ..
+                        version,
+                        start,
+                        entries,
+                        end,
+                        ..
                     } => {
                         assert_eq!(
                             node.children(),
-                            vec![("entries", Child::from(entries))]
-                                .into_iter()
-                                .collect(),
+                            vec![
+                                ("start", Child::from(start)),
+                                ("entries", Child::from(entries)),
+                                ("end", Child::from(end)),
+                            ]
+                            .into_iter()
+                            .collect(),
                         );
                         format!(
                             "{}({{{}}})",
@@ -398,10 +414,22 @@ fn test_json_incremental() {
                         )
                     }
 
-                    DebugNode::Array { version, items, .. } => {
+                    DebugNode::Array {
+                        version,
+                        start,
+                        items,
+                        end,
+                        ..
+                    } => {
                         assert_eq!(
                             node.children(),
-                            vec![("items", Child::from(items))].into_iter().collect(),
+                            vec![
+                                ("start", Child::from(start)),
+                                ("items", Child::from(items)),
+                                ("end", Child::from(end)),
+                            ]
+                            .into_iter()
+                            .collect(),
                         );
                         format!(
                             "{}([{}])",
@@ -472,8 +500,8 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 1 }
 
-    let cluster = doc.write(0..0, "{").cluster();
-    assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{"#);
+    let node_ref = doc.write(0..0, "{");
+    assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{"#,);
     assert_eq!(doc.substring(..), r#"{"#);
     assert_eq!(doc.debug_errors(), "1:2: Missing Entry or '}' in Object.",);
     assert_eq!(doc.to_json_string(), r#"{}"#);
@@ -481,16 +509,16 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 2 }
 
-    let cluster = doc.write(1..1, "}").cluster();
-    assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{}"#);
+    let node_ref = doc.write(1..1, "}");
+    assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{}"#,);
     assert_eq!(doc.substring(..), r#"{}"#);
     assert_eq!(doc.to_json_string(), r#"{}"#);
     assert_eq!(doc.debug_print(), r#"2(2({}))"#);
 
     unsafe { VERSION = 3 }
 
-    let cluster = doc.write(1..1, r#""foo""#).cluster();
-    assert_eq!(doc.substring(cluster.site_ref_span(&doc)), r#"{"foo"}"#);
+    let node_ref = doc.write(1..1, r#""foo""#);
+    assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{"foo"}"#,);
     assert_eq!(doc.substring(..), r#"{"foo"}"#);
     assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(doc.to_json_string(), r#"{"foo": ?}"#);
@@ -498,14 +526,12 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 4 }
 
-    let cluster = doc
-        .write(
-            6..6,
-            r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        )
-        .cluster();
+    let node_ref = doc.write(
+        6..6,
+        r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+    );
     assert_eq!(
-        doc.substring(cluster.site_ref_span(&doc)),
+        doc.substring(node_ref.span(&doc).unwrap()),
         r#""foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
     );
     assert_eq!(
@@ -524,9 +550,9 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 5 }
 
-    let cluster = doc.write(6..6, r#" :"#).cluster();
+    let node_ref = doc.write(6..6, r#" :"#);
     assert_eq!(
-        doc.substring(cluster.site_ref_span(&doc)),
+        doc.substring(node_ref.span(&doc).unwrap()),
         r#""foo" :[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
     );
     assert_eq!(
@@ -545,9 +571,9 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 6 }
 
-    let cluster = doc.write(6..8, r#": "#).cluster();
+    let node_ref = doc.write(6..8, r#": "#);
     assert_eq!(
-        doc.substring(cluster.site_ref_span(&doc)),
+        doc.substring(node_ref.span(&doc).unwrap()),
         r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#
     );
     assert_eq!(
@@ -565,9 +591,9 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 7 }
 
-    let cluster = doc.write(8..34, r#""#).cluster();
+    let node_ref = doc.write(8..34, r#""#);
     assert_eq!(
-        doc.substring(cluster.site_ref_span(&doc)),
+        doc.substring(node_ref.span(&doc).unwrap()),
         r#"{"foo": {"a": "xyz", "b": null}]}"#
     );
     assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}]}"#);
@@ -580,9 +606,9 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 8 }
 
-    let cluster = doc.write(31..32, r#""#).cluster();
+    let node_ref = doc.write(31..32, r#""#);
     assert_eq!(
-        doc.substring(cluster.site_ref_span(&doc)),
+        doc.substring(node_ref.span(&doc).unwrap()),
         r#"{"foo": {"a": "xyz", "b": null}}"#
     );
     assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}}"#);
@@ -595,9 +621,9 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 9 }
 
-    let cluster = doc.write(14..14, r#"111, "c": "#).cluster();
+    let node_ref = doc.write(14..14, r#"111, "c": "#);
     assert_eq!(
-        doc.substring(cluster.site_ref_span(&doc)),
+        doc.substring(node_ref.span(&doc).unwrap()),
         r#"{"a": 111, "c": "xyz", "b": null}"#
     );
     assert_eq!(

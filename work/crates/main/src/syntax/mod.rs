@@ -40,7 +40,6 @@
 mod buffer;
 mod children;
 mod cluster;
-mod content;
 mod error;
 mod morphism;
 mod no;
@@ -55,7 +54,6 @@ pub use crate::syntax::{
     buffer::SyntaxBuffer,
     children::{Child, Children},
     cluster::{Cluster, ClusterRef},
-    content::TreeContent,
     error::{ErrorRef, ParseError},
     morphism::{PolyRef, PolyVariant, RefKind},
     no::NoSyntax,
@@ -64,5 +62,5 @@ pub use crate::syntax::{
     rule::{NodeRule, NodeSet, EMPTY_RULE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,
-    tree::SyntaxTree,
+    tree::{SyntaxTree, Visitor},
 };

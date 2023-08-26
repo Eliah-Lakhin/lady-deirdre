@@ -852,7 +852,7 @@ mod tests {
             unimplemented!()
         }
 
-        fn index(&self) -> NodeRule {
+        fn rule(&self) -> NodeRule {
             unimplemented!()
         }
 

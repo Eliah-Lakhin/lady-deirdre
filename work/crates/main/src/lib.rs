@@ -46,11 +46,11 @@
 
 pub mod arena;
 pub mod compiler;
+mod format;
 pub mod lexis;
 mod report;
 mod std;
 pub mod syntax;
-pub mod utils;
 
 pub use compiler::document::Document;
 extern crate self as lady_deirdre;

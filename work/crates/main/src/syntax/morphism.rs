@@ -37,7 +37,8 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    lexis::TokenRef,
+    compiler::CompilationUnit,
+    lexis::{SiteSpan, TokenRef},
     std::*,
     syntax::NodeRef,
 };
@@ -109,6 +110,14 @@ impl PolyRef for PolyVariant {
             Self::Node(variant) => variant,
         }
     }
+
+    #[inline(always)]
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
+        match self {
+            Self::Token(variant) => variant.span(unit),
+            Self::Node(variant) => variant.span(unit),
+        }
+    }
 }
 
 pub trait PolyRef: Identifiable + Debug + 'static {
@@ -121,6 +130,10 @@ pub trait PolyRef: Identifiable + Debug + 'static {
     fn as_token_ref(&self) -> &TokenRef;
 
     fn as_node_ref(&self) -> &NodeRef;
+
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan>
+    where
+        Self: Sized;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

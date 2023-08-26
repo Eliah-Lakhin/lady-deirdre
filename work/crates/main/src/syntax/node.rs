@@ -41,9 +41,11 @@ pub use lady_deirdre_derive::Node;
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    lexis::{Token, TokenRef},
+    compiler::CompilationUnit,
+    lexis::{SiteSpan, Token, TokenRef},
     std::*,
     syntax::{
+        Child,
         Children,
         ClusterRef,
         NodeRule,
@@ -53,6 +55,7 @@ use crate::{
         RefKind,
         SyntaxSession,
         SyntaxTree,
+        NON_RULE,
     },
 };
 
@@ -212,7 +215,7 @@ pub trait Node: Sized + 'static {
     ///         Self::parse_other(session)
     ///     }
     ///
-    ///     fn index(&self) -> NodeRule {
+    ///     fn rule(&self) -> NodeRule {
     ///         match self {
     ///             Self::Root {..} => ROOT_RULE,
     ///             Self::Parens {..} => PARENS_RULE,
@@ -348,7 +351,7 @@ pub trait Node: Sized + 'static {
     /// ```
     fn parse<'code>(session: &mut impl SyntaxSession<'code, Node = Self>, rule: NodeRule) -> Self;
 
-    fn index(&self) -> NodeRule;
+    fn rule(&self) -> NodeRule;
 
     fn node_ref(&self) -> NodeRef;
 
@@ -420,7 +423,7 @@ impl Identifiable for NodeRef {
 impl PolyRef for NodeRef {
     #[inline(always)]
     fn kind(&self) -> RefKind {
-        RefKind::Token
+        RefKind::Node
     }
 
     #[inline(always)]
@@ -443,6 +446,11 @@ impl PolyRef for NodeRef {
     #[inline(always)]
     fn as_node_ref(&self) -> &NodeRef {
         self
+    }
+
+    #[inline(always)]
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
+        self.deref(unit)?.children().span(unit)
     }
 }
 
@@ -517,9 +525,103 @@ impl NodeRef {
         }
     }
 
+    #[inline(always)]
+    pub fn rule(&self, tree: &impl SyntaxTree) -> NodeRule {
+        self.deref(tree).map(|node| node.rule()).unwrap_or(NON_RULE)
+    }
+
+    #[inline(always)]
+    pub fn name<N: Node>(&self, tree: &impl SyntaxTree<Node = N>) -> Option<&'static str> {
+        self.deref(tree).map(|node| N::name(node.rule())).flatten()
+    }
+
+    #[inline(always)]
+    pub fn describe<N: Node>(&self, tree: &impl SyntaxTree<Node = N>) -> Option<&'static str> {
+        self.deref(tree)
+            .map(|node| N::describe(node.rule()))
+            .flatten()
+    }
+
+    #[inline(always)]
+    pub fn parent(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let node = match self.deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        node.parent_ref()
+    }
+
+    #[inline(always)]
+    pub fn first_child(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let node = match self.deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        match node.children().nodes().next() {
+            None => NodeRef::nil(),
+            Some(node_ref) => *node_ref,
+        }
+    }
+
+    pub fn get_child(&self, tree: &impl SyntaxTree, key: &'static str) -> NodeRef {
+        let node = match self.deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        match node.children().get(key) {
+            Some(Child::Node(child)) => *child,
+            Some(Child::NodeSeq(child)) => match child.first() {
+                Some(child) => *child,
+                None => NodeRef::nil(),
+            },
+            _ => NodeRef::nil(),
+        }
+    }
+
+    pub fn prev_sibling(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let node = match self.deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        let parent = match node.parent_ref().deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        let siblings = parent.children();
+
+        match siblings.prev_node(self) {
+            None => NodeRef::nil(),
+            Some(sibling) => *sibling,
+        }
+    }
+
+    pub fn next_sibling(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let node = match self.deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        let parent = match node.parent_ref().deref(tree) {
+            None => return NodeRef::nil(),
+            Some(node) => node,
+        };
+
+        let siblings = parent.children();
+
+        match siblings.next_node(self) {
+            None => NodeRef::nil(),
+            Some(sibling) => *sibling,
+        }
+    }
+
     /// Creates a weak reference of the [Cluster](crate::syntax::Cluster) of referred [Node].
     #[inline(always)]
-    pub fn cluster(&self) -> ClusterRef {
+    pub fn cluster_ref(&self) -> ClusterRef {
         ClusterRef {
             id: self.id,
             cluster_entry: self.cluster_entry,

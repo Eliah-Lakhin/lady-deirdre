@@ -91,6 +91,7 @@ pub use ::core::{
     ops::{
         AddAssign,
         Deref,
+        DerefMut,
         Drop,
         Fn,
         FnMut,
@@ -172,6 +173,7 @@ pub use std::{
     ops::{
         AddAssign,
         Deref,
+        DerefMut,
         Drop,
         Fn,
         FnMut,

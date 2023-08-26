@@ -90,7 +90,7 @@ impl<T: Token> Node for NoSyntax<T> {
     }
 
     #[inline(always)]
-    fn index(&self) -> NodeRule {
+    fn rule(&self) -> NodeRule {
         NON_RULE
     }
 

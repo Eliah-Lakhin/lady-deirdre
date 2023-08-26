@@ -41,7 +41,19 @@ pub use lady_deirdre_derive::Token;
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    lexis::{Chunk, Length, LexisSession, Site, SiteRef, SourceCode, TokenRule},
+    compiler::CompilationUnit,
+    lexis::{
+        Chunk,
+        Length,
+        LexisSession,
+        Site,
+        SiteRef,
+        SiteSpan,
+        SourceCode,
+        ToSpan,
+        TokenRule,
+        EOI,
+    },
     std::*,
     syntax::{NodeRef, PolyRef, PolyVariant, RefKind},
 };
@@ -402,6 +414,11 @@ impl PolyRef for TokenRef {
 
         &NIL
     }
+
+    #[inline(always)]
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
+        self.chunk(unit)?.to_site_span(unit)
+    }
 }
 
 impl TokenRef {
@@ -522,6 +539,25 @@ impl TokenRef {
         code.get_length(&self.chunk_entry)
     }
 
+    #[inline(always)]
+    pub fn rule(&self, code: &impl SourceCode) -> TokenRule {
+        self.deref(code).map(|token| token.rule()).unwrap_or(EOI)
+    }
+
+    #[inline(always)]
+    pub fn name<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<&'static str> {
+        self.deref(code)
+            .map(|token| T::name(token.rule()))
+            .flatten()
+    }
+
+    #[inline(always)]
+    pub fn describe<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<&'static str> {
+        self.deref(code)
+            .map(|token| T::describe(token.rule()))
+            .flatten()
+    }
+
     /// Returns `true` if and only if referred weak Token reference belongs to specified
     /// [SourceCode](crate::lexis::SourceCode), and referred Token exists in this SourceCode
     /// instance.
@@ -529,11 +565,11 @@ impl TokenRef {
     /// If this function returns `true`, all dereference function would return meaningful [Some]
     /// values, otherwise these functions return [None].
     ///
-    /// This function uses [`SourceCode::contains`](crate::lexis::SourceCode::contains_chunk)
+    /// This function uses [`SourceCode::contains`](crate::lexis::SourceCode::has_chunk)
     /// function under the hood.
     #[inline(always)]
     pub fn is_valid_ref(&self, code: &impl SourceCode) -> bool {
-        self.id == code.id() && code.contains_chunk(&self.chunk_entry)
+        self.id == code.id() && code.has_chunk(&self.chunk_entry)
     }
 
     /// Turns this weak reference into the Token string first character weak reference of the

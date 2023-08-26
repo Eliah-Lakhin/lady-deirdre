@@ -163,7 +163,7 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
     type Cursor<'code> = TokenBufferCursor<'code, Self::Token>;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
+    fn has_chunk(&self, chunk_entry: &Entry) -> bool {
         self.tokens.contains(chunk_entry)
     }
 

@@ -108,10 +108,10 @@ impl<N: Node> SourceCode for Document<N> {
     type Cursor<'document> = DocumentCursor<'document, N>;
 
     #[inline(always)]
-    fn contains_chunk(&self, chunk_entry: &Entry) -> bool {
+    fn has_chunk(&self, chunk_entry: &Entry) -> bool {
         match self {
-            Self::Mutable(unit) => unit.contains_chunk(chunk_entry),
-            Self::Immutable(unit) => unit.contains_chunk(chunk_entry),
+            Self::Mutable(unit) => unit.has_chunk(chunk_entry),
+            Self::Immutable(unit) => unit.has_chunk(chunk_entry),
         }
     }
 
@@ -176,18 +176,10 @@ impl<N: Node> SyntaxTree for Document<N> {
     type Node = N;
 
     #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> ClusterRef {
+    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
         match self {
-            Self::Mutable(unit) => unit.cover(span),
-            Self::Immutable(unit) => unit.cover(span),
-        }
-    }
-
-    #[inline(always)]
-    fn contains_cluster(&self, cluster_entry: &Entry) -> bool {
-        match self {
-            Self::Mutable(unit) => unit.contains_cluster(cluster_entry),
-            Self::Immutable(unit) => unit.contains_cluster(cluster_entry),
+            Self::Mutable(unit) => unit.has_cluster(cluster_entry),
+            Self::Immutable(unit) => unit.has_cluster(cluster_entry),
         }
     }
 
@@ -204,14 +196,6 @@ impl<N: Node> SyntaxTree for Document<N> {
         match self {
             Self::Mutable(unit) => unit.get_cluster_mut(cluster_entry),
             Self::Immutable(unit) => unit.get_cluster_mut(cluster_entry),
-        }
-    }
-
-    #[inline(always)]
-    fn get_cluster_span(&self, cluster_entry: &Entry) -> SiteRefSpan {
-        match self {
-            Self::Mutable(unit) => unit.get_cluster_span(cluster_entry),
-            Self::Immutable(unit) => unit.get_cluster_span(cluster_entry),
         }
     }
 
@@ -275,6 +259,14 @@ impl<N: Node> CompilationUnit for Document<N> {
         match self {
             Self::Mutable(unit) => unit.into_immutable_unit(),
             Self::Immutable(unit) => unit,
+        }
+    }
+
+    #[inline(always)]
+    fn cover(&self, span: impl ToSpan) -> NodeRef {
+        match self {
+            Self::Mutable(unit) => unit.cover(span),
+            Self::Immutable(unit) => unit.cover(span),
         }
     }
 }

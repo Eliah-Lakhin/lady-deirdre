@@ -39,7 +39,7 @@ use crate::{
     compiler::CompilationUnit,
     lexis::{Site, SiteSpan, TokenRef},
     std::*,
-    syntax::{node::Node, NodeRef, PolyRef, PolyVariant},
+    syntax::{node::Node, NodeRef, PolyRef, PolyVariant, RefKind},
 };
 
 #[derive(Clone)]
@@ -200,6 +200,47 @@ impl Children {
     #[inline(always)]
     pub fn into_entries(self) -> Vec<(&'static str, Child)> {
         self.vector
+    }
+
+    #[inline(always)]
+    pub fn flatten(&self) -> impl Iterator<Item = &dyn PolyRef> {
+        self.vector
+            .iter()
+            .map(|(_, child)| child.into_iter())
+            .flatten()
+            .filter(|child| !child.is_nil())
+    }
+
+    #[inline(always)]
+    pub fn nodes(&self) -> impl Iterator<Item = &NodeRef> {
+        self.flatten().flat_map(|variant| match variant.kind() {
+            RefKind::Token => None,
+            RefKind::Node => Some(variant.as_node_ref()),
+        })
+    }
+
+    pub fn prev_node(&self, current: &NodeRef) -> Option<&NodeRef> {
+        let mut nodes = self.nodes().peekable();
+
+        loop {
+            let probe = nodes.peek()?;
+
+            if *probe == current {
+                return nodes.next();
+            }
+        }
+    }
+
+    pub fn next_node(&self, current: &NodeRef) -> Option<&NodeRef> {
+        let mut nodes = self.nodes();
+
+        loop {
+            let probe = nodes.next()?;
+
+            if probe == current {
+                return nodes.next();
+            }
+        }
     }
 
     fn start(&self, unit: &impl CompilationUnit) -> Option<Site> {

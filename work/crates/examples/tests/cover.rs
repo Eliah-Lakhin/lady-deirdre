@@ -40,160 +40,176 @@
 
 use lady_deirdre::{
     arena::Entry,
-    lexis::{CodeContent, ToSpan},
-    syntax::{SyntaxTree, TreeContent},
+    compiler::CompilationUnit,
+    lexis::{CodeContent, ToSpan, TokenRef},
+    syntax::{Node, NodeRef, ParseError, PolyRef, SyntaxTree},
     Document,
 };
-use lady_deirdre_examples::json::syntax::JsonNode;
+use lady_deirdre_examples::json::lexis::JsonToken;
+
+#[derive(Node, Clone)]
+#[token(JsonToken)]
+#[error(ParseError)]
+#[trivia($Whitespace)]
+#[define(ANY = Object | Array | True | False | String | Number | Null)]
+#[recovery(
+    $BraceClose,
+    $BracketClose,
+    [$BraceOpen..$BraceClose],
+    [$BracketOpen..$BracketClose],
+)]
+pub enum DebugNode {
+    #[root]
+    #[rule(object: Object)]
+    Root {
+        #[child]
+        object: NodeRef,
+    },
+
+    #[rule(start: $BraceOpen & (entries: Entry)*{$Comma} & end: $BraceClose)]
+    #[recovery(
+        [$BraceOpen..$BraceClose],
+        [$BracketOpen..$BracketClose],
+    )]
+    Object {
+        #[child]
+        start: TokenRef,
+        #[child]
+        entries: Vec<NodeRef>,
+        #[child]
+        end: TokenRef,
+    },
+
+    #[rule(key: $String & $Colon & value: ANY)]
+    #[secondary]
+    Entry {
+        #[child]
+        key: TokenRef,
+        #[child]
+        value: NodeRef,
+    },
+
+    #[rule(start: $BracketOpen & (items: ANY)*{$Comma} & end: $BracketClose)]
+    #[recovery(
+        [$BraceOpen..$BraceClose],
+        [$BracketOpen..$BracketClose],
+    )]
+    Array {
+        #[child]
+        start: TokenRef,
+        #[child]
+        items: Vec<NodeRef>,
+        #[child]
+        end: TokenRef,
+    },
+
+    #[rule(value: $String)]
+    #[secondary]
+    String {
+        #[child]
+        value: TokenRef,
+    },
+
+    #[rule(value: $Number)]
+    #[secondary]
+    Number {
+        #[child]
+        value: TokenRef,
+    },
+
+    #[rule(lit: $True)]
+    #[secondary]
+    True {
+        #[child]
+        lit: TokenRef,
+    },
+
+    #[rule(lit: $False)]
+    #[secondary]
+    False {
+        #[child]
+        lit: TokenRef,
+    },
+
+    #[rule(lit: $Null)]
+    #[secondary]
+    Null {
+        #[child]
+        lit: TokenRef,
+    },
+}
 
 #[test]
 fn test_clusters_traverse() {
-    let mut doc = Document::<JsonNode>::default();
+    let mut doc = Document::<DebugNode>::default();
 
-    assert_eq!(0..0, doc.root_node_ref().cluster().site_span(&doc).unwrap());
+    assert!(doc.root_node_ref().span(&doc).is_none());
 
     doc.write(
         ..,
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
     );
 
-    assert_eq!(
-        0..70,
-        doc.root_node_ref().cluster().site_span(&doc).unwrap()
-    );
+    assert_eq!(0..70, doc.root_node_ref().span(&doc).unwrap());
 
-    assert_eq!(
-        0..70,
-        doc.get_cluster_span(&Entry::Primary)
-            .to_site_span(&doc)
-            .unwrap()
-    );
-
-    let mut cluster = doc.root_node_ref().cluster();
+    let mut cluster = doc.root_cluster_ref();
 
     cluster = cluster.next(&doc);
-    assert_eq!(8..58, cluster.site_span(&doc).unwrap());
+    assert_eq!(8..58, cluster.primary_node_ref().span(&doc).unwrap());
 
     cluster = cluster.next(&doc);
-    assert_eq!(34..57, cluster.site_span(&doc).unwrap());
+    assert_eq!(34..57, cluster.primary_node_ref().span(&doc).unwrap());
 
     cluster = cluster.next(&doc);
-    assert_eq!(67..69, cluster.site_span(&doc).unwrap());
+    assert_eq!(67..69, cluster.primary_node_ref().span(&doc).unwrap());
 
     assert!(!cluster.next(&doc).is_valid_ref(&doc));
 
     cluster = cluster.previous(&doc);
-    assert_eq!(34..57, cluster.site_span(&doc).unwrap());
+    assert_eq!(34..57, cluster.primary_node_ref().span(&doc).unwrap());
 
     cluster = cluster.previous(&doc);
-    assert_eq!(8..58, cluster.site_span(&doc).unwrap());
+    assert_eq!(8..58, cluster.primary_node_ref().span(&doc).unwrap());
 
     cluster = cluster.previous(&doc);
-    assert_eq!(0..70, cluster.site_span(&doc).unwrap());
+    assert_eq!(0..70, cluster.primary_node_ref().span(&doc).unwrap());
 
     assert!(!cluster.previous(&doc).is_valid_ref(&doc));
 }
 
 #[test]
-fn test_clusters_cover() {
-    let doc = Document::<JsonNode>::from(
+fn test_nodes_cover() {
+    let doc = Document::<DebugNode>::from(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
     );
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(doc.cover(..).site_span(&doc).unwrap())
+        doc.substring(doc.cover(..).span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(doc.cover(0..0).site_span(&doc).unwrap())
+        doc.substring(doc.cover(0..0).span(&doc).unwrap())
     );
 
     assert_eq!(
-        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(doc.cover(1..1).site_span(&doc).unwrap())
+        r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
+        doc.substring(doc.cover(1..1).span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        doc.substring(doc.cover(9..9).site_span(&doc).unwrap())
+        doc.substring(doc.cover(8..8).span(&doc).unwrap())
+    );
+
+    assert_eq!(
+        r#"true"#,
+        doc.substring(doc.cover(15..15).span(&doc).unwrap())
     );
 
     assert_eq!(
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        doc.substring(doc.cover(15..15).site_span(&doc).unwrap())
+        doc.substring(doc.cover(14..14).span(&doc).unwrap())
     );
-
-    assert_eq!(
-        r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-        doc.substring(doc.cover(16..16).site_span(&doc).unwrap())
-    );
-}
-
-#[test]
-fn test_cluster_traverse() {
-    let doc = Document::<JsonNode>::from(
-        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-    );
-
-    let cluster = doc.cover(..);
-
-    assert_eq!(
-        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-        doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
-    );
-
-    let mut children = cluster.children(&doc);
-
-    {
-        let cluster = children.next().unwrap();
-
-        assert_eq!(
-            r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-            doc.substring(cluster.site_span(&doc).unwrap())
-        );
-
-        assert_eq!(
-            r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-            doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
-        );
-
-        let mut children = cluster.children(&doc);
-
-        {
-            let cluster = children.next().unwrap();
-
-            assert_eq!(
-                r#"{"a": "xyz", "b": null}"#,
-                doc.substring(cluster.site_span(&doc).unwrap())
-            );
-
-            assert_eq!(
-                r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-                doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
-            );
-
-            assert!(children.next().is_none());
-        }
-    }
-
-    {
-        let cluster = children.next().unwrap();
-
-        assert_eq!(r#"{}"#, doc.substring(cluster.site_span(&doc).unwrap()));
-
-        assert_eq!(
-            r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-            doc.substring(cluster.parent(&doc).site_span(&doc).unwrap())
-        );
-
-        let mut children = cluster.children(&doc);
-
-        {
-            assert!(children.next().is_none());
-        }
-    }
-
-    assert!(children.next().is_none());
 }
