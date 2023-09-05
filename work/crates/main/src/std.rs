@@ -58,23 +58,27 @@ pub use ::alloc::{
 pub use ::core::{
     any::{Any, TypeId},
     assert_eq,
+    assert_ne,
     borrow::{Borrow, BorrowMut},
     cell::UnsafeCell,
     clone::Clone,
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     column,
+    concat,
     convert::{AsRef, From, Into},
     default::Default,
     file,
     fmt::{Arguments as FmtArguments, Debug, Display, Formatter, Result as FmtResult},
     format_args,
-    hash::Hash,
+    hash::{Hash, Hasher},
     hint::unreachable_unchecked,
     iter::{
+        repeat,
         Copied,
         DoubleEndedIterator,
         Enumerate,
         ExactSizeIterator,
+        Extend,
         FilterMap,
         FromIterator,
         FusedIterator,
@@ -124,6 +128,7 @@ extern crate std;
 pub use std::{
     any::{Any, TypeId},
     assert_eq,
+    assert_ne,
     borrow::{Borrow, BorrowMut, Cow, ToOwned},
     boxed::Box,
     cell::UnsafeCell,
@@ -137,7 +142,8 @@ pub use std::{
         VecDeque,
     },
     column,
-    convert::{AsRef, From, Into},
+    concat,
+    convert::{AsRef, From, Into, TryFrom},
     default::Default,
     file,
     fmt::{
@@ -150,13 +156,15 @@ pub use std::{
     },
     format,
     format_args,
-    hash::Hash,
+    hash::{Hash, Hasher},
     hint::unreachable_unchecked,
     iter::{
+        repeat,
         Copied,
         DoubleEndedIterator,
         Enumerate,
         ExactSizeIterator,
+        Extend,
         FilterMap,
         FromIterator,
         FusedIterator,
@@ -209,3 +217,43 @@ pub use std::{
     vec::IntoIter,
     vec::Vec,
 };
+
+pub(crate) trait StdMapEx<K, V> {
+    fn new_std_map(capacity: usize) -> Self;
+}
+
+#[cfg(feature = "std")]
+impl<K, V> StdMapEx<K, V> for StdMap<K, V> {
+    #[inline(always)]
+    fn new_std_map(capacity: usize) -> Self {
+        Self::with_capacity(capacity)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<K, V> StdMapEx<K, V> for StdMap<K, V> {
+    #[inline(always)]
+    fn new_std_map(_capacity: usize) -> Self {
+        Self::new()
+    }
+}
+
+pub(crate) trait StdSetEx<K> {
+    fn new_std_set(capacity: usize) -> Self;
+}
+
+#[cfg(feature = "std")]
+impl<K> StdSetEx<K> for StdSet<K> {
+    #[inline(always)]
+    fn new_std_set(capacity: usize) -> Self {
+        Self::with_capacity(capacity)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<K> StdSetEx<K> for StdMap<K> {
+    #[inline(always)]
+    fn new_std_set(_capacity: usize) -> Self {
+        Self::new()
+    }
+}

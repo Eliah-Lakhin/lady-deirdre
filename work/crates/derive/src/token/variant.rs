@@ -60,7 +60,7 @@ use crate::{
         automata::TokenAutomata,
         regex::{Regex, RegexImpl},
     },
-    utils::error,
+    utils::{error, Description},
 };
 
 pub(super) type TokenRule = u8;
@@ -76,7 +76,7 @@ pub(super) struct TokenVariant {
     //todo turn to Expr
     pub(super) constructor: Option<Ident>,
     pub(super) priority: isize,
-    pub(super) description: LitStr,
+    pub(super) description: Description,
     pub(super) time: Duration,
 }
 
@@ -154,7 +154,7 @@ impl TryFrom<Variant> for TokenVariant {
                         return Err(error!(span, "Duplicate Describe attribute.",));
                     }
 
-                    description = Some(attr.parse_args::<LitStr>()?);
+                    description = Some(Description::try_from(attr)?);
                 }
 
                 "priority" => {
@@ -210,21 +210,18 @@ impl TryFrom<Variant> for TokenVariant {
             }
         }
 
-        let description = match description {
-            Some(lit) => lit,
-
-            None => {
-                let name = match rule.as_ref().map(|(_, regex)| regex.name()).flatten() {
+        let description = description.unwrap_or_else(|| {
+            Description::new(
+                ident.span(),
+                match rule.as_ref().map(|(_, regex)| regex.name()).flatten() {
                     None => format!(
                         "<{}>",
                         ident.to_string().to_case(Case::Title).to_lowercase()
                     ),
                     Some(rule) => rule,
-                };
-
-                LitStr::new(&name, ident.span())
-            }
-        };
+                },
+            )
+        });
 
         let priority = match priority {
             None => 0,

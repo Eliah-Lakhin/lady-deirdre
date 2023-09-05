@@ -36,7 +36,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{CodeContent, Position, Site, SiteRef, SourceCode, ToSite},
+    compiler::CompilationUnit,
+    format::{Priority, SnippetFormatter},
+    lexis::{Position, Site, SiteRef, SourceCode, ToSite, Token, TokenCursor},
+    report::debug_unreachable,
     std::*,
 };
 
@@ -64,7 +67,7 @@ use crate::{
 /// You can think about SiteSpan as a range of the text selected inside the code editor.
 ///
 /// ```rust
-/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::CodeContent};
+/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::SourceCode};
 ///
 /// let doc = Document::<SimpleNode>::from("foo bar baz");
 ///
@@ -83,7 +86,7 @@ pub type SiteSpan = Range<Site>;
 /// use lady_deirdre::{
 ///     Document,
 ///     syntax::SimpleNode,
-///     lexis::{CodeContent, SourceCode, TokenCursor},
+///     lexis::{SourceCode, TokenCursor},
 /// };
 ///
 /// let doc = Document::<SimpleNode>::from("foo bar baz");
@@ -101,7 +104,7 @@ pub type SiteRefSpan = Range<SiteRef>;
 /// can be used to specify Spans.
 ///
 /// ```rust
-/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::{CodeContent, Position}};
+/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::{SourceCode, Position}};
 ///
 /// let doc = Document::<SimpleNode>::from("foo bar baz");
 ///
@@ -134,7 +137,7 @@ pub type PositionSpan = Range<Position>;
 /// use lady_deirdre::{
 ///     Document,
 ///     syntax::SimpleNode,
-///     lexis::{CodeContent, ToSpan, ToSite, SourceCode, SiteSpan, Site},
+///     lexis::{ToSpan, ToSite, SourceCode, SiteSpan, Site},
 /// };
 ///
 /// let doc = Document::<SimpleNode>::from("foo bar baz");
@@ -272,26 +275,31 @@ pub unsafe trait ToSpan {
     /// returns `"?"` string.
     ///
     /// ```rust
-    /// use lady_deirdre::{Document, syntax::SimpleNode, lexis::{ToSpan, CodeContent}};
+    /// use lady_deirdre::{Document, syntax::SimpleNode, lexis::{ToSpan, SourceCode}};
     ///
     /// let doc = Document::<SimpleNode>::from("foo\nbar baz");
     ///
     /// assert_eq!(doc.substring(2..7), "o\nbar");
     /// assert_eq!((2..7).display(&doc).to_string(), "1:3..2:3");
     /// ```
-    #[inline]
-    fn display(&self, code: &impl SourceCode) -> DisplayPositionSpan {
-        let mut span = match self.to_site_span(code) {
-            None => return DisplayPositionSpan(None),
-            Some(span) => span,
-        };
-
-        match span.start + 1 < span.end {
-            true => span.end -= 1,
-            false => span.end = span.start,
+    #[inline(always)]
+    fn display<'a, Code: SourceCode>(&self, code: &'a Code) -> DisplaySpan<'a, Code> {
+        DisplaySpan {
+            code,
+            span: self.to_site_span(code),
         }
+    }
+}
 
-        DisplayPositionSpan(span.to_position_span(code))
+unsafe impl<S: ToSpan> ToSpan for &S {
+    #[inline(always)]
+    fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
+        (*self).to_site_span(code)
+    }
+
+    #[inline(always)]
+    fn is_valid_span(&self, code: &impl SourceCode) -> bool {
+        (*self).is_valid_span(code)
     }
 }
 
@@ -420,24 +428,60 @@ unsafe impl<Site: ToSite> ToSpan for RangeToInclusive<Site> {
     }
 }
 
-#[repr(transparent)]
-pub struct DisplayPositionSpan(Option<PositionSpan>);
+pub struct DisplaySpan<'a, Code: SourceCode> {
+    code: &'a Code,
+    span: Option<SiteSpan>,
+}
 
-impl Debug for DisplayPositionSpan {
+impl<'a, Code> Debug for DisplaySpan<'a, Code>
+where
+    Code: SourceCode,
+{
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         Display::fmt(self, formatter)
     }
 }
 
-impl Display for DisplayPositionSpan {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        match &self.0 {
-            None => formatter.write_str("?"),
-            Some(span) if span.start == span.end => {
-                formatter.write_fmt(format_args!("{}", span.start))
+impl<'a, Code> Display for DisplaySpan<'a, Code>
+where
+    Code: SourceCode,
+{
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        let mut span = match &self.span {
+            None => return formatter.write_str("?"),
+            Some(span) => span.clone(),
+        };
+
+        if !formatter.alternate() {
+            match span.start + 1 < span.end {
+                true => span.end -= 1,
+                false => span.end = span.start,
             }
-            Some(span) => formatter.write_fmt(format_args!("{}..{}", span.start, span.end)),
+
+            let span = match span.to_position_span(self.code) {
+                Some(span) => span,
+
+                // Safety: Site spans are always valid to resolve.
+                None => unsafe { debug_unreachable!("Invalid position span.") },
+            };
+
+            return match span.start == span.end {
+                true => formatter.write_fmt(format_args!("{}", span.start)),
+                false => formatter.write_fmt(format_args!("{}..{}", span.start, span.end)),
+            };
         }
+
+        formatter
+            .snippet(self.code)
+            .set_caption(format!("Unit({})", self.code.id()))
+            .set_summary(format!(
+                "Site span: {}..{}\nPosition span: {}",
+                span.start,
+                span.end,
+                span.display(self.code),
+            ))
+            .annotate(span, Priority::Default, "")
+            .finish()
     }
 }

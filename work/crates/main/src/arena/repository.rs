@@ -124,7 +124,7 @@ impl<T> Default for Repository<T> {
 
 impl<T> Debug for Repository<T> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_str("Repository")
     }
 }

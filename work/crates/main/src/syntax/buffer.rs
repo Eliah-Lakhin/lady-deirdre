@@ -60,7 +60,7 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     lexis::{TokenBuffer, SimpleToken, SourceCode, Token},
-///     syntax::{SyntaxBuffer, SimpleNode, SyntaxTree, NodeRef, Node, TreeContent},
+///     syntax::{SyntaxBuffer, SimpleNode, SyntaxTree, NodeRef, Node},
 /// };
 ///
 /// let token_buffer = TokenBuffer::parse("foo({bar}[baz])");
@@ -103,7 +103,7 @@ impl<N: Node> Eq for SyntaxBuffer<N> {}
 
 impl<N: Node> Debug for SyntaxBuffer<N> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
             .debug_struct("SyntaxBuffer")
             .field("id", &self.id())

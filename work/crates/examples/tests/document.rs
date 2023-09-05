@@ -41,7 +41,7 @@
 use std::fmt::{Debug, Display, Formatter};
 
 use lady_deirdre::{
-    lexis::{CodeContent, LexisSession, SourceCode, Token, TokenCursor, TokenRule},
+    lexis::{LexisSession, SourceCode, Token, TokenCursor, TokenRule},
     syntax::{NoSyntax, SimpleNode},
     Document,
 };
@@ -133,7 +133,7 @@ fn test_document_lexis() {
         }
 
         #[inline(always)]
-        fn describe(index: TokenRule) -> Option<&'static str> {
+        fn describe(index: TokenRule, _verbose: bool) -> Option<&'static str> {
             if index == Self::A as u8 {
                 return Some("A");
             }

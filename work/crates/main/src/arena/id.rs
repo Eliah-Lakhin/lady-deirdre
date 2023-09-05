@@ -66,14 +66,14 @@ pub struct Id {
 
 impl Debug for Id {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         Debug::fmt(&self.inner, formatter)
     }
 }
 
 impl Display for Id {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         Display::fmt(&self.inner, formatter)
     }
 }

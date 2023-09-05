@@ -37,6 +37,7 @@
 
 mod automata;
 mod context;
+mod description;
 mod deterministic;
 mod dump;
 mod expression;
@@ -52,6 +53,7 @@ pub(crate) use report::{error, error_message, expect_some, null, system_panic};
 pub use crate::utils::{
     automata::Automata,
     context::{AutomataContext, AutomataTerminal, State, Strategy},
+    description::Description,
     dump::Dump,
     expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
     facade::Facade,

@@ -84,7 +84,7 @@ pub enum SimpleNode {
 
 impl Display for SimpleNode {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         Debug::fmt(self, formatter)
     }
 }

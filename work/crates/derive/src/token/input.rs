@@ -644,18 +644,32 @@ impl TokenInput {
             let ident = &variant.ident;
             let span = ident.span();
             let option = span.face_option();
-            let description = &variant.description;
 
-            quote_spanned!(span=>
-                if Self::#ident as u8 == rule {
-                    return #option::Some(#description);
-                }
-            )
+            let short = &variant.description.short;
+            let verbose = &variant.description.verbose;
+
+            match short == verbose {
+                true => quote_spanned!(span=>
+                    if Self::#ident as u8 == rule {
+                        return #option::Some(#short);
+                    }
+                ),
+
+                false => quote_spanned!(span=>
+                    if Self::#ident as u8 == rule {
+                        return match verbose {
+                            false => #option::Some(#short),
+                            true => #option::Some(#verbose),
+                        }
+                    }
+                ),
+            }
         });
 
         quote_spanned!(span=>
             #[inline(always)]
-            fn describe(rule: #core::lexis::TokenRule) -> #option<&'static str> {
+            #[allow(unused_variables)]
+            fn describe(rule: #core::lexis::TokenRule, verbose: bool) -> #option<&'static str> {
                 #(#descriptions)*
 
                 None

@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{CodeContent, Site, SourceCode, ToSite},
+    lexis::{Site, SourceCode, ToSite},
     std::*,
 };
 
@@ -77,7 +77,7 @@ pub type Column = usize;
 ///
 /// ```rust
 /// use lady_deirdre::lexis::{
-///     Position, ToSite, ToPosition, SimpleToken, TokenBuffer, CodeContent
+///     Position, ToSite, SimpleToken, TokenBuffer, SourceCode
 /// };
 ///
 /// let mut code = TokenBuffer::<SimpleToken>::default();
@@ -154,7 +154,7 @@ impl Default for Position {
 
 impl Display for Position {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_fmt(format_args!("{}:{}", self.line, self.column))
     }
 }
@@ -229,76 +229,5 @@ impl Position {
     #[inline(always)]
     pub fn new(line: Line, column: Column) -> Self {
         Self { line, column }
-    }
-}
-
-/// An auto-implemented trait that turns any [ToSite](crate::lexis::ToSite) implementation
-/// into [Position](crate::lexis::Position).
-///
-/// ```rust
-/// use lady_deirdre::lexis::{ToPosition, TokenBuffer, SimpleToken, Position};
-///
-/// let mut code = TokenBuffer::<SimpleToken>::default();
-///
-/// code.append("First line\n");
-/// code.append("Second line\n");
-/// code.append("Third line\n");
-///
-/// // The third character "c" in the "Second line\n" substring.
-/// let site = 13;
-/// let position = site.to_position(&code).unwrap();
-///
-/// assert_eq!(position, Position::new(2, 3));
-/// ```
-pub trait ToPosition: ToSite {
-    /// Turns an object that implements a [ToSite](crate::lexis::ToSite) trait to Position.
-    ///
-    /// Returns [Some] value if and only if `self.is_valid_site(code)`.
-    ///
-    /// This operation performs in linear time of the entire source code size.
-    fn to_position(&self, code: &impl SourceCode) -> Option<Position>;
-}
-
-impl<S: ToSite> ToPosition for S {
-    fn to_position(&self, code: &impl SourceCode) -> Option<Position> {
-        let site = match self.to_site(code) {
-            None => return None,
-            Some(site) => site,
-        };
-
-        if site == 0 {
-            return Some(Position::default());
-        }
-
-        let mut line = 1;
-        let mut column = 1;
-        let mut cursor = 0;
-        let mut chars = code.chars(..);
-
-        loop {
-            let ch = match chars.next() {
-                None => break,
-                Some(ch) => ch,
-            };
-
-            cursor += 1;
-
-            match ch {
-                '\n' => {
-                    line += 1;
-                    column = 1;
-                }
-
-                _ => {
-                    column += 1;
-                }
-            }
-
-            if cursor >= site {
-                break;
-            }
-        }
-
-        Some(Position { line, column })
     }
 }

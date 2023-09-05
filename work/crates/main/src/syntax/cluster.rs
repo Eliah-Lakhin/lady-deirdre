@@ -106,7 +106,7 @@ pub struct Cluster<N: Node> {
 
 impl<N: Node + Debug> Debug for Cluster<N> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
             .debug_struct("Cluster")
             .field("primary", &self.primary)
@@ -124,13 +124,13 @@ impl<N: Node + Debug> Debug for Cluster<N> {
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     syntax::{SimpleNode, SyntaxTree, NodeRef, Cluster, TreeContent}
+///     syntax::{SimpleNode, SyntaxTree, NodeRef, Cluster}
 /// };
 ///
 /// let doc = Document::<SimpleNode>::from("[]{}()");
 ///
 /// let braces_node_ref = &doc.root_node_ref().deref(&doc).unwrap().inner()[1];
-/// let braces_cluster_ref = braces_node_ref.cluster();
+/// let braces_cluster_ref = braces_node_ref.cluster_ref();
 /// let braces_cluster = braces_cluster_ref.deref(&doc).unwrap();
 ///
 /// assert_eq!(&braces_cluster.primary, braces_node_ref.deref(&doc).unwrap());
@@ -158,7 +158,7 @@ pub struct ClusterRef {
 
 impl Debug for ClusterRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
                 "ClusterRef(id: {:?}, cluster_entry: {:?})",

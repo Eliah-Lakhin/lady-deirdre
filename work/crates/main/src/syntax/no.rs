@@ -51,7 +51,7 @@ use crate::{
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     syntax::{NoSyntax, SyntaxTree, TreeContent},
+///     syntax::{NoSyntax, SyntaxTree},
 ///     lexis::SimpleToken,
 ///     Document,
 /// };
@@ -72,7 +72,7 @@ pub struct NoSyntax<T: Token> {
 
 impl<T: Token> Debug for NoSyntax<T> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_str("NoSyntax")
     }
 }
@@ -118,7 +118,7 @@ impl<T: Token> Node for NoSyntax<T> {
     }
 
     #[inline(always)]
-    fn describe(_rule: NodeRule) -> Option<&'static str> {
+    fn describe(_rule: NodeRule, _verbose: bool) -> Option<&'static str> {
         None
     }
 }

@@ -61,7 +61,7 @@ pub struct NodeSet {
 
 impl Debug for NodeSet {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         let mut debug_list = formatter.debug_list();
 
         let mut entry = 0;
@@ -276,11 +276,11 @@ impl NodeSet {
         }
 
         impl<'set, N: Node> Display for DisplayNodeSet<'set, N> {
-            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                 let mut vector = Vec::with_capacity(NodeSet::LIMIT);
 
                 for rule in self.set {
-                    if let Some(description) = N::describe(rule) {
+                    if let Some(description) = N::name(rule) {
                         vector.push(description);
                     }
                 }

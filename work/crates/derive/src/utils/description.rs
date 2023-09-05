@@ -35,86 +35,67 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{lexis::Token, std::*};
+use std::mem::replace;
 
-/// A common generic lexis.
-///
-/// You can use this Token type when particular source code grammar is unknown or does not
-/// matter(e.g. if the end user opens a custom .txt file in the code editor window), but the text
-/// needs to be split into tokens in some reasonable way.
-///
-/// Also, you can use a companion [SimpleNode](crate::syntax::SimpleNode) syntax implementation
-/// that parses parens nesting on top of this lexis.
-#[derive(Token, Clone, Copy, Debug, PartialEq, Eq)]
-#[define(ALPHABET = ['a'..'z', 'A'..'Z'])]
-#[define(NUM = ['0'..'9'])]
-#[define(ALPHANUM = ALPHABET | NUM)]
-#[define(SYMBOL = [
-    '!', '@', '#', '$', '%', '^', '&', '*', '-', '+', '=', '/', '|', ':', ';', '.',
-    ',', '<', '>', '?', '~', '`'
-])]
-#[repr(u8)]
-pub enum SimpleToken {
-    EOI = 0,
+use convert_case::{Case, Casing};
+use proc_macro2::{Ident, Span};
+use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitStr, Result};
 
-    /// Any other token that does not fit this lexical grammar.
-    Mismatch = 1,
+use crate::utils::error;
 
-    /// A numerical literal. Either integer or a floating point(e.g. `12345` or `1234.56`).
-    #[rule(NUM+ & ('.' & NUM+)?)]
-    Number,
-
-    /// All keyboard terminal character(e.g. `@` or `%`) except paren terminals.
-    #[rule(SYMBOL | '\\')]
-    Symbol,
-
-    /// An open parenthesis(`(`) terminal.
-    #[rule('(')]
-    ParenOpen,
-
-    /// A close parenthesis(`)`) terminal.
-    #[rule(')')]
-    ParenClose,
-
-    /// An open bracket(`[`) terminal.
-    #[rule('[')]
-    BracketOpen,
-
-    /// A close bracket(`]`) terminal.
-    #[rule(']')]
-    BracketClose,
-
-    /// An open brace(`{`) terminal.
-    #[rule('{')]
-    BraceOpen,
-
-    /// A close brace(`}`) terminal.
-    #[rule('}')]
-    BraceClose,
-
-    /// An English alphanumeric word that does not start with digit(e.g. `hello_World123`).
-    #[rule(ALPHABET & (ALPHANUM | '_')*)]
-    Identifier,
-
-    /// A string literal surrounded by `"` characters that allows any characters inside including
-    /// the characters escaped by `\` prefix(e.g. `"hello \" \n world"`).
-    #[rule('"' & ('\\' & . | ^['\\', '\"'])* & '"')]
-    String,
-
-    /// A single character literal surrounded by `'` characters that allows any character inside
-    /// including the characters escaped by `\` prefix(e.g. `'A'`, or `'\A'`, or `'\''`)
-    #[rule('\'' & ('\\' & . | ^['\\', '\''])  & '\'')]
-    Char,
-
-    /// A sequence of whitespace characters as defined in
-    /// [`char::is_ascii_whitespace()`](char::is_ascii_whitespace).
-    #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
-    Whitespace,
+pub struct Description {
+    pub span: Span,
+    pub short: LitStr,
+    pub verbose: LitStr,
 }
 
-impl Display for SimpleToken {
-    #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        Debug::fmt(self, formatter)
+impl TryFrom<Attribute> for Description {
+    type Error = Error;
+
+    fn try_from(attr: Attribute) -> Result<Self> {
+        let span = attr.span();
+
+        attr.parse_args_with(|input: ParseStream| {
+            if input.is_empty() {
+                return Err(error!(
+                    input.span(),
+                    "Expected description strings in form of `\"<short>\", \
+                    \"<verbose>\"` or `\"<short_and_verbose>\"`.",
+                ));
+            }
+
+            let short = input.parse::<LitStr>()?;
+
+            let verbose = match input.peek(Token![,]) {
+                false => short.clone(),
+
+                true => {
+                    let _ = input.parse::<Token![,]>()?;
+                    input.parse::<LitStr>()?
+                }
+            };
+
+            if !input.is_empty() {
+                return Err(error!(input.span(), "unexpected end of input.",));
+            }
+
+            return Ok(Self {
+                span,
+                short,
+                verbose,
+            });
+        })
+    }
+}
+
+impl Description {
+    pub fn new(span: Span, string: impl AsRef<str>) -> Self {
+        let literal = LitStr::new(string.as_ref(), span);
+
+        Self {
+            span,
+            short: literal.clone(),
+            verbose: literal,
+        }
     }
 }

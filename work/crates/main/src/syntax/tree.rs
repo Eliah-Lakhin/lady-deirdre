@@ -192,13 +192,6 @@ pub struct NodeIterator<'tree, T: SyntaxTree> {
     inner: NodeIteratorInner<'tree, T>,
 }
 
-impl<'tree, T: SyntaxTree> Identifiable for NodeIterator<'tree, T> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.tree.id()
-    }
-}
-
 impl<'tree, T: SyntaxTree> Iterator for NodeIterator<'tree, T> {
     type Item = &'tree T::Node;
 
@@ -262,13 +255,6 @@ pub struct ErrorIterator<'tree, T: SyntaxTree> {
     tree: &'tree T,
     cluster_ref: ClusterRef,
     current: RepositoryIterator<'tree, <T::Node as Node>::Error>,
-}
-
-impl<'tree, T: SyntaxTree> Identifiable for ErrorIterator<'tree, T> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.tree.id()
-    }
 }
 
 impl<'tree, T: SyntaxTree> Iterator for ErrorIterator<'tree, T> {

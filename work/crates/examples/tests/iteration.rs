@@ -39,7 +39,7 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    lexis::{CodeContent, SimpleToken, SourceCode, ToSite, TokenBuffer, TokenCursor},
+    lexis::{SimpleToken, SourceCode, ToSite, TokenBuffer, TokenCursor},
     syntax::NoSyntax,
     Document,
 };

@@ -77,7 +77,7 @@ pub type TokenCount = usize;
 /// grammar directly on enum variants through the macros attributes.
 ///
 /// ```rust
-/// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, Chunk};
+/// use lady_deirdre::lexis::{Token, TokenBuffer, SourceCode, Chunk};
 ///
 /// #[derive(Token, Clone, Copy, PartialEq, Eq, Debug)]
 /// #[repr(u8)]
@@ -186,7 +186,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
     ///     Token,
     ///     TokenBuffer,
     ///     TokenRule,
-    ///     CodeContent,
+    ///     SourceCode,
     ///     LexisSession,
     ///     Chunk,
     /// };
@@ -270,7 +270,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
     ///         }
     ///     }
     ///
-    ///     fn describe(rule: TokenRule) -> Option<&'static str> {
+    ///     fn describe(rule: TokenRule, _verbose: bool) -> Option<&'static str> {
     ///         match rule {
     ///             0 => Some("<mismatch>"),
     ///             1 => Some("<num>"),
@@ -305,7 +305,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
 
     fn name(rule: TokenRule) -> Option<&'static str>;
 
-    fn describe(rule: TokenRule) -> Option<&'static str>;
+    fn describe(rule: TokenRule, verbose: bool) -> Option<&'static str>;
 }
 
 /// A weak reference of the [Token] and its [Chunk](crate::lexis::Chunk) metadata inside the source
@@ -320,7 +320,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     lexis::{TokenRef, SimpleToken, SourceCode, TokenCursor, CodeContent},
+///     lexis::{TokenRef, SimpleToken, SourceCode, TokenCursor},
 ///     syntax::NoSyntax,
 /// };
 ///
@@ -369,7 +369,7 @@ pub struct TokenRef {
 
 impl Debug for TokenRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
                 "TokenRef(id: {:?}, chunk_entry: {:?})",
@@ -552,9 +552,13 @@ impl TokenRef {
     }
 
     #[inline(always)]
-    pub fn describe<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<&'static str> {
+    pub fn describe<T: Token>(
+        &self,
+        code: &impl SourceCode<Token = T>,
+        verbose: bool,
+    ) -> Option<&'static str> {
         self.deref(code)
-            .map(|token| T::describe(token.rule()))
+            .map(|token| T::describe(token.rule(), verbose))
             .flatten()
     }
 

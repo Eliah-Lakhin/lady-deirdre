@@ -39,7 +39,7 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    lexis::{CodeContent, SimpleToken},
+    lexis::{Position, SimpleToken, SourceCode, ToSpan},
     syntax::{Node, NodeRef, ParseError, SyntaxTree},
     Document,
 };

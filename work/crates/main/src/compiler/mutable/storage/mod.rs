@@ -874,7 +874,7 @@ mod tests {
             unimplemented!()
         }
 
-        fn describe(_rule: NodeRule) -> Option<&'static str> {
+        fn describe(_rule: NodeRule, _verbose: bool) -> Option<&'static str> {
             unimplemented!()
         }
     }
@@ -903,7 +903,7 @@ mod tests {
             unimplemented!()
         }
 
-        fn describe(_index: TokenRule) -> Option<&'static str> {
+        fn describe(_index: TokenRule, _verbose: bool) -> Option<&'static str> {
             unimplemented!()
         }
     }
@@ -912,13 +912,13 @@ mod tests {
 
     impl<'a, N: Node> Display for TreeDisplay<'a, N> {
         #[inline]
-        fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
             struct PageDisplay<'a, N: Node> {
                 page: &'a ItemRefVariant<N>,
             }
 
             impl<'a, N: Node> Debug for PageDisplay<'a, N> {
-                fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                     let page = unsafe { self.page.as_page_ref().as_ref() };
 
                     let mut list = formatter.debug_list();
@@ -945,7 +945,7 @@ mod tests {
             }
 
             impl<'a, N: Node> Debug for BranchDisplay<'a, N> {
-                fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                     match self.height {
                         0 => unreachable!("Incorrect height"),
 

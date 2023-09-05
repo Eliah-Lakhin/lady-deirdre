@@ -45,6 +45,7 @@ use crate::{
     lexis::{SiteSpan, Token, TokenRef},
     std::*,
     syntax::{
+        morphism::DisplayPolyRef,
         Child,
         Children,
         ClusterRef,
@@ -76,7 +77,7 @@ use crate::{
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     syntax::{Node, ParseError, SyntaxTree, TreeContent},
+///     syntax::{Node, ParseError, SyntaxTree},
 ///     lexis::{SimpleToken, TokenRef},
 ///     Document,
 /// };
@@ -171,7 +172,6 @@ pub trait Node: Sized + 'static {
     ///         NodeRule,
     ///         ParseError,
     ///         SyntaxTree,
-    ///         TreeContent,
     ///         NodeSet,
     ///         Children,
     ///         ROOT_RULE,
@@ -245,7 +245,7 @@ pub trait Node: Sized + 'static {
     ///         }
     ///     }
     ///
-    ///     fn describe(rule: NodeRule) -> Option<&'static str> {
+    ///     fn describe(rule: NodeRule, _verbose: bool) -> Option<&'static str> {
     ///         match rule {
     ///             PARENS_RULE => Some("Parens"),
     ///             OTHER_RULE => Some("Other"),
@@ -314,7 +314,7 @@ pub trait Node: Sized + 'static {
     ///             span,
     ///             context: PARENS_RULE,
     ///             expected_tokens: &EMPTY_TOKEN_SET,
-    ///             expected_rules: &EMPTY_RULE_SET,
+    ///             expected_nodes: &EMPTY_RULE_SET,
     ///         });
     ///
     ///         // Returning what we have parsed so far.
@@ -363,7 +363,7 @@ pub trait Node: Sized + 'static {
 
     fn name(rule: NodeRule) -> Option<&'static str>;
 
-    fn describe(rule: NodeRule) -> Option<&'static str>;
+    fn describe(rule: NodeRule, verbose: bool) -> Option<&'static str>;
 }
 
 /// A weak reference of the [Node] and its metadata inside the syntax structure of the compilation
@@ -402,7 +402,7 @@ pub struct NodeRef {
 
 impl Debug for NodeRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
                 "NodeRef(id: {:?}, cluster_entry: {:?}, node_entry: {:?})",
@@ -536,9 +536,13 @@ impl NodeRef {
     }
 
     #[inline(always)]
-    pub fn describe<N: Node>(&self, tree: &impl SyntaxTree<Node = N>) -> Option<&'static str> {
+    pub fn describe<N: Node>(
+        &self,
+        tree: &impl SyntaxTree<Node = N>,
+        verbose: bool,
+    ) -> Option<&'static str> {
         self.deref(tree)
-            .map(|node| N::describe(node.rule()))
+            .map(|node| N::describe(node.rule(), verbose))
             .flatten()
     }
 
@@ -578,6 +582,22 @@ impl NodeRef {
                 None => NodeRef::nil(),
             },
             _ => NodeRef::nil(),
+        }
+    }
+
+    pub fn get_token(&self, tree: &impl SyntaxTree, key: &'static str) -> TokenRef {
+        let node = match self.deref(tree) {
+            None => return TokenRef::nil(),
+            Some(node) => node,
+        };
+
+        match node.children().get(key) {
+            Some(Child::Token(child)) => *child,
+            Some(Child::TokenSeq(child)) => match child.first() {
+                Some(child) => *child,
+                None => TokenRef::nil(),
+            },
+            _ => TokenRef::nil(),
         }
     }
 

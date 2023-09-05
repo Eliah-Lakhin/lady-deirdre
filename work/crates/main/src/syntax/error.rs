@@ -38,7 +38,8 @@
 use crate::{
     arena::{Entry, Id, Identifiable},
     compiler::CompilationUnit,
-    lexis::{SiteRefSpan, ToSpan, Token, TokenSet},
+    format::{Delimited, PrintString, Priority, SnippetFormatter},
+    lexis::{Length, SiteRefSpan, ToSpan, Token, TokenRule, TokenSet},
     std::*,
     syntax::{ClusterRef, Node, NodeRule, NodeSet, SyntaxTree, ROOT_RULE},
 };
@@ -81,7 +82,7 @@ pub struct ParseError {
     /// A set of named rules that the parser was expected to be descend to.
     ///
     /// Possibly empty set.
-    pub expected_rules: &'static NodeSet,
+    pub expected_nodes: &'static NodeSet,
 }
 
 impl ParseError {
@@ -94,9 +95,11 @@ impl ParseError {
 
         impl<'error, N: Node> Display for Title<'error, N> {
             #[inline(always)]
-            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-                match N::describe(self.error.context) {
-                    Some(context) => formatter.write_fmt(format_args!("Parse error in {context}.")),
+            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+                match N::describe(self.error.context, true) {
+                    Some(context) => {
+                        formatter.write_fmt(format_args!("{context} format mismatch."))
+                    }
                     None => formatter.write_str("Parse error."),
                 }
             }
@@ -109,162 +112,210 @@ impl ParseError {
     }
 
     #[inline(always)]
-    pub fn describe<N: Node>(&self) -> impl Display + '_ {
-        const SHORT_LENGTH: usize = 80;
-
+    pub fn message<N: Node>(&self) -> impl Display + '_ {
         struct Describe<'error, N> {
             error: &'error ParseError,
             _node: PhantomData<N>,
         }
 
         impl<'error, N: Node> Display for Describe<'error, N> {
-            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-                #[derive(PartialEq, Eq, PartialOrd, Ord)]
-                enum RuleOrToken {
-                    Rule(&'static str),
-                    Token(&'static str),
+            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+                const LENGTH_MAX: Length = 80;
+
+                #[derive(PartialEq, Eq)]
+                enum TokenOrNode {
+                    Token(PrintString<'static>),
+                    Node(PrintString<'static>),
                 }
 
-                impl Display for RuleOrToken {
+                impl PartialOrd for TokenOrNode {
                     #[inline(always)]
-                    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+                    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                        Some(self.cmp(other))
+                    }
+                }
+
+                impl Ord for TokenOrNode {
+                    fn cmp(&self, other: &Self) -> Ordering {
+                        match (self, other) {
+                            (Self::Token(_), Self::Node(_)) => Ordering::Greater,
+                            (Self::Node(_), Self::Token(_)) => Ordering::Less,
+                            (Self::Token(this), Self::Token(other)) => this.cmp(other),
+                            (Self::Node(this), Self::Node(other)) => this.cmp(other),
+                        }
+                    }
+                }
+
+                impl TokenOrNode {
+                    #[inline(always)]
+                    fn print_to(&self, target: &mut PrintString<'static>) {
                         match self {
-                            Self::Rule(string) => formatter.write_str(string),
-                            Self::Token(string) => formatter.write_fmt(format_args!("'{string}'")),
-                        }
-                    }
-                }
-
-                let mut expected_rules = (&self.error.expected_rules)
-                    .into_iter()
-                    .map(|rule| N::describe(rule))
-                    .flatten()
-                    .map(RuleOrToken::Rule)
-                    .collect::<Vec<_>>();
-
-                let mut expected_tokens = self
-                    .error
-                    .expected_tokens
-                    .into_iter()
-                    .map(|rule| <N as Node>::Token::describe(rule))
-                    .flatten()
-                    .map(RuleOrToken::Token)
-                    .collect::<Vec<_>>();
-
-                let total = expected_rules.len() + expected_tokens.len();
-
-                if total == 0 {
-                    return match formatter.alternate() {
-                        true => match self.error.context == ROOT_RULE {
-                            false => match N::describe(self.error.context) {
-                                Some(context) if self.error.context != ROOT_RULE => formatter
-                                    .write_fmt(format_args!(
-                                        "Unexpected end of input in {context}."
-                                    )),
-
-                                _ => formatter.write_str("Unexpected end of input."),
-                            },
-                            true => formatter.write_str("Unexpected end of input."),
-                        },
-                        false => formatter.write_str("unexpected end of input"),
-                    };
-                }
-
-                expected_rules.sort();
-                expected_tokens.sort();
-
-                let limit;
-                let mut length;
-
-                match formatter.alternate() {
-                    true => {
-                        limit = usize::MAX;
-                        length = 0;
-
-                        match total <= 2 {
-                            true => {
-                                formatter.write_str("Missing ")?;
-                            }
-
-                            false => {
-                                if let Some(context) = N::describe(self.error.context) {
-                                    formatter
-                                        .write_fmt(format_args!("{context} format mismatch. "))?;
-                                }
-
-                                formatter.write_str("Expected ")?;
-                            }
-                        }
-                    }
-
-                    false => {
-                        limit = SHORT_LENGTH;
-
-                        match total == 1 {
-                            true => {
-                                formatter.write_str("missing ")?;
-                                length = "missing ".len();
-                            }
-
-                            false => {
-                                formatter.write_str("expected ")?;
-                                length = "expected ".len();
+                            Self::Node(string) => target.append(string.clone()),
+                            Self::Token(string) => {
+                                target.push('\'');
+                                target.append(string.clone());
+                                target.push('\'');
                             }
                         }
                     }
                 }
 
-                let mut index = 0;
+                struct OutString {
+                    alt: bool,
+                    set: StdSet<&'static str>,
+                    components: Vec<TokenOrNode>,
+                    exhaustive: bool,
+                }
 
-                for item in expected_rules.into_iter().chain(expected_tokens) {
-                    let mut next = String::with_capacity(SHORT_LENGTH);
+                impl OutString {
+                    fn new(alt: bool, capacity: usize) -> Self {
+                        let mut set = StdSet::new_std_set(capacity);
 
-                    match index {
-                        0 => (),
-                        1 => match total == 2 {
-                            true => {
-                                next += " or ";
-                            }
-
-                            false => {
-                                next += ", ";
-                            }
-                        },
-
-                        _ => {
-                            next += ", ";
+                        Self {
+                            alt,
+                            set,
+                            components: Vec::with_capacity(capacity),
+                            exhaustive: true,
                         }
                     }
 
-                    next += item.to_string().as_str();
+                    fn push_token<N: Node>(&mut self, rule: TokenRule) {
+                        let description = match <N as Node>::Token::describe(rule, self.alt) {
+                            Some(string) => string,
+                            None => return,
+                        };
 
-                    if index == 0 || length + next.len() < limit {
-                        index += 1;
-                        length += next.len();
-                        formatter.write_str(&next)?;
-                        continue;
-                    }
-
-                    break;
-                }
-
-                match index < total - 1 {
-                    true => formatter.write_str("...")?,
-
-                    false => {
-                        if formatter.alternate() {
-                            if total <= 2 {
-                                if let Some(context) = N::describe(self.error.context) {
-                                    formatter.write_fmt(format_args!(" in {context}"))?;
-                                }
-                            }
-
-                            formatter.write_str(".")?;
+                        if self.set.insert(description) {
+                            self.components
+                                .push(TokenOrNode::Token(PrintString::borrowed(description)));
                         }
                     }
+
+                    fn push_node<N: Node>(&mut self, rule: NodeRule) {
+                        let description = match N::describe(rule, self.alt) {
+                            Some(string) => string,
+                            None => return,
+                        };
+
+                        if self.set.insert(description) {
+                            self.components
+                                .push(TokenOrNode::Node(PrintString::borrowed(description)));
+                        }
+                    }
+
+                    fn shorten(&mut self) -> bool {
+                        if self.alt {
+                            return false;
+                        }
+
+                        if self.components.len() <= 2 {
+                            return false;
+                        }
+
+                        let _ = self.components.pop();
+                        self.exhaustive = false;
+
+                        true
+                    }
+
+                    fn string(&self) -> PrintString<'static> {
+                        static MISSING: PrintString<'static> = PrintString::borrowed("missing");
+                        static MISSING_ALT: PrintString<'static> = PrintString::borrowed("Missing");
+
+                        static EXPECTED: PrintString<'static> = PrintString::borrowed("expected");
+                        static EXPECTED_ALT: PrintString<'static> =
+                            PrintString::borrowed("Expected");
+
+                        static EOI: PrintString<'static> =
+                            PrintString::borrowed("unexpected end of input");
+                        static EOI_ALT: PrintString<'static> =
+                            PrintString::borrowed("Unexpected end of input");
+
+                        static IN: PrintString<'static> = PrintString::borrowed(" in ");
+                        static OR: PrintString<'static> = PrintString::borrowed(" or ");
+                        static COMMA: PrintString<'static> = PrintString::borrowed(", ");
+
+                        static ETC: PrintString<'static> = PrintString::borrowed("…");
+                        static ETC_ALT: PrintString<'static> = PrintString::borrowed("...");
+
+                        let mut result = PrintString::empty();
+
+                        match self.components.len() {
+                            0 => {
+                                result.append(match self.alt {
+                                    false => EOI.clone(),
+                                    true => EOI_ALT.clone(),
+                                });
+                            }
+
+                            1 | 2 => {
+                                result.append(match self.alt {
+                                    false => MISSING.clone(),
+                                    true => MISSING_ALT.clone(),
+                                });
+                            }
+
+                            _ => {
+                                result.append(match self.alt {
+                                    false => EXPECTED.clone(),
+                                    true => EXPECTED_ALT.clone(),
+                                });
+                            }
+                        }
+
+                        for component in self.components.iter().delimited() {
+                            match component.is_first {
+                                true => result.push(' '),
+                                false => match self.components.len() == 2 && self.exhaustive {
+                                    true => result.append(OR.clone()),
+                                    false => result.append(COMMA.clone()),
+                                },
+                            }
+
+                            component.print_to(&mut result);
+                        }
+
+                        if self.alt && self.exhaustive {
+                            result.push('.');
+                        }
+
+                        if !self.exhaustive {
+                            result.append(match self.alt {
+                                false => ETC.clone(),
+                                true => ETC_ALT.clone(),
+                            });
+                        }
+
+                        result
+                    }
                 }
 
-                Ok(())
+                let mut out = OutString::new(
+                    formatter.alternate(),
+                    self.error.expected_tokens.length() + self.error.expected_nodes.length(),
+                );
+
+                for rule in self.error.expected_nodes {
+                    out.push_node::<N>(rule);
+                }
+
+                for rule in self.error.expected_tokens {
+                    out.push_token::<N>(rule);
+                }
+
+                out.components.sort();
+
+                let mut string = out.string();
+
+                while string.length() > LENGTH_MAX {
+                    if !out.shorten() {
+                        break;
+                    }
+
+                    string = out.string();
+                }
+
+                formatter.write_str(string.as_ref())
             }
         }
 
@@ -283,12 +334,27 @@ impl ParseError {
 
         impl<'a, U: CompilationUnit> Display for DisplaySyntaxError<'a, U> {
             #[inline]
-            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-                Display::fmt(&self.error.span.display(self.unit), formatter)?;
-                formatter.write_str(": ")?;
-                formatter.write_fmt(format_args!("{:#}", self.error.describe::<U::Node>()))?;
+            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+                if !formatter.alternate() {
+                    formatter.write_fmt(format_args!("{}", self.error.span.display(self.unit)))?;
+                    formatter.write_str(": ")?;
+                    formatter.write_fmt(format_args!("{:#}", self.error.title::<U::Node>()))?;
+                    formatter.write_str(" ")?;
+                    formatter.write_fmt(format_args!("{:#}", self.error.message::<U::Node>()))?;
 
-                Ok(())
+                    return Ok(());
+                }
+
+                formatter
+                    .snippet(self.unit)
+                    .set_caption(format!("Unit({})", self.unit.id()))
+                    .set_summary(self.error.title::<U::Node>().to_string())
+                    .annotate(
+                        &self.error.span,
+                        Priority::Primary,
+                        format!("{}", self.error.message::<U::Node>()),
+                    )
+                    .finish()
             }
         }
 
@@ -311,7 +377,6 @@ impl ParseError {
 ///         SimpleNode,
 ///         SyntaxTree,
 ///         ParseError,
-///         TreeContent,
 ///         NodeSet,
 ///         ROOT_RULE,
 ///         EMPTY_RULE_SET,
@@ -327,13 +392,13 @@ impl ParseError {
 ///         span: SiteRef::nil()..SiteRef::nil(),
 ///         context: ROOT_RULE,
 ///         expected_tokens: &EMPTY_TOKEN_SET,
-///         expected_rules: &EMPTY_RULE_SET,
+///         expected_nodes: &EMPTY_RULE_SET,
 ///     },
 /// );
 ///
 /// assert_eq!(
 ///     new_custom_error_ref.deref(&doc).unwrap().display(&doc).to_string(),
-///     "?: Unexpected end of input.",
+///     "?: Root format mismatch. Unexpected end of input.",
 /// );
 ///
 /// // This change touches "root" node of the syntax tree(the only node of the tree), as such
@@ -365,7 +430,7 @@ pub struct ErrorRef {
 
 impl Debug for ErrorRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
                 "ErrorRef(id: {:?}, cluster_entry: {:?}, error_entry: {:?})",

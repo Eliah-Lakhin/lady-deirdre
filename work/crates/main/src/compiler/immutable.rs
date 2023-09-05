@@ -38,6 +38,7 @@
 use crate::{
     arena::{Id, Identifiable},
     compiler::{CompilationUnit, Lexis, Syntax},
+    format::SnippetFormatter,
     lexis::{SourceCode, Token, TokenBuffer},
     std::*,
     syntax::{Node, SyntaxBuffer},
@@ -57,12 +58,22 @@ impl<N: Node> Identifiable for ImmutableUnit<N> {
 
 impl<N: Node> Debug for ImmutableUnit<N> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
             .debug_struct("ImmutableUnit")
             .field("id", &self.lexis.id())
             .field("length", &self.lexis.length())
             .finish_non_exhaustive()
+    }
+}
+
+impl<N: Node> Display for ImmutableUnit<N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        formatter
+            .snippet(self)
+            .set_caption(format!("ImmutableUnit({})", self.id()))
+            .finish()
     }
 }
 

@@ -261,7 +261,7 @@ impl Rule {
         let mut covered = Set::with_capacity(total_alphabet_len);
 
         let mut expected_tokens = Set::with_capacity(input.alphabet.len());
-        let mut expected_rules = Set::with_capacity(input.variants.len());
+        let mut expected_nodes = Set::with_capacity(input.variants.len());
         let mut by_token = Map::with_capacity(input.alphabet.len());
 
         for (through, to) in outgoing {
@@ -333,18 +333,18 @@ impl Rule {
                     let index =
                         expect_some!(variant.index.as_ref(), "Missing parsable variant index.",);
 
-                    expected_rules.insert(index);
+                    expected_nodes.insert(index);
                 }
             }
         }
 
         let expected_tokens_var;
-        let expected_rules_var;
+        let expected_nodes_var;
 
         match halts {
             true => {
                 expected_tokens_var = GlobalVar::EmptyTokenSet.compile(span);
-                expected_rules_var = GlobalVar::EmptyNodeSet.compile(span);
+                expected_nodes_var = GlobalVar::EmptyNodeSet.compile(span);
 
                 let eoi = TokenLit::EOI(span);
 
@@ -370,8 +370,8 @@ impl Rule {
                     )
                     .compile(span);
 
-                expected_rules_var = globals
-                    .rules(expected_rules.into_iter().cloned())
+                expected_nodes_var = globals
+                    .rules(expected_nodes.into_iter().cloned())
                     .compile(span);
             }
         };
@@ -508,7 +508,7 @@ impl Rule {
                                     span: site..site,
                                     context: #context,
                                     expected_tokens: &#var,
-                                    expected_rules: &#core::syntax::EMPTY_RULE_SET,
+                                    expected_nodes: &#core::syntax::EMPTY_RULE_SET,
                                 });
                         )
                         .to_tokens(&mut body);
@@ -537,7 +537,7 @@ impl Rule {
                                     span: site..site,
                                     context: #context,
                                     expected_tokens: &#core::lexis::EMPTY_TOKEN_SET,
-                                    expected_rules: &#var,
+                                    expected_nodes: &#var,
                                 });
                         )
                         .to_tokens(&mut body);
@@ -717,7 +717,7 @@ impl Rule {
                             span: site..end_site,
                             context: #context,
                             expected_tokens: &#expected_tokens_var,
-                            expected_rules: &#expected_rules_var,
+                            expected_nodes: &#expected_nodes_var,
                         }
                     );
                 )

@@ -47,6 +47,7 @@ use crate::{
         unit::NodeCoverage,
         CompilationUnit,
     },
+    format::SnippetFormatter,
     lexis::{
         Length,
         Site,
@@ -128,7 +129,7 @@ use crate::{
 /// input action even on large documents.
 ///
 /// ```rust
-/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::CodeContent};
+/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::SourceCode};
 ///
 /// let mut doc = Document::<SimpleNode>::from("test string");
 ///
@@ -159,7 +160,7 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     lexis::{SourceCode, CodeContent, SimpleToken},
+///     lexis::{SourceCode, SimpleToken},
 ///     syntax::SimpleNode,
 /// };
 ///
@@ -187,7 +188,7 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     lexis::{SourceCode, CodeContent, TokenCursor, SimpleToken},
+///     lexis::{SourceCode, TokenCursor, SimpleToken},
 ///     syntax::SimpleNode
 /// };
 ///
@@ -229,8 +230,8 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     syntax::{SimpleNode, SyntaxTree, NodeRef, TreeContent},
-///     lexis::{CodeContent, ToSpan},
+///     syntax::{SimpleNode, SyntaxTree, NodeRef},
+///     lexis::{SourceCode, ToSpan},
 /// };
 ///
 /// let mut doc = Document::<SimpleNode>::from("foo ([bar] {baz})");
@@ -335,12 +336,22 @@ impl<N: Node> Drop for MutableUnit<N> {
 
 impl<N: Node> Debug for MutableUnit<N> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
             .debug_struct("MutableUnit")
             .field("id", &self.id)
             .field("length", &self.tree.length())
             .finish_non_exhaustive()
+    }
+}
+
+impl<N: Node> Display for MutableUnit<N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        formatter
+            .snippet(self)
+            .set_caption(format!("MutableUnit({})", self.id))
+            .finish()
     }
 }
 
@@ -652,7 +663,7 @@ impl<N: Node> MutableUnit<N> {
     /// a Deletion operation.
     ///
     /// ```rust
-    /// use lady_deirdre::{Document, lexis::CodeContent, syntax::SimpleNode};
+    /// use lady_deirdre::{Document, lexis::SourceCode, syntax::SimpleNode};
     ///
     /// let mut doc = Document::<SimpleNode>::from("foo bar baz");
     ///
@@ -1304,7 +1315,7 @@ impl<'unit, N: Node> Copy for Mutations<'unit, N> {}
 
 impl<'unit, N: Node> Debug for Mutations<'unit, N> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_str("Mutations ")?;
 
         let mut debug_set = formatter.debug_set();

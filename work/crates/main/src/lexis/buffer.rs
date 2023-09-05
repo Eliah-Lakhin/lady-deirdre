@@ -37,6 +37,7 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable, Sequence},
+    format::SnippetFormatter,
     lexis::{
         cursor::TokenBufferCursor,
         session::{Cursor, SequentialLexisSession},
@@ -128,12 +129,22 @@ pub struct TokenBuffer<T: Token> {
 
 impl<T: Token> Debug for TokenBuffer<T> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
             .debug_struct("TokenBuffer")
             .field("id", &self.id)
             .field("length", &self.length)
             .finish_non_exhaustive()
+    }
+}
+
+impl<T: Token> Display for TokenBuffer<T> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        formatter
+            .snippet(self)
+            .set_caption(format!("TokenBuffer({})", self.id))
+            .finish()
     }
 }
 

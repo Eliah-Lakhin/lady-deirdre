@@ -55,10 +55,29 @@ use crate::{
     syntax::{Cluster, ClusterRef, Node, NodeRef, SyntaxTree},
 };
 
-#[derive(Debug)]
 pub enum Document<N: Node> {
     Mutable(MutableUnit<N>),
     Immutable(ImmutableUnit<N>),
+}
+
+impl<N: Node> Debug for Document<N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        match self {
+            Self::Mutable(unit) => Debug::fmt(unit, formatter),
+            Self::Immutable(unit) => Debug::fmt(unit, formatter),
+        }
+    }
+}
+
+impl<N: Node> Display for Document<N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        match self {
+            Self::Mutable(unit) => Display::fmt(unit, formatter),
+            Self::Immutable(unit) => Display::fmt(unit, formatter),
+        }
+    }
 }
 
 impl<N: Node> Identifiable for Document<N> {

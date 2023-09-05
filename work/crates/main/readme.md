@@ -214,7 +214,7 @@ doc.write(.., "(+ 5, 10)");
 
 // Now lets check our tokens using chunk iterator.
 
-use lady_deirdre::lexis::CodeContent;
+use lady_deirdre::lexis::SourceCode;
 
 assert_eq!(
     doc.chunks(..).map(|chunk| chunk.token).collect::<Vec<_>>(),
@@ -236,7 +236,7 @@ assert_eq!(
 // enum type with LL(1) grammar rules directly on the enum variants.
 
 use lady_deirdre::{
-    syntax::{Node, ParseError, NodeRef, SyntaxTree, TreeContent},
+    syntax::{Node, ParseError, NodeRef, SyntaxTree},
     lexis::TokenRef,
 };
 

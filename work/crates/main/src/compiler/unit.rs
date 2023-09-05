@@ -242,7 +242,7 @@ where
     U: CompilationUnit<Cursor<'unit> = C, Node = N>,
 {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         Display::fmt(self, formatter)
     }
 }
@@ -253,7 +253,7 @@ where
     C: TokenCursor<'unit>,
     U: CompilationUnit<Cursor<'unit> = C, Node = N>,
 {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match &self.variant {
             PolyVariant::Token(variant) => {
                 let chunk: Chunk<U::Token> = match variant.chunk(self.unit) {

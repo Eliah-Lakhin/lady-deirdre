@@ -46,7 +46,7 @@
 
 pub mod arena;
 pub mod compiler;
-mod format;
+pub mod format;
 pub mod lexis;
 mod report;
 mod std;

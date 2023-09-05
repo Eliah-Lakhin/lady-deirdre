@@ -36,5 +36,15 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 mod delimited;
+mod printer;
+mod snippet;
+mod string;
+mod terminal;
 
-pub use crate::format::delimited::{Delimited, DelimitedItem};
+pub use crate::format::{
+    delimited::{Delimited, DelimitedItem},
+    printer::{PrettyPrintConfig, PrettyPrinter},
+    snippet::{Highlighter, Priority, Snippet, SnippetConfig, SnippetFormatter},
+    string::PrintString,
+    terminal::{Color, Style, TerminalString},
+};

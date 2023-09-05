@@ -103,7 +103,7 @@ impl<T> Default for Sequence<T> {
 
 impl<T> Debug for Sequence<T> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_str("Sequence")
     }
 }

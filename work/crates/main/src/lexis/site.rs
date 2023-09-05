@@ -37,7 +37,9 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    lexis::{SourceCode, TokenCursor, TokenRef},
+    format::{Priority, SnippetFormatter},
+    lexis::{Position, SourceCode, TokenCursor, TokenRef},
+    report::debug_unreachable,
     std::*,
     syntax::PolyRef,
 };
@@ -88,7 +90,7 @@ unsafe impl ToSite for Site {
 /// ```rust
 /// use lady_deirdre::{
 ///     Document,
-///     lexis::{SimpleToken, SourceCode, TokenCursor, ToSite, CodeContent},
+///     lexis::{SimpleToken, SourceCode, TokenCursor, ToSite},
 ///     syntax::NoSyntax,
 /// };
 ///
@@ -123,7 +125,7 @@ pub struct SiteRef(SiteRefInner);
 
 impl Debug for SiteRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match &self.0 {
             SiteRefInner::CodeEnd(id) => formatter.write_fmt(format_args!("SiteRef({:?})", id)),
             SiteRefInner::ChunkStart(reference) => match reference.is_nil() {
@@ -249,6 +251,45 @@ pub unsafe trait ToSite {
     /// Returned Some value is always within the `0..=SourceCode::length(code)` range.
     fn to_site(&self, code: &impl SourceCode) -> Option<Site>;
 
+    fn to_position(&self, code: &impl SourceCode) -> Option<Position> {
+        let site = self.to_site(code)?;
+
+        if site == 0 {
+            return Some(Position::default());
+        }
+
+        let mut line = 1;
+        let mut column = 1;
+        let mut cursor = 0;
+        let mut chars = code.chars(..);
+
+        loop {
+            let ch = match chars.next() {
+                None => break,
+                Some(ch) => ch,
+            };
+
+            cursor += 1;
+
+            match ch {
+                '\n' => {
+                    line += 1;
+                    column = 1;
+                }
+
+                _ => {
+                    column += 1;
+                }
+            }
+
+            if cursor >= site {
+                break;
+            }
+        }
+
+        Some(Position { line, column })
+    }
+
     /// Resolves index object into a valid Unicode [byte index](crate::lexis::ByteIndex) for
     /// specified `code` instance text.
     ///
@@ -315,4 +356,57 @@ pub unsafe trait ToSite {
     /// [Site](crate::lexis::Site) and [ByteIndex](crate::lexis::ByteIndex) values for specified
     /// `code` instance.
     fn is_valid_site(&self, code: &impl SourceCode) -> bool;
+
+    #[inline(always)]
+    fn display<'a, Code: SourceCode>(&self, code: &'a Code) -> DisplaySite<'a, Code> {
+        DisplaySite {
+            code,
+            site: self.to_site(code),
+        }
+    }
+}
+
+pub struct DisplaySite<'a, Code: SourceCode> {
+    code: &'a Code,
+    site: Option<Site>,
+}
+
+impl<'a, Code> Debug for DisplaySite<'a, Code>
+where
+    Code: SourceCode,
+{
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        Display::fmt(self, formatter)
+    }
+}
+
+impl<'a, Code> Display for DisplaySite<'a, Code>
+where
+    Code: SourceCode,
+{
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        let mut site = match &self.site {
+            None => return formatter.write_str("?"),
+            Some(site) => *site,
+        };
+
+        let position = match site.to_position(self.code) {
+            Some(span) => span,
+
+            // Safety: Sites are always valid to resolve.
+            None => unsafe { debug_unreachable!("Invalid site.") },
+        };
+
+        if !formatter.alternate() {
+            return formatter.write_fmt(format_args!("{}", position));
+        }
+
+        formatter
+            .snippet(self.code)
+            .set_caption(format!("Unit({})", self.code.id()))
+            .set_summary(format!("Site: {site}\nPosition: {position}"))
+            .annotate(site..site, Priority::Default, "")
+            .finish()
+    }
 }

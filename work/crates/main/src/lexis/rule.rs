@@ -56,7 +56,7 @@ pub struct TokenSet {
 
 impl Debug for TokenSet {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.debug_set().entries(self.into_iter()).finish()
     }
 }
@@ -287,12 +287,12 @@ impl TokenSet {
         }
 
         impl<'a, T: Token> Display for DisplayTokenSet<'a, T> {
-            fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                 let mut vector = Vec::with_capacity(0xFF);
 
                 for token in self.set {
-                    if let Some(description) = T::describe(token) {
-                        vector.push(description);
+                    if let Some(name) = T::name(token) {
+                        vector.push(name);
                     }
                 }
 

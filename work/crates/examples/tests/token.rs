@@ -38,7 +38,7 @@
 //TODO check warnings regularly
 #![allow(warnings)]
 
-use lady_deirdre::lexis::{CodeContent, SimpleToken, TokenBuffer};
+use lady_deirdre::lexis::{SimpleToken, SourceCode, TokenBuffer};
 
 #[test]
 fn test_default_token() {

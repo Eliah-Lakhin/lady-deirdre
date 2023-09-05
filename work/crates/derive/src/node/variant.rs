@@ -51,7 +51,7 @@ use crate::{
         recovery::Recovery,
         rule::Rule,
     },
-    utils::{error, expect_some, Dump},
+    utils::{error, expect_some, Description, Dump},
 };
 
 pub(super) struct NodeVariant {
@@ -65,7 +65,7 @@ pub(super) struct NodeVariant {
     pub(super) constructor: Option<Constructor>,
     pub(super) parser: Option<Expr>,
     pub(super) secondary: Option<Span>,
-    pub(super) description: Option<LitStr>,
+    pub(super) description: Option<Description>,
     pub(super) dump: Dump,
 }
 
@@ -186,7 +186,7 @@ impl TryFrom<Variant> for NodeVariant {
                         return Err(error!(span, "Duplicate Describe attribute.",));
                     }
 
-                    description = Some((span, attr.parse_args::<LitStr>()?));
+                    description = Some(Description::try_from(attr)?);
                 }
 
                 "dump" => {
@@ -209,7 +209,7 @@ impl TryFrom<Variant> for NodeVariant {
                     variants.\n\nTo make the variant parsable annotate this \
                     variant with #[rule(...)] attribute.\n\nIf this is \
                     intending (e.g. if you want to make this Node variant \
-                    describable)\nalso annotate this variant with \
+                    describable)\n annotate this variant with \
                     #[describe(...)] attribute.",
                 ));
             }
@@ -332,7 +332,7 @@ impl TryFrom<Variant> for NodeVariant {
 
         let description = match rule.is_some() || index.is_some() {
             false => {
-                if let Some((span, _)) = description {
+                if let Some(Description { span, .. }) = description {
                     return Err(error!(
                         span,
                         "Describe attribute is not applicable to unparseable \
@@ -344,10 +344,10 @@ impl TryFrom<Variant> for NodeVariant {
                 None
             }
 
-            true => description.map(|(_, string)| string).or_else(|| {
-                Some(LitStr::new(
-                    ident.to_string().to_case(Case::Title).as_str(),
+            true => description.or_else(|| {
+                Some(Description::new(
                     ident.span(),
+                    ident.to_string().to_case(Case::Title).as_str(),
                 ))
             }),
         };

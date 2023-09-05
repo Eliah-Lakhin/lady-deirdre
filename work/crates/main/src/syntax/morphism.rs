@@ -38,9 +38,11 @@
 use crate::{
     arena::{Id, Identifiable},
     compiler::CompilationUnit,
-    lexis::{SiteSpan, TokenRef},
+    format::{PrintString, Priority, SnippetConfig, SnippetFormatter},
+    lexis::{SiteSpan, ToSpan, Token, TokenRef},
+    report::debug_unreachable,
     std::*,
-    syntax::NodeRef,
+    syntax::{Node, NodeRef},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -51,7 +53,7 @@ pub enum PolyVariant {
 
 impl Debug for PolyVariant {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self {
             Self::Token(variant) => Debug::fmt(variant, formatter),
             Self::Node(variant) => Debug::fmt(variant, formatter),
@@ -134,6 +136,17 @@ pub trait PolyRef: Identifiable + Debug + 'static {
     fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan>
     where
         Self: Sized;
+
+    #[inline(always)]
+    fn display<'unit, U: CompilationUnit>(&self, unit: &'unit U) -> DisplayPolyRef<'unit, U>
+    where
+        Self: Sized,
+    {
+        DisplayPolyRef {
+            unit,
+            variant: self.as_variant(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -157,5 +170,88 @@ impl RefKind {
             Self::Node => true,
             _ => false,
         }
+    }
+}
+
+pub struct DisplayPolyRef<'unit, U: CompilationUnit> {
+    unit: &'unit U,
+    variant: PolyVariant,
+}
+
+impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+        let mut summary = PrintString::empty();
+        let span;
+
+        match self.variant {
+            PolyVariant::Token(variant) => {
+                let chunk = match variant.chunk(self.unit) {
+                    None => return Debug::fmt(&variant, formatter),
+                    Some(chunk) => chunk,
+                };
+
+                span = match chunk.to_site_span(self.unit) {
+                    Some(span) => span,
+
+                    // Safety: Chunks are always valid spans.
+                    None => unsafe { debug_unreachable!("Invalid chunk span.") },
+                };
+
+                let rule = chunk.token.rule();
+
+                summary.push_str("Token: ");
+                summary.push_str(<U::Token as Token>::name(rule).unwrap_or("?"));
+                summary.push_str("\nDescription: ");
+                summary.push_str(<U::Token as Token>::describe(rule, true).unwrap_or("?"));
+                summary.push_str("\nChunk entry: ");
+                summary.push_str(&format!("{:?}", variant.chunk_entry));
+                summary.push_str("\nLength: ");
+                summary.push_str(&chunk.length.to_string());
+                summary.push_str("\nSite span: ");
+                summary.push_str(&span.start.to_string());
+                summary.push_str("..");
+                summary.push_str(&span.end.to_string());
+                summary.push_str(&format!("\nPosition span: {}", span.display(self.unit)));
+                summary.push_str(&format!("\nString: {:?}", chunk.string));
+            }
+
+            PolyVariant::Node(variant) => {
+                let node = match variant.deref(self.unit) {
+                    None => return Debug::fmt(&variant, formatter),
+                    Some(chunk) => chunk,
+                };
+
+                span = match node.children().span(self.unit) {
+                    None => return Debug::fmt(&variant, formatter),
+                    Some(span) => span,
+                };
+
+                let rule = node.rule();
+
+                summary.push_str("Node: ");
+                summary.push_str(<U::Node as Node>::name(rule).unwrap_or("?"));
+                summary.push_str("\nDescription: ");
+                summary.push_str(<U::Node as Node>::describe(rule, true).unwrap_or("?"));
+                summary.push_str("\nCluster entry: ");
+                summary.push_str(&format!("{:?}", variant.cluster_entry));
+                summary.push_str("\nNode entry: ");
+                summary.push_str(&format!("{:?}", variant.node_entry));
+                summary.push_str("\nSite span: ");
+                summary.push_str(&span.start.to_string());
+                summary.push_str("..");
+                summary.push_str(&span.end.to_string());
+                summary.push_str(&format!("\nPosition span: {}", span.display(self.unit)));
+            }
+        }
+
+        static CONFIG: SnippetConfig = SnippetConfig::verbose();
+
+        formatter
+            .snippet(self.unit)
+            .set_config(&CONFIG)
+            .set_caption(format!("Unit({})", self.unit.id()))
+            .set_summary(summary)
+            .annotate(span, Priority::Default, "")
+            .finish()
     }
 }

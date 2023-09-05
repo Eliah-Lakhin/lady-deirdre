@@ -125,7 +125,7 @@ pub enum Entry {
 
 impl Debug for Entry {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self {
             Entry::Nil => formatter.write_str("Nil"),
             Entry::Primary => formatter.write_str("Primary"),

@@ -41,7 +41,7 @@
 use lady_deirdre::{
     arena::Entry,
     compiler::CompilationUnit,
-    lexis::{CodeContent, ToSpan, TokenRef},
+    lexis::{SourceCode, ToSpan, TokenRef},
     syntax::{Node, NodeRef, ParseError, PolyRef, SyntaxTree},
     Document,
 };

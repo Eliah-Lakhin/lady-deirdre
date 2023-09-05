@@ -50,7 +50,7 @@ pub struct Children {
 
 impl Debug for Children {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         let mut debug_struct = formatter.debug_struct("Children");
 
         for (key, value) in &self.vector {
@@ -114,11 +114,7 @@ impl FromIterator<(&'static str, Child)> for Children {
     fn from_iter<T: IntoIterator<Item = (&'static str, Child)>>(iter: T) -> Self {
         let vector = iter.into_iter().collect::<Vec<_>>();
 
-        #[cfg(not(feature = "std"))]
-        let mut map = StdMap::new();
-
-        #[cfg(feature = "std")]
-        let mut map = StdMap::with_capacity(vector.len());
+        let mut map = StdMap::new_std_map(vector.len());
 
         for (index, (key, _)) in vector.iter().enumerate() {
             if map.insert(*key, index).is_some() {
@@ -310,7 +306,7 @@ pub enum Child {
 
 impl Debug for Child {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self {
             Self::Token(child) => Debug::fmt(child, formatter),
             Self::TokenSeq(child) => Debug::fmt(child, formatter),

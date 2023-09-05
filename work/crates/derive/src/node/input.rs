@@ -825,10 +825,20 @@ impl ToTokens for NodeInput {
             .into_iter()
             .map(|(index, ident, description)| {
                 let name = LitStr::new(&ident.to_string(), ident.span());
+                let short = &description.short;
+                let verbose = &description.verbose;
 
                 (
                     quote_spanned!(index.span() => #index => #option::Some(#name),),
-                    quote_spanned!(index.span() => #index => #option::Some(#description),),
+                    match short == verbose {
+                        true => quote_spanned!(index.span() => #index => #option::Some(#verbose),),
+
+                        false => quote_spanned!(index.span() =>
+                            #index => match verbose {
+                                false => #option::Some(#short),
+                                true => #option::Some(#verbose),
+                            },),
+                    },
                 )
             })
             .unzip();
@@ -982,7 +992,11 @@ impl ToTokens for NodeInput {
                 }
 
                 #[inline(always)]
-                fn describe(rule: #core::syntax::NodeRule) -> #option<&'static str> {
+                #[allow(unused_variables)]
+                fn describe(
+                    rule: #core::syntax::NodeRule,
+                    verbose: bool,
+                ) -> #option<&'static str> {
                     match rule {
                         #(
                         #get_description

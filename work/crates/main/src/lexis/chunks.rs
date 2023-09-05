@@ -36,6 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    format::PrintString,
     lexis::{Length, Site, SiteSpan, SourceCode, ToSite, ToSpan, Token},
     std::*,
 };
@@ -62,18 +63,6 @@ pub struct Chunk<'source, T: Token> {
     pub string: &'source str,
 }
 
-impl<'source, T: Token> Chunk<'source, T> {
-    #[inline(always)]
-    pub fn start(&self) -> Site {
-        self.site
-    }
-
-    #[inline(always)]
-    pub fn end(&self) -> Site {
-        self.site + self.length
-    }
-}
-
 unsafe impl<'source, T: Token> ToSpan for Chunk<'source, T> {
     #[inline(always)]
     fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
@@ -86,5 +75,17 @@ unsafe impl<'source, T: Token> ToSpan for Chunk<'source, T> {
     #[inline(always)]
     fn is_valid_span(&self, _code: &impl SourceCode) -> bool {
         true
+    }
+}
+
+impl<'source, T: Token> Chunk<'source, T> {
+    #[inline(always)]
+    pub fn start(&self) -> Site {
+        self.site
+    }
+
+    #[inline(always)]
+    pub fn end(&self) -> Site {
+        self.site + self.length
     }
 }
