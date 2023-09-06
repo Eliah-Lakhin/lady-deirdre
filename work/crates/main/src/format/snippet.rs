@@ -36,10 +36,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    format::{Color, Delimited, PrintString, Style},
+    format::{PrintString, Style},
     lexis::{
-        Chunk,
-        ChunkIterator,
         Column,
         Length,
         Line,
@@ -443,7 +441,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
         let mut code_length = 0;
 
-        for mut print_line in &mut lines {
+        for print_line in &mut lines {
             print_line.expand(self.config);
 
             for string in &print_line.before {
@@ -538,7 +536,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
         back_distance = 0;
 
-        for (mut forward_distance, line) in distances.into_iter().rev().zip(lines) {
+        for (forward_distance, line) in distances.into_iter().rev().zip(lines) {
             if line.annotated || !self.config.show_numbers || !dim {
                 back_distance = 0;
                 skip = false;
@@ -751,10 +749,8 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
         let dim = !self.annotations.is_empty();
 
-        let mut code_style = self.config.code_style(dim);
+        let code_style = self.config.code_style(dim);
         let mut token_style = None;
-
-        let mut iter = self.code.chunks(&scanner.site_cover);
 
         'chunk_loop: for chunk in self.code.chunks(&scanner.site_cover) {
             let mut site = chunk.site;
@@ -843,7 +839,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
             }
         }
 
-        for (index, annotation) in self.annotations.iter().enumerate() {
+        for annotation in self.annotations.iter() {
             if annotation.span.start != scanner.site_cover.end {
                 continue;
             }
@@ -945,7 +941,7 @@ impl ScanLine {
         let mut left = pending.len();
 
         if left > 1 {
-            for mut message in pending.iter_mut() {
+            for message in pending.iter_mut() {
                 if let Some(message) = message {
                     if message.priority == Priority::Primary {
                         continue;
@@ -1110,6 +1106,7 @@ struct Message {
 
 impl Message {
     #[inline(always)]
+    #[allow(unused)]
     fn span_up_right(&self, config: &SnippetConfig) -> SiteSpan {
         let drawing = config.arrow_up_right();
 
@@ -1212,20 +1209,15 @@ impl StyleString {
         string
     }
 
-    fn with_header_blank(mut self, config: &SnippetConfig, alignment: Length) -> Self {
+    fn with_header_blank(self, config: &SnippetConfig, alignment: Length) -> Self {
         self.with_header(config, alignment, "")
     }
 
-    fn with_header_etc(mut self, config: &SnippetConfig, alignment: Length) -> Self {
+    fn with_header_etc(self, config: &SnippetConfig, alignment: Length) -> Self {
         self.with_header(config, alignment, config.etc().as_ref())
     }
 
-    fn with_header_number(
-        mut self,
-        config: &SnippetConfig,
-        alignment: Length,
-        number: Line,
-    ) -> Self {
+    fn with_header_number(self, config: &SnippetConfig, alignment: Length, number: Line) -> Self {
         self.with_header(config, alignment, number.to_string().as_str())
     }
 
@@ -1317,7 +1309,7 @@ impl StyleString {
         dim: bool,
         has_caption: bool,
         has_summary: bool,
-        mut alignment: Length,
+        alignment: Length,
     ) -> Self {
         if config.draw_frame || config.show_numbers || has_caption || has_summary {
             self.write_sanitized(config.box_vertical());
@@ -1338,7 +1330,7 @@ impl StyleString {
         self
     }
 
-    fn with_delimiter(mut self, config: &SnippetConfig, mut alignment: Length) -> Self {
+    fn with_delimiter(mut self, config: &SnippetConfig, alignment: Length) -> Self {
         match config.draw_frame {
             true => {
                 self.write_sanitized(config.box_middle_left());
@@ -1374,7 +1366,7 @@ impl StyleString {
         self
     }
 
-    fn with_footer(mut self, config: &SnippetConfig, mut alignment: Length) -> Self {
+    fn with_footer(mut self, config: &SnippetConfig, alignment: Length) -> Self {
         self.write_sanitized(config.box_bottom_left());
         self.write_sanitized(config.box_horizontal());
 
@@ -1495,7 +1487,7 @@ impl StyleString {
     }
 }
 
-#[cfg(debug_assertions)]
+#[cfg(test)]
 mod tests {
     use crate::{
         format::{snippet::StyleString, SnippetConfig, Style, TerminalString},

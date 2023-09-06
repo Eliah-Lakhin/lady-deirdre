@@ -51,16 +51,13 @@ use crate::{
     lexis::{
         Length,
         Site,
-        SiteRef,
         SiteRefInner,
-        SiteRefSpan,
         SiteSpan,
         SourceCode,
         ToSpan,
         Token,
         TokenBuffer,
         TokenCount,
-        TokenRef,
         CHUNK_SIZE,
     },
     report::{debug_assert, debug_assert_eq, debug_unreachable},
@@ -331,6 +328,8 @@ unsafe impl<N: Node + Sync> Sync for MutableUnit<N> {}
 impl<N: Node> Drop for MutableUnit<N> {
     fn drop(&mut self) {
         unsafe { self.tree.free() };
+
+        self.id.clear_name();
     }
 }
 

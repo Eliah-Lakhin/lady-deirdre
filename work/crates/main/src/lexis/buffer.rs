@@ -161,6 +161,12 @@ impl<T: Token, S: Borrow<str>> From<S> for TokenBuffer<T> {
     }
 }
 
+impl<T: Token> Drop for TokenBuffer<T> {
+    fn drop(&mut self) {
+        self.id.clear_name();
+    }
+}
+
 impl<T: Token> Identifiable for TokenBuffer<T> {
     #[inline(always)]
     fn id(&self) -> Id {

@@ -39,7 +39,6 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    format::{Highlighter, Priority, Snippet, SnippetConfig, Style, TerminalString},
     lexis::{SourceCode, TokenBuffer, TokenRef},
     syntax::{Child, Node, NodeRef, ParseError, PolyRef, SyntaxTree},
     Document,

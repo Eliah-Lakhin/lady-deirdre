@@ -42,18 +42,7 @@ use std::{
 
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span};
-use syn::{
-    spanned::Spanned,
-    AttrStyle,
-    Error,
-    Expr,
-    ExprLit,
-    Lit,
-    LitInt,
-    LitStr,
-    Result,
-    Variant,
-};
+use syn::{spanned::Spanned, AttrStyle, Error, Expr, ExprLit, Lit, LitInt, Result, Variant};
 
 use crate::{
     token::{

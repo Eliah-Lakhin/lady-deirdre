@@ -51,6 +51,7 @@ mod token;
 
 pub(crate) const CHUNK_SIZE: Length = 5;
 
+pub(crate) use crate::lexis::site::SiteRefInner;
 pub use crate::lexis::{
     buffer::TokenBuffer,
     chunks::Chunk,
@@ -64,4 +65,3 @@ pub use crate::lexis::{
     span::{PositionSpan, SiteRefSpan, SiteSpan, ToSpan},
     token::{Token, TokenCount, TokenRef},
 };
-pub(crate) use crate::lexis::{code::ChunkIterator, site::SiteRefInner};

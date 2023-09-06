@@ -45,7 +45,6 @@ use crate::{
     lexis::{SiteSpan, Token, TokenRef},
     std::*,
     syntax::{
-        morphism::DisplayPolyRef,
         Child,
         Children,
         ClusterRef,

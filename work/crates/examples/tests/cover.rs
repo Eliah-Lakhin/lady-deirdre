@@ -39,9 +39,8 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    arena::Entry,
     compiler::CompilationUnit,
-    lexis::{SourceCode, ToSpan, TokenRef},
+    lexis::{SourceCode, TokenRef},
     syntax::{Node, NodeRef, ParseError, PolyRef, SyntaxTree},
     Document,
 };

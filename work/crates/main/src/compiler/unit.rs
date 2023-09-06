@@ -38,12 +38,10 @@
 use crate::{
     arena::{Entry, Identifiable},
     compiler::{ImmutableUnit, MutableUnit},
-    format::Delimited,
     lexis::{
         Chunk,
         Length,
         Site,
-        SiteRefSpan,
         SiteSpan,
         SourceCode,
         ToSpan,
@@ -53,7 +51,7 @@ use crate::{
         TokenCursor,
     },
     std::*,
-    syntax::{Child, Cluster, ClusterRef, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
+    syntax::{Child, Cluster, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
     Document,
 };
 
@@ -270,7 +268,10 @@ where
                 debug_struct.field("string", &chunk.string);
                 debug_struct.field("length", &chunk.length);
                 debug_struct.field("site_span", &chunk.to_site_span(self.unit));
-                debug_struct.field("position_span", &chunk.display(self.unit));
+                debug_struct.field(
+                    "position_span",
+                    &format_args!("{}", chunk.display(self.unit)),
+                );
 
                 debug_struct.finish()
             }

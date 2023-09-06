@@ -42,7 +42,6 @@ use crate::{
         Length,
         Site,
         SiteRef,
-        SiteRefSpan,
         SourceCode,
         ToSpan,
         Token,
@@ -52,7 +51,7 @@ use crate::{
         TokenRef,
     },
     std::*,
-    syntax::{Cluster, ClusterRef, Node, NodeRef, SyntaxTree},
+    syntax::{Cluster, Node, NodeRef, SyntaxTree},
 };
 
 pub enum Document<N: Node> {

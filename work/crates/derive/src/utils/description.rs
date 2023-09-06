@@ -35,10 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::mem::replace;
-
-use convert_case::{Case, Casing};
-use proc_macro2::{Ident, Span};
+use proc_macro2::Span;
 use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitStr, Result};
 
 use crate::utils::error;

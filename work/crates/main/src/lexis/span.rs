@@ -36,9 +36,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    compiler::CompilationUnit,
     format::{Priority, SnippetFormatter},
-    lexis::{Position, Site, SiteRef, SourceCode, ToSite, Token, TokenCursor},
+    lexis::{Position, Site, SiteRef, SourceCode, ToSite},
     report::debug_unreachable,
     std::*,
 };

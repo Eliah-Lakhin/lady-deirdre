@@ -37,9 +37,9 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable, Repository},
-    lexis::{SiteRef, SiteRefSpan, ToSpan, TokenCursor},
+    lexis::TokenCursor,
     std::*,
-    syntax::{session::SequentialSyntaxSession, Cluster, ClusterRef, Node, SyntaxTree},
+    syntax::{session::SequentialSyntaxSession, Cluster, Node, SyntaxTree},
 };
 
 /// A non-incrementally managed syntax structure of a compilation unit.
@@ -88,7 +88,6 @@ use crate::{
 /// ```
 pub struct SyntaxBuffer<N: Node> {
     id: Id,
-    span: SiteRefSpan,
     cluster: Cluster<N>,
 }
 
@@ -108,6 +107,12 @@ impl<N: Node> Debug for SyntaxBuffer<N> {
             .debug_struct("SyntaxBuffer")
             .field("id", &self.id())
             .finish_non_exhaustive()
+    }
+}
+
+impl<N: Node> Drop for SyntaxBuffer<N> {
+    fn drop(&mut self) {
+        self.id.clear_name();
     }
 }
 
@@ -171,10 +176,8 @@ impl<N: Node> SyntaxBuffer<N> {
 
     pub(crate) fn new<'code>(
         id: Id,
-        mut token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
+        token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
     ) -> Self {
-        let start = token_cursor.site_ref(0);
-
         let mut session = SequentialSyntaxSession {
             id,
             context: Vec::with_capacity(10),
@@ -187,18 +190,12 @@ impl<N: Node> SyntaxBuffer<N> {
 
         session.enter_root();
 
-        let end = session.token_cursor.site_ref(0);
-
         let cluster = Cluster {
             primary: unsafe { session.primary.unwrap_unchecked() },
             nodes: session.nodes,
             errors: session.errors,
         };
 
-        Self {
-            id,
-            span: start..end,
-            cluster,
-        }
+        Self { id, cluster }
     }
 }

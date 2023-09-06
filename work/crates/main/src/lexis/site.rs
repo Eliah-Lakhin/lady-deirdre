@@ -386,7 +386,7 @@ where
     Code: SourceCode,
 {
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        let mut site = match &self.site {
+        let site = match &self.site {
             None => return formatter.write_str("?"),
             Some(site) => *site,
         };

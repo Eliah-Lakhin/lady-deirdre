@@ -50,7 +50,6 @@ use crate::{
         TokenCount,
         TokenCursor,
     },
-    report::debug_unreachable,
     std::*,
 };
 

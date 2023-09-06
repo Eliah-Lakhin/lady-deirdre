@@ -39,7 +39,7 @@ use std::mem::take;
 
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
-use syn::{spanned::Spanned, AttrStyle, Error, Expr, Fields, LitStr, Meta, Result, Variant};
+use syn::{spanned::Spanned, AttrStyle, Error, Expr, Fields, Meta, Result, Variant};
 
 use crate::{
     node::{

@@ -36,7 +36,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    format::PrintString,
     lexis::{Length, Site, SiteSpan, SourceCode, ToSite, ToSpan, Token},
     std::*,
 };

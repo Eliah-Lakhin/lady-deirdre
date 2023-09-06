@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{format::PrintString, std::*};
+use crate::std::*;
 
 macro_rules! escape {
     ($($code:expr)?) => {
@@ -68,92 +68,92 @@ impl Style {
     }
 
     #[inline(always)]
-    pub const fn black(mut self) -> Self {
+    pub const fn black(self) -> Self {
         self.fg(Color::Black)
     }
 
     #[inline(always)]
-    pub const fn red(mut self) -> Self {
+    pub const fn red(self) -> Self {
         self.fg(Color::Red)
     }
 
     #[inline(always)]
-    pub const fn green(mut self) -> Self {
+    pub const fn green(self) -> Self {
         self.fg(Color::Green)
     }
 
     #[inline(always)]
-    pub const fn yellow(mut self) -> Self {
+    pub const fn yellow(self) -> Self {
         self.fg(Color::Yellow)
     }
 
     #[inline(always)]
-    pub const fn blue(mut self) -> Self {
+    pub const fn blue(self) -> Self {
         self.fg(Color::Blue)
     }
 
     #[inline(always)]
-    pub const fn magenta(mut self) -> Self {
+    pub const fn magenta(self) -> Self {
         self.fg(Color::Magenta)
     }
 
     #[inline(always)]
-    pub const fn cyan(mut self) -> Self {
+    pub const fn cyan(self) -> Self {
         self.fg(Color::Cyan)
     }
 
     #[inline(always)]
-    pub const fn white(mut self) -> Self {
+    pub const fn white(self) -> Self {
         self.fg(Color::White)
     }
 
     #[inline(always)]
-    pub const fn bright_black(mut self) -> Self {
+    pub const fn bright_black(self) -> Self {
         self.fg(Color::BrightBlack)
     }
 
     #[inline(always)]
-    pub const fn bright_red(mut self) -> Self {
+    pub const fn bright_red(self) -> Self {
         self.fg(Color::BrightRed)
     }
 
     #[inline(always)]
-    pub const fn bright_green(mut self) -> Self {
+    pub const fn bright_green(self) -> Self {
         self.fg(Color::BrightGreen)
     }
 
     #[inline(always)]
-    pub const fn bright_yellow(mut self) -> Self {
+    pub const fn bright_yellow(self) -> Self {
         self.fg(Color::BrightYellow)
     }
 
     #[inline(always)]
-    pub const fn bright_blue(mut self) -> Self {
+    pub const fn bright_blue(self) -> Self {
         self.fg(Color::BrightBlue)
     }
 
     #[inline(always)]
-    pub const fn bright_magenta(mut self) -> Self {
+    pub const fn bright_magenta(self) -> Self {
         self.fg(Color::BrightMagenta)
     }
 
     #[inline(always)]
-    pub const fn bright_cyan(mut self) -> Self {
+    pub const fn bright_cyan(self) -> Self {
         self.fg(Color::BrightCyan)
     }
 
     #[inline(always)]
-    pub const fn bright_white(mut self) -> Self {
+    pub const fn bright_white(self) -> Self {
         self.fg(Color::BrightWhite)
     }
 
     #[inline(always)]
-    pub const fn rgb(mut self, red: f64, green: f64, blue: f64) -> Self {
+    pub const fn rgb(self, red: f64, green: f64, blue: f64) -> Self {
         self.fg(Color::RGB { red, green, blue })
     }
 
     #[inline(always)]
-    pub const fn grayscale(mut self, shade: f64) -> Self {
+    pub const fn grayscale(self, shade: f64) -> Self {
         self.fg(Color::Grayscale(shade))
     }
 

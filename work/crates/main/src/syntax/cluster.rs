@@ -37,7 +37,6 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable, Repository},
-    lexis::{SiteRef, SiteRefSpan},
     std::*,
     syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
 };

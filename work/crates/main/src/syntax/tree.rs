@@ -36,8 +36,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Entry, Id, Identifiable, RepositoryIterator},
-    lexis::{SiteRefSpan, ToSpan, TokenRef},
+    arena::{Entry, Identifiable, RepositoryIterator},
+    lexis::TokenRef,
     std::*,
     syntax::{Cluster, ClusterRef, Node, NodeRef, RefKind},
 };

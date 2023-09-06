@@ -864,7 +864,7 @@ mod tests {
             unimplemented!()
         }
 
-        fn set_parent_ref(&mut self, parent: NodeRef) {}
+        fn set_parent_ref(&mut self, _parent: NodeRef) {}
 
         fn children(&self) -> Children {
             unimplemented!()
@@ -899,7 +899,7 @@ mod tests {
             unimplemented!()
         }
 
-        fn name(index: TokenRule) -> Option<&'static str> {
+        fn name(_index: TokenRule) -> Option<&'static str> {
             unimplemented!()
         }
 

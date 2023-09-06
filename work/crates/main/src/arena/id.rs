@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::std::*;
+use crate::{format::PrintString, report::debug_unreachable, std::*};
 
 /// A globally unique identifier of the data container.
 ///
@@ -65,16 +65,37 @@ pub struct Id {
 }
 
 impl Debug for Id {
-    #[inline(always)]
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        Debug::fmt(&self.inner, formatter)
+        if self.is_nil() {
+            return formatter.write_str("Nil");
+        }
+
+        formatter.write_str("Id(")?;
+        Debug::fmt(&self.inner, formatter)?;
+
+        let name = self.name();
+
+        if name.is_empty() {
+            formatter.write_str(", ")?;
+            Debug::fmt(&name, formatter)?;
+        }
+
+        formatter.write_str(")")
     }
 }
 
 impl Display for Id {
-    #[inline(always)]
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        Display::fmt(&self.inner, formatter)
+        if self.is_nil() {
+            return formatter.write_str("Nil");
+        }
+
+        let name = self.name();
+
+        match name.is_empty() {
+            true => Display::fmt(&self.inner, formatter),
+            false => Debug::fmt(&name, formatter),
+        }
     }
 }
 
@@ -148,6 +169,45 @@ impl Id {
     pub const fn into_inner(self) -> u64 {
         self.inner
     }
+
+    #[inline(always)]
+    pub fn name(&self) -> PrintString<'static> {
+        if self.is_nil() {
+            return PrintString::empty();
+        }
+
+        let key = *self;
+
+        IdNames::access(move |map| map.get(&key).cloned().unwrap_or_default())
+    }
+
+    #[inline(always)]
+    pub fn set_name(&self, name: impl Into<PrintString<'static>>) {
+        if self.is_nil() {
+            panic!("An attempt to set a name to the Nil identifier.");
+        }
+
+        let key = *self;
+        let name = name.into();
+
+        IdNames::access(move |map| {
+            let _ = match name.is_empty() {
+                true => map.remove(&key),
+                false => map.insert(key, name),
+            };
+        });
+    }
+
+    #[inline(always)]
+    pub fn clear_name(&self) -> bool {
+        if self.is_nil() {
+            panic!("An attempt to unset a name of the Nil identifier.");
+        }
+
+        let key = *self;
+
+        IdNames::access(move |map| map.remove(&key).is_some())
+    }
 }
 
 /// A convenient interface for objects that persist or refer globally unique data.
@@ -158,4 +218,113 @@ pub trait Identifiable {
     /// Returns a reference to a globally unique identifier of the data container this object
     /// belongs to.  
     fn id(&self) -> Id;
+}
+
+struct IdNames {
+    lock: AtomicBool,
+    data: UnsafeCell<Option<StdMap<Id, PrintString<'static>>>>,
+}
+
+// Safety: Access is protected by a mutex.
+unsafe impl Send for IdNames {}
+
+// Safety: Access is protected by a mutex.
+unsafe impl Sync for IdNames {}
+
+impl Drop for IdNames {
+    fn drop(&mut self) {
+        self.access_raw(|raw| {
+            *raw = None;
+        });
+    }
+}
+
+impl IdNames {
+    #[inline(always)]
+    const fn new() -> Self {
+        Self {
+            lock: AtomicBool::new(false),
+            data: UnsafeCell::new(None),
+        }
+    }
+
+    #[inline(always)]
+    fn access<R>(
+        grant: impl FnOnce(&mut StdMap<Id, PrintString<'static>>) -> R + Send + Sync + 'static,
+    ) -> R {
+        static GLOBAL: IdNames = IdNames::new();
+
+        GLOBAL.access_raw(move |raw| {
+            let map = match raw {
+                Some(map) => map,
+                None => {
+                    *raw = Some(StdMap::new());
+
+                    match raw {
+                        Some(map) => map,
+
+                        // Safety: The Option initialized above.
+                        None => unsafe {
+                            debug_unreachable!("IdNames map initialization failure.")
+                        },
+                    }
+                }
+            };
+
+            grant(map)
+        })
+    }
+
+    fn access_raw<R>(
+        &self,
+        grant: impl FnOnce(&mut Option<StdMap<Id, PrintString<'static>>>) -> R + Send + Sync + 'static,
+    ) -> R {
+        loop {
+            let borrow = self.lock.load(AtomicOrdering::Relaxed);
+
+            if borrow {
+                spin_loop();
+                continue;
+            }
+
+            if self
+                .lock
+                .compare_exchange_weak(
+                    false,
+                    true,
+                    AtomicOrdering::Acquire,
+                    AtomicOrdering::Relaxed,
+                )
+                .is_err()
+            {
+                spin_loop();
+                continue;
+            }
+
+            break;
+        }
+
+        let result = {
+            // Safety: The data locked atomically.
+            let data = unsafe { &mut *self.data.get() };
+
+            grant(data)
+        };
+
+        if self
+            .lock
+            .compare_exchange(
+                true,
+                false,
+                AtomicOrdering::Release,
+                AtomicOrdering::Relaxed,
+            )
+            .is_err()
+        {
+            // Safety: The data locked atomically.
+            unsafe { debug_unreachable!("IdNames mutex release failure.") }
+        }
+
+        result
+    }
 }

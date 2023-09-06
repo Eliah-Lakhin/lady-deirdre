@@ -41,7 +41,7 @@ use crate::{
     format::{Delimited, PrintString, Priority, SnippetFormatter},
     lexis::{Length, SiteRefSpan, ToSpan, Token, TokenRule, TokenSet},
     std::*,
-    syntax::{ClusterRef, Node, NodeRule, NodeSet, SyntaxTree, ROOT_RULE},
+    syntax::{ClusterRef, Node, NodeRule, NodeSet, SyntaxTree},
 };
 
 /// A base syntax parse error object.
@@ -169,7 +169,7 @@ impl ParseError {
 
                 impl OutString {
                     fn new(alt: bool, capacity: usize) -> Self {
-                        let mut set = StdSet::new_std_set(capacity);
+                        let set = StdSet::new_std_set(capacity);
 
                         Self {
                             alt,
@@ -231,7 +231,6 @@ impl ParseError {
                         static EOI_ALT: PrintString<'static> =
                             PrintString::borrowed("Unexpected end of input");
 
-                        static IN: PrintString<'static> = PrintString::borrowed(" in ");
                         static OR: PrintString<'static> = PrintString::borrowed(" or ");
                         static COMMA: PrintString<'static> = PrintString::borrowed(", ");
 
