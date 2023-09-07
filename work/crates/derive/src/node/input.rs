@@ -779,21 +779,14 @@ impl ToTokens for NodeInput {
 
             let index = expect_some!(variant.index.as_ref(), "Parsable rule without index.",);
 
-            if let Some(parser) = &variant.parser {
-                let span = parser.span();
-
-                cases.push(quote_spanned!(span=> #index => Self::#parser(session),));
-                continue;
-            }
-
             let function = expect_some!(
                 variant.compile_parser_fn(self, &mut globals, true, false, output_comments, true,),
-                "Parsable non-overridden rule without generated parser.",
+                "Parsable rule without parser.",
             );
 
             functions.push(function);
 
-            let ident = variant.generated_parser_ident();
+            let ident = variant.parser_fn_ident();
 
             cases.push(quote_spanned!(span=> #index => #ident(session),));
         }

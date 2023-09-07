@@ -589,38 +589,15 @@ impl Rule {
                             ))
                         }
 
-                        true => match &variant.parser {
-                            None => {
-                                let ident = variant.generated_parser_ident();
+                        true => {
+                            let ident = variant.parser_fn_ident();
 
-                                quote_spanned!(span=> {
-                                    #core::syntax::SyntaxSession::enter_node(session);
-                                    let node = #ident(session);
-                                    #core::syntax::SyntaxSession::leave_node(session, node)
-                                })
-                            }
-
-                            Some(expr) => {
-                                let expr_span = expr.span();
-                                let this = input.this();
-
-                                let (fn_ident, fn_impl) = input.make_fn(
-                                    format_ident!("parse", span = expr_span),
-                                    vec![],
-                                    Some(this.to_token_stream()),
-                                    expr.to_token_stream(),
-                                    false,
-                                );
-
-                                quote_spanned!(span=> {
-                                    #[inline(always)]
-                                    #fn_impl
-                                    #core::syntax::SyntaxSession::enter_node(session);
-                                    let node = #fn_ident(session);
-                                    #core::syntax::SyntaxSession::leave_node(session, node)
-                                })
-                            }
-                        },
+                            quote_spanned!(span=> {
+                                #core::syntax::SyntaxSession::enter_node(session);
+                                let node = #ident(session);
+                                #core::syntax::SyntaxSession::leave_node(session, node)
+                            })
+                        }
                     };
 
                     match action.capture {

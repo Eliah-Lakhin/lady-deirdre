@@ -39,6 +39,7 @@ use std::mem::take;
 
 use convert_case::{Case, Casing};
 use proc_macro2::{Ident, Span, TokenStream};
+use quote::ToTokens;
 use syn::{spanned::Spanned, AttrStyle, Error, Expr, Fields, Meta, Result, Variant};
 
 use crate::{
@@ -202,14 +203,14 @@ impl TryFrom<Variant> for NodeVariant {
         }
 
         if let Some(index) = &index {
-            if rule.is_none() && description.is_set() {
+            if rule.is_none() && !description.is_set() {
                 return Err(error!(
                     index.span(),
                     "Index attribute is not applicable to unparseable \
                     variants.\n\nTo make the variant parsable annotate this \
                     variant with #[rule(...)] attribute.\n\nIf this is \
                     intending (e.g. if you want to make this Node variant \
-                    describable)\n annotate this variant with \
+                    describable)\nannotate this variant with \
                     #[describe(...)] attribute.",
                 ));
             }
@@ -428,13 +429,28 @@ impl NodeVariant {
         allow_warnings: bool,
     ) -> Option<TokenStream> {
         let rule = self.rule.as_ref()?;
+        let function_ident = self.parser_fn_ident();
+
+        if let Some(parser) = &self.parser {
+            return Some(
+                input
+                    .make_fn(
+                        function_ident,
+                        vec![],
+                        Some(input.this()),
+                        parser.to_token_stream(),
+                        allow_warnings,
+                    )
+                    .1,
+            );
+        }
+
         let context = expect_some!(self.index.as_ref(), "Parsable variant without index.",);
         let constructor = expect_some!(
             self.constructor.as_ref(),
             "Parsable variant without constructor.",
         );
         let variables = expect_some!(rule.variables.as_ref(), "Missing parsable rule variables.",);
-        let function_ident = self.generated_parser_ident();
 
         let span = rule.span;
 
@@ -499,7 +515,7 @@ impl NodeVariant {
         )
     }
 
-    pub(super) fn generated_parser_ident(&self) -> Ident {
+    pub(super) fn parser_fn_ident(&self) -> Ident {
         let ident = &self.ident;
 
         format_ident!("parse_{ident}", span = ident.span())
