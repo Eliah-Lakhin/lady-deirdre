@@ -102,7 +102,7 @@ impl TryFrom<Variant> for TokenVariant {
 
         let mut rule = None;
         let mut constructor = None;
-        let mut description = None;
+        let mut description = Description::Unset;
         let mut priority = None;
         let mut time = Duration::default();
 
@@ -139,11 +139,11 @@ impl TryFrom<Variant> for TokenVariant {
                 }
 
                 "describe" => {
-                    if description.is_some() {
+                    if description.is_set() {
                         return Err(error!(span, "Duplicate Describe attribute.",));
                     }
 
-                    description = Some(Description::try_from(attr)?);
+                    description = Description::try_from(attr)?;
                 }
 
                 "priority" => {
@@ -199,8 +199,8 @@ impl TryFrom<Variant> for TokenVariant {
             }
         }
 
-        let description = description.unwrap_or_else(|| {
-            Description::new(
+        let description = description.complete(|| {
+            (
                 ident.span(),
                 match rule.as_ref().map(|(_, regex)| regex.name()).flatten() {
                     None => format!(

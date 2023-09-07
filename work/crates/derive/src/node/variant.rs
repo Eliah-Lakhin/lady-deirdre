@@ -65,7 +65,7 @@ pub(super) struct NodeVariant {
     pub(super) constructor: Option<Constructor>,
     pub(super) parser: Option<Expr>,
     pub(super) secondary: Option<Span>,
-    pub(super) description: Option<Description>,
+    pub(super) description: Description,
     pub(super) dump: Dump,
 }
 
@@ -94,7 +94,7 @@ impl TryFrom<Variant> for NodeVariant {
         let mut constructor = None;
         let mut parser = None;
         let mut secondary = None;
-        let mut description = None;
+        let mut description = Description::Unset;
         let mut dump = Dump::None;
 
         for attr in take(&mut variant.attrs) {
@@ -182,11 +182,11 @@ impl TryFrom<Variant> for NodeVariant {
                 }
 
                 "describe" => {
-                    if description.is_some() {
+                    if description.is_set() {
                         return Err(error!(span, "Duplicate Describe attribute.",));
                     }
 
-                    description = Some(Description::try_from(attr)?);
+                    description = Description::try_from(attr)?;
                 }
 
                 "dump" => {
@@ -202,7 +202,7 @@ impl TryFrom<Variant> for NodeVariant {
         }
 
         if let Some(index) = &index {
-            if rule.is_none() && description.is_none() {
+            if rule.is_none() && description.is_set() {
                 return Err(error!(
                     index.span(),
                     "Index attribute is not applicable to unparseable \
@@ -332,7 +332,7 @@ impl TryFrom<Variant> for NodeVariant {
 
         let description = match rule.is_some() || index.is_some() {
             false => {
-                if let Some(Description { span, .. }) = description {
+                if let Some(span) = description.span() {
                     return Err(error!(
                         span,
                         "Describe attribute is not applicable to unparseable \
@@ -341,15 +341,10 @@ impl TryFrom<Variant> for NodeVariant {
                     ));
                 }
 
-                None
+                Description::Unset
             }
 
-            true => description.or_else(|| {
-                Some(Description::new(
-                    ident.span(),
-                    ident.to_string().to_case(Case::Title).as_str(),
-                ))
-            }),
+            true => description.complete(|| (ident.span(), ident.to_string().to_case(Case::Title))),
         };
 
         if let Some(span) = dump.span() {

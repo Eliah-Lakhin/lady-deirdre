@@ -38,12 +38,19 @@
 use proc_macro2::Span;
 use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitStr, Result};
 
-use crate::utils::error;
+use crate::utils::{error, system_panic};
 
-pub struct Description {
-    pub span: Span,
-    pub short: LitStr,
-    pub verbose: LitStr,
+pub enum Description {
+    Unset,
+    Short {
+        span: Span,
+        short: LitStr,
+    },
+    Full {
+        span: Span,
+        short: LitStr,
+        verbose: LitStr,
+    },
 }
 
 impl TryFrom<Attribute> for Description {
@@ -56,19 +63,19 @@ impl TryFrom<Attribute> for Description {
             if input.is_empty() {
                 return Err(error!(
                     input.span(),
-                    "Expected description strings in form of `\"<short>\", \
-                    \"<verbose>\"` or `\"<short_and_verbose>\"`.",
+                    "Expected description strings in form of `\"<short>\"` or \
+                    `\"<short>\", \"<verbose>\"`.",
                 ));
             }
 
             let short = input.parse::<LitStr>()?;
 
             let verbose = match input.peek(Token![,]) {
-                false => short.clone(),
+                false => None,
 
                 true => {
                     let _ = input.parse::<Token![,]>()?;
-                    input.parse::<LitStr>()?
+                    Some(input.parse::<LitStr>()?)
                 }
             };
 
@@ -76,23 +83,83 @@ impl TryFrom<Attribute> for Description {
                 return Err(error!(input.span(), "unexpected end of input.",));
             }
 
-            return Ok(Self {
-                span,
-                short,
-                verbose,
-            });
+            match verbose {
+                None => Ok(Self::Short { span, short }),
+
+                Some(verbose) => Ok(Self::Full {
+                    span,
+                    short,
+                    verbose,
+                }),
+            }
         })
     }
 }
 
 impl Description {
-    pub fn new(span: Span, string: impl AsRef<str>) -> Self {
-        let literal = LitStr::new(string.as_ref(), span);
+    pub fn complete(self, initializer: impl FnOnce() -> (Span, String)) -> Self {
+        match self {
+            Self::Unset => {
+                let (span, string) = initializer();
 
-        Self {
-            span,
-            short: literal.clone(),
-            verbose: literal,
+                let literal = LitStr::new(string.as_ref(), span);
+
+                Self::Full {
+                    span,
+                    short: literal.clone(),
+                    verbose: literal,
+                }
+            }
+
+            Self::Short {
+                span: attr_span,
+                short,
+            } => {
+                let (span, string) = initializer();
+
+                let verbose = LitStr::new(string.as_ref(), span);
+
+                Self::Full {
+                    span: attr_span,
+                    short,
+                    verbose,
+                }
+            }
+
+            result @ Self::Full { .. } => result,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_set(&self) -> bool {
+        match self {
+            Self::Unset => false,
+            _ => true,
+        }
+    }
+
+    #[inline(always)]
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            Self::Unset => None,
+            Self::Short { span, .. } => Some(*span),
+            Self::Full { span, .. } => Some(*span),
+        }
+    }
+
+    #[inline(always)]
+    pub fn short(&self) -> &LitStr {
+        match self {
+            Self::Full { short, .. } => short,
+            _ => system_panic!("Description is not fully initialized."),
+        }
+    }
+
+    #[inline(always)]
+    pub fn verbose(&self) -> &LitStr {
+        match self {
+            Self::Full { verbose, .. } => verbose,
+            _ => system_panic!("Description is not fully initialized."),
         }
     }
 }

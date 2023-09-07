@@ -645,8 +645,8 @@ impl TokenInput {
             let span = ident.span();
             let option = span.face_option();
 
-            let short = &variant.description.short;
-            let verbose = &variant.description.verbose;
+            let short = variant.description.short();
+            let verbose = variant.description.verbose();
 
             match short == verbose {
                 true => quote_spanned!(span=>

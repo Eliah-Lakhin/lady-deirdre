@@ -802,14 +802,13 @@ impl ToTokens for NodeInput {
             .variants
             .values()
             .map(|variant| {
-                let description = match &variant.description {
-                    None => return None,
-                    Some(description) => description,
-                };
+                if !variant.description.is_set() {
+                    return None;
+                }
 
                 let index = expect_some!(variant.index.as_ref(), "Description without index",);
 
-                Some((index, &variant.ident, description))
+                Some((index, &variant.ident, &variant.description))
             })
             .flatten()
             .collect::<Vec<_>>();
@@ -825,8 +824,8 @@ impl ToTokens for NodeInput {
             .into_iter()
             .map(|(index, ident, description)| {
                 let name = LitStr::new(&ident.to_string(), ident.span());
-                let short = &description.short;
-                let verbose = &description.verbose;
+                let short = description.short();
+                let verbose = description.verbose();
 
                 (
                     quote_spanned!(index.span() => #index => #option::Some(#name),),
