@@ -174,7 +174,7 @@ pub trait Node: Sized + 'static {
     ///         NodeSet,
     ///         Children,
     ///         ROOT_RULE,
-    ///         EMPTY_RULE_SET,
+    ///         EMPTY_NODE_SET,
     ///     },
     ///     lexis::{SimpleToken, TokenCursor, TokenSet, EMPTY_TOKEN_SET},
     ///     Document,
@@ -313,7 +313,7 @@ pub trait Node: Sized + 'static {
     ///             span,
     ///             context: PARENS_RULE,
     ///             expected_tokens: &EMPTY_TOKEN_SET,
-    ///             expected_nodes: &EMPTY_RULE_SET,
+    ///             expected_nodes: &EMPTY_NODE_SET,
     ///         });
     ///
     ///         // Returning what we have parsed so far.

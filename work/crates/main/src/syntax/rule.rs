@@ -44,7 +44,7 @@ use crate::{std::*, syntax::Node};
 /// specifies grammar's an entry rule.
 pub type NodeRule = u16;
 
-pub static EMPTY_RULE_SET: NodeSet = NodeSet::empty();
+pub static EMPTY_NODE_SET: NodeSet = NodeSet::empty();
 
 /// A syntax grammar entry rule.
 ///

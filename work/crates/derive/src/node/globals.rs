@@ -233,7 +233,7 @@ impl GlobalVar {
             Self::EmptyNodeSet => {
                 let core = span.face_core();
 
-                quote_spanned!(span=> #core::syntax::EMPTY_RULE_SET)
+                quote_spanned!(span=> #core::syntax::EMPTY_NODE_SET)
             }
 
             Self::UnlimitedRecovery => {

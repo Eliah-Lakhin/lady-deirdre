@@ -59,7 +59,7 @@ pub use crate::syntax::{
     no::NoSyntax,
     node::{Node, NodeRef},
     recovery::{Recovery, UNLIMITED_RECOVERY},
-    rule::{NodeRule, NodeSet, EMPTY_RULE_SET, NON_RULE, ROOT_RULE},
+    rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,
     tree::{SyntaxTree, Visitor},

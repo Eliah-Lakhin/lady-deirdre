@@ -119,14 +119,14 @@ impl Recovery {
     pub fn recover<'code>(
         &self,
         session: &mut impl SyntaxSession<'code>,
-        expectations: &TokenSet,
+        until: &TokenSet,
     ) -> bool {
         let mut stack = GroupStack::new();
 
         loop {
             let rule = session.token(0).rule();
 
-            if expectations.contains(rule) {
+            if until.contains(rule) {
                 return true;
             }
 

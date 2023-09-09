@@ -454,6 +454,58 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
+    fn attach_node(&mut self, node: Self::Node) -> NodeRef {
+        let node_entry = self.pending.nodes.insert(node);
+
+        NodeRef {
+            id: self.id,
+            cluster_entry: self.pending.cluster_entry,
+            node_entry,
+        }
+    }
+
+    fn lift_sibling(&mut self, sibling_ref: &NodeRef) {
+        #[cfg(debug_assertions)]
+        if sibling_ref.id != self.id {
+            panic!("An attempt to lift external Node.");
+        }
+
+        let node_ref = self.node_ref();
+
+        if self.pending.cluster_entry == sibling_ref.cluster_entry {
+            if let Some(sibling) = self.pending.nodes.get_mut(&sibling_ref.node_entry) {
+                sibling.set_parent_ref(node_ref);
+
+                if let Some(updates) = &mut self.updates {
+                    updates.insert(*sibling_ref);
+                }
+                return;
+            }
+
+            panic!("An attempt to lift non-sibling Node.");
+        }
+
+        if let Entry::Primary = &sibling_ref.node_entry {
+            if let Some(cursor) = self
+                .references
+                .clusters_mut()
+                .get_mut(&sibling_ref.cluster_entry)
+            {
+                if let Some(cache) = unsafe { cursor.cache_mut() } {
+                    cache.cluster.primary.set_parent_ref(node_ref);
+
+                    if let Some(updates) = &mut self.updates {
+                        updates.insert(*sibling_ref);
+                    }
+                    return;
+                }
+            }
+        }
+
+        panic!("An attempt to lift non-sibling Node.");
+    }
+
+    #[inline(always)]
     fn node_ref(&self) -> NodeRef {
         match self.context.last() {
             Some(node_ref) => *node_ref,

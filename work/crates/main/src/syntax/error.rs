@@ -378,7 +378,7 @@ impl ParseError {
 ///         ParseError,
 ///         NodeSet,
 ///         ROOT_RULE,
-///         EMPTY_RULE_SET,
+///         EMPTY_NODE_SET,
 ///     },
 ///     lexis::{SiteRef, TokenSet, EMPTY_TOKEN_SET},
 /// };
@@ -391,7 +391,7 @@ impl ParseError {
 ///         span: SiteRef::nil()..SiteRef::nil(),
 ///         context: ROOT_RULE,
 ///         expected_tokens: &EMPTY_TOKEN_SET,
-///         expected_nodes: &EMPTY_RULE_SET,
+///         expected_nodes: &EMPTY_NODE_SET,
 ///     },
 /// );
 ///

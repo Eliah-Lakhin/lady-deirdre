@@ -508,7 +508,7 @@ impl Rule {
                                     span: site..site,
                                     context: #context,
                                     expected_tokens: &#var,
-                                    expected_nodes: &#core::syntax::EMPTY_RULE_SET,
+                                    expected_nodes: &#core::syntax::EMPTY_NODE_SET,
                                 });
                         )
                         .to_tokens(&mut body);

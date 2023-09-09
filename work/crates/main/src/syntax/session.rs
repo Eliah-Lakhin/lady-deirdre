@@ -95,6 +95,10 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
 
     fn leave_node(&mut self, node: Self::Node) -> NodeRef;
 
+    fn attach_node(&mut self, node: Self::Node) -> NodeRef;
+
+    fn lift_sibling(&mut self, sibling_ref: &NodeRef);
+
     fn node_ref(&self) -> NodeRef;
 
     fn parent_ref(&self) -> NodeRef;
@@ -245,6 +249,37 @@ where
             cluster_entry: Entry::Primary,
             node_entry: unsafe { self.nodes.entry_of(index) },
         }
+    }
+
+    #[inline(always)]
+    fn attach_node(&mut self, node: Self::Node) -> NodeRef {
+        NodeRef {
+            id: self.id,
+            cluster_entry: Entry::Primary,
+            node_entry: self.nodes.insert(node),
+        }
+    }
+
+    #[inline]
+    fn lift_sibling(&mut self, sibling_ref: &NodeRef) {
+        #[cfg(debug_assertions)]
+        if sibling_ref.id != self.id {
+            panic!("An attempt to lift external Node.");
+        }
+
+        #[cfg(debug_assertions)]
+        if sibling_ref.cluster_entry != Entry::Primary {
+            panic!("An attempt to lift non-sibling Node.");
+        }
+
+        let node_ref = self.node_ref();
+
+        if let Some(node) = self.nodes.get_mut(&sibling_ref.node_entry) {
+            node.set_parent_ref(node_ref);
+            return;
+        }
+
+        panic!("An attempt to lift non-sibling Node.");
     }
 
     #[inline(always)]
