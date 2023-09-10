@@ -87,4 +87,9 @@ impl<'source, T: Token> Chunk<'source, T> {
     pub fn end(&self) -> Site {
         self.site + self.length
     }
+
+    #[inline(always)]
+    pub fn span(&self) -> SiteSpan {
+        self.start()..self.end()
+    }
 }
