@@ -55,7 +55,7 @@ pub(crate) use crate::lexis::site::SiteRefInner;
 pub use crate::lexis::{
     buffer::TokenBuffer,
     chunks::Chunk,
-    code::SourceCode,
+    code::{CharIter, ChunkIter, SourceCode},
     cursor::TokenCursor,
     position::{Column, Line, Position},
     rule::{TokenRule, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},

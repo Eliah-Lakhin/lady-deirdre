@@ -119,7 +119,7 @@ unsafe impl ToSite for Site {
 ///
 /// For details on the Weak references framework design see [Arena](crate::arena) module
 /// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct SiteRef(SiteRefInner);
 
@@ -209,7 +209,7 @@ impl SiteRef {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum SiteRefInner {
     ChunkStart(TokenRef),
     CodeEnd(Id),

@@ -92,18 +92,18 @@ pub trait SyntaxTree: Identifiable {
     }
 
     #[inline(always)]
-    fn nodes(&self) -> NodeIterator<'_, Self>
+    fn nodes(&self) -> NodeIter<'_, Self>
     where
         Self: Sized,
     {
-        NodeIterator {
+        NodeIter {
             tree: self,
             inner: NodeIteratorInner::Root,
         }
     }
 
     #[inline(always)]
-    fn errors(&self) -> ErrorIterator<'_, Self>
+    fn errors(&self) -> ErrorIter<'_, Self>
     where
         Self: Sized,
     {
@@ -114,7 +114,7 @@ pub trait SyntaxTree: Identifiable {
             None => panic!("Root cluster dereference failure."),
         };
 
-        ErrorIterator {
+        ErrorIter {
             tree: self,
             cluster_ref,
             current: (&cluster.errors).into_iter(),
@@ -187,12 +187,12 @@ pub trait SyntaxTree: Identifiable {
     fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>>;
 }
 
-pub struct NodeIterator<'tree, T: SyntaxTree> {
+pub struct NodeIter<'tree, T: SyntaxTree> {
     tree: &'tree T,
     inner: NodeIteratorInner<'tree, T>,
 }
 
-impl<'tree, T: SyntaxTree> Iterator for NodeIterator<'tree, T> {
+impl<'tree, T: SyntaxTree> Iterator for NodeIter<'tree, T> {
     type Item = &'tree T::Node;
 
     #[inline]
@@ -240,7 +240,7 @@ impl<'tree, T: SyntaxTree> Iterator for NodeIterator<'tree, T> {
     }
 }
 
-impl<'tree, T: SyntaxTree> FusedIterator for NodeIterator<'tree, T> {}
+impl<'tree, T: SyntaxTree> FusedIterator for NodeIter<'tree, T> {}
 
 enum NodeIteratorInner<'tree, T: SyntaxTree> {
     Root,
@@ -251,13 +251,13 @@ enum NodeIteratorInner<'tree, T: SyntaxTree> {
     },
 }
 
-pub struct ErrorIterator<'tree, T: SyntaxTree> {
+pub struct ErrorIter<'tree, T: SyntaxTree> {
     tree: &'tree T,
     cluster_ref: ClusterRef,
     current: RepositoryIterator<'tree, <T::Node as Node>::Error>,
 }
 
-impl<'tree, T: SyntaxTree> Iterator for ErrorIterator<'tree, T> {
+impl<'tree, T: SyntaxTree> Iterator for ErrorIter<'tree, T> {
     type Item = &'tree <T::Node as Node>::Error;
 
     #[inline]
@@ -279,7 +279,7 @@ impl<'tree, T: SyntaxTree> Iterator for ErrorIterator<'tree, T> {
     }
 }
 
-impl<'tree, T: SyntaxTree> FusedIterator for ErrorIterator<'tree, T> {}
+impl<'tree, T: SyntaxTree> FusedIterator for ErrorIter<'tree, T> {}
 
 pub trait Visitor {
     fn visit_token(&mut self, token_ref: &TokenRef);

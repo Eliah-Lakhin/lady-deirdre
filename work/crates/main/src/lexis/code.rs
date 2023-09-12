@@ -120,7 +120,7 @@ pub trait SourceCode: Identifiable {
     /// );
     /// ```
     #[inline(always)]
-    fn chunks(&self, span: impl ToSpan) -> ChunkIterator<'_, Self::Cursor<'_>>
+    fn chunks(&self, span: impl ToSpan) -> ChunkIter<'_, Self::Cursor<'_>>
     where
         Self: Sized,
     {
@@ -131,7 +131,7 @@ pub trait SourceCode: Identifiable {
 
         let cursor = self.cursor(span.clone());
 
-        ChunkIterator {
+        ChunkIter {
             cursor,
             _code_lifetime: PhantomData::default(),
         }
@@ -151,7 +151,7 @@ pub trait SourceCode: Identifiable {
     /// );
     /// ```
     #[inline(always)]
-    fn chars(&self, span: impl ToSpan) -> CharIterator<'_, Self::Cursor<'_>>
+    fn chars(&self, span: impl ToSpan) -> CharIter<'_, Self::Cursor<'_>>
     where
         Self: Sized,
     {
@@ -162,7 +162,7 @@ pub trait SourceCode: Identifiable {
 
         let cursor = self.cursor(span.clone());
 
-        CharIterator {
+        CharIter {
             span,
             cursor,
             site: 0,
@@ -206,7 +206,7 @@ pub trait SourceCode: Identifiable {
             }
         }
 
-        let iterator = CharIterator {
+        let iterator = CharIter {
             span,
             cursor,
             site: 0,
@@ -342,12 +342,12 @@ pub trait SourceCode: Identifiable {
 }
 
 #[repr(transparent)]
-pub struct ChunkIterator<'code, C: TokenCursor<'code>> {
+pub struct ChunkIter<'code, C: TokenCursor<'code>> {
     cursor: C,
     _code_lifetime: PhantomData<&'code ()>,
 }
 
-impl<'code, C: TokenCursor<'code>> Iterator for ChunkIterator<'code, C> {
+impl<'code, C: TokenCursor<'code>> Iterator for ChunkIter<'code, C> {
     type Item = Chunk<'code, <C as TokenCursor<'code>>::Token>;
 
     #[inline]
@@ -370,9 +370,9 @@ impl<'code, C: TokenCursor<'code>> Iterator for ChunkIterator<'code, C> {
     }
 }
 
-impl<'code, C: TokenCursor<'code>> FusedIterator for ChunkIterator<'code, C> {}
+impl<'code, C: TokenCursor<'code>> FusedIterator for ChunkIter<'code, C> {}
 
-pub struct CharIterator<'code, C: TokenCursor<'code>> {
+pub struct CharIter<'code, C: TokenCursor<'code>> {
     span: SiteSpan,
     cursor: C,
     site: Site,
@@ -380,7 +380,7 @@ pub struct CharIterator<'code, C: TokenCursor<'code>> {
     _code_lifetime: PhantomData<&'code ()>,
 }
 
-impl<'code, C: TokenCursor<'code>> Iterator for CharIterator<'code, C> {
+impl<'code, C: TokenCursor<'code>> Iterator for CharIter<'code, C> {
     type Item = char;
 
     #[inline]
@@ -423,4 +423,4 @@ impl<'code, C: TokenCursor<'code>> Iterator for CharIterator<'code, C> {
     }
 }
 
-impl<'code, C: TokenCursor<'code>> FusedIterator for CharIterator<'code, C> {}
+impl<'code, C: TokenCursor<'code>> FusedIterator for CharIter<'code, C> {}

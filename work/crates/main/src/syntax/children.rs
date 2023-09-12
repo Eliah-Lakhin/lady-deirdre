@@ -194,6 +194,11 @@ impl Children {
     }
 
     #[inline(always)]
+    pub fn iter(&self) -> ChildrenIter {
+        self.into_iter()
+    }
+
+    #[inline(always)]
     pub fn into_entries(self) -> Vec<(&'static str, Child)> {
         self.vector
     }
@@ -469,6 +474,11 @@ impl Child {
 
             Self::NodeSeq(child) => child.get(index).map(|poly_ref| poly_ref as &dyn PolyRef),
         }
+    }
+
+    #[inline(always)]
+    pub fn iter(&self) -> ChildIter {
+        self.into_iter()
     }
 
     #[inline]

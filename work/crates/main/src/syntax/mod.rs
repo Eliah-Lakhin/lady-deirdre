@@ -52,7 +52,7 @@ mod tree;
 
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
-    children::{Child, Children},
+    children::{Child, ChildIntoIter, ChildIter, Children, ChildrenIntoIter, ChildrenIter},
     cluster::{Cluster, ClusterRef},
     error::{ErrorRef, ParseError},
     morphism::{PolyRef, PolyVariant, RefKind},
@@ -62,5 +62,5 @@ pub use crate::syntax::{
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,
-    tree::{SyntaxTree, Visitor},
+    tree::{ErrorIter, NodeIter, SyntaxTree, Visitor},
 };

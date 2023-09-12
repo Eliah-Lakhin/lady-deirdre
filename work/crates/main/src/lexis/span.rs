@@ -36,6 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    arena::{Id, Identifiable},
     format::{Priority, SnippetFormatter},
     lexis::{Position, Site, SiteRef, SourceCode, ToSite},
     report::debug_unreachable,
@@ -96,6 +97,19 @@ pub type SiteSpan = Range<Site>;
 /// assert_eq!(doc.substring(start..end), "bar");
 /// ```
 pub type SiteRefSpan = Range<SiteRef>;
+
+impl Identifiable for SiteRefSpan {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        let id = self.start.id();
+
+        if self.end.id() != id {
+            return Id::nil();
+        }
+
+        id
+    }
+}
 
 /// A range of [Positions](crate::lexis::Position).
 ///
