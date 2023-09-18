@@ -442,8 +442,6 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         let mut code_length = 0;
 
         for print_line in &mut lines {
-            print_line.expand(self.config);
-
             for string in &print_line.before {
                 code_length = code_length.max(string.length);
             }
@@ -792,6 +790,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                             scanner.pending.code.style =
                                 self.config.annotation_style(annotation.priority);
                             scanner.pending.code.write_placeholder(self.config);
+                            scanner.pending.annotated = true;
                         }
 
                         false => {
