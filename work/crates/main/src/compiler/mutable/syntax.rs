@@ -56,6 +56,7 @@ pub struct MutableSyntaxSession<'unit, N: Node> {
     peek_chunk_cursor: ChildCursor<N>,
     peek_distance: TokenCount,
     peek_site: Site,
+    peek_caches: usize,
 }
 
 impl<'unit, N: Node> Identifiable for MutableSyntaxSession<'unit, N> {
@@ -68,7 +69,6 @@ impl<'unit, N: Node> Identifiable for MutableSyntaxSession<'unit, N> {
 impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     type Token = N::Token;
 
-    #[inline(always)]
     fn advance(&mut self) -> bool {
         if self.next_chunk_cursor.is_dangling() {
             return false;
@@ -76,16 +76,40 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
         self.next_site += unsafe { self.next_chunk_cursor.span() };
 
+        let has_cache = unsafe { self.next_chunk_cursor.cache().is_some() };
+
+        if has_cache {
+            match &self.pending.cluster_entry {
+                Entry::Repo { index, .. }
+                    if index == &unsafe { self.next_chunk_cursor.cache_index() } =>
+                {
+                    ()
+                }
+
+                _ => {
+                    let entry_index = unsafe { self.next_chunk_cursor.remove_cache() };
+
+                    unsafe { self.references.clusters_mut().remove_unchecked(entry_index) };
+                }
+            }
+        }
+
         unsafe { self.next_chunk_cursor.next() };
 
         match self.peek_distance == 0 {
             true => {
                 self.peek_chunk_cursor = self.next_chunk_cursor;
                 self.peek_site = self.next_site;
+
+                debug_assert!(self.peek_caches == 0, "Incorrect cache counter.");
             }
 
             false => {
                 self.peek_distance -= 1;
+
+                if has_cache {
+                    self.peek_caches -= 1;
+                }
             }
         }
 
@@ -94,25 +118,34 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         true
     }
 
-    #[inline(always)]
     fn skip(&mut self, mut distance: TokenCount) {
         if distance == 0 {
             return;
         }
 
-        if distance == self.peek_distance {
-            self.next_chunk_cursor = self.peek_chunk_cursor;
-            self.next_site = self.peek_site;
-            self.peek_distance = 0;
-            self.pending.leftmost = false;
-            return;
-        }
+        match self.peek_distance == distance {
+            true => {
+                while self.peek_caches > 0 {
+                    #[allow(unused)]
+                    let advanced = self.advance();
 
-        while distance > 0 {
-            distance -= 1;
+                    debug_assert!(advanced, "Skip advancing failure.");
+                }
 
-            if !self.advance() {
-                break;
+                self.next_chunk_cursor = self.peek_chunk_cursor;
+                self.next_site = self.peek_site;
+                self.peek_distance = 0;
+                self.pending.leftmost = false;
+            }
+
+            false => {
+                while distance > 0 {
+                    distance -= 1;
+
+                    if !self.advance() {
+                        break;
+                    }
+                }
             }
         }
     }
@@ -314,6 +347,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
                 self.peek_chunk_cursor = end_chunk_cursor;
                 self.peek_distance = 0;
                 self.peek_site = end_site;
+                self.peek_caches = 0;
 
                 if let Some(updates) = &mut self.updates {
                     updates.insert(result);
@@ -380,6 +414,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
         let parsed_end = self.parsed_end();
 
+        #[allow(unused)]
         let previous_entry_index = unsafe {
             child_chunk_cursor.set_cache(
                 cluster_entry_index,
@@ -397,13 +432,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             )
         };
 
-        if let Some(previous_entry_index) = previous_entry_index {
-            unsafe {
-                self.references
-                    .clusters_mut()
-                    .remove_unchecked(previous_entry_index)
-            };
-        }
+        debug_assert!(previous_entry_index.is_none(), "Unreleased cache entry.");
 
         node_ref
     }
@@ -611,6 +640,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             peek_chunk_cursor: head,
             peek_distance: 0,
             peek_site: start,
+            peek_caches: 0,
         };
 
         let primary = N::parse(&mut session, rule);
@@ -664,6 +694,12 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             self.peek_distance += 1;
             self.peek_site += unsafe { *self.peek_chunk_cursor.span() };
 
+            let has_cache = unsafe { self.peek_chunk_cursor.cache().is_some() };
+
+            if has_cache {
+                self.peek_caches += 1;
+            };
+
             unsafe { self.peek_chunk_cursor.next() };
 
             if unsafe { self.peek_chunk_cursor.is_dangling() } {
@@ -678,10 +714,17 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             self.peek_distance = 0;
             self.peek_site = self.next_site;
             self.peek_chunk_cursor = self.next_chunk_cursor;
+            self.peek_caches = 0;
 
             while self.peek_distance < target {
                 self.peek_distance += 1;
                 self.peek_site += unsafe { *self.peek_chunk_cursor.span() };
+
+                let has_cache = unsafe { self.peek_chunk_cursor.cache().is_some() };
+
+                if has_cache {
+                    self.peek_caches += 1;
+                };
 
                 unsafe { self.peek_chunk_cursor.next() };
 
@@ -692,6 +735,12 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         }
 
         while self.peek_distance > target {
+            let has_cache = unsafe { self.peek_chunk_cursor.cache().is_some() };
+
+            if has_cache {
+                self.peek_caches -= 1;
+            };
+
             unsafe { self.peek_chunk_cursor.back() }
 
             debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");

@@ -38,8 +38,8 @@
 use std::ops::Range;
 
 use lady_deirdre::{
-    lexis::{CodeContent, Length, Site, SiteSpan},
-    syntax::TreeContent,
+    lexis::{Length, Site, SiteSpan, SourceCode},
+    syntax::SyntaxTree,
     Document,
 };
 use lady_deirdre_examples::json::syntax::JsonNode;
