@@ -187,6 +187,32 @@ impl SiteRef {
         Self(SiteRefInner::ChunkStart(reference))
     }
 
+    #[inline(always)]
+    pub fn token_ref(&self) -> TokenRef {
+        match self.0 {
+            SiteRefInner::ChunkStart(token_ref) => token_ref,
+            SiteRefInner::CodeEnd(_) => TokenRef::nil(),
+        }
+    }
+
+    pub fn prev(&self, code: &impl SourceCode) -> Self {
+        let site = match self.to_site(code) {
+            Some(site) => site,
+            None => return Self::nil(),
+        };
+
+        code.cursor(site..site).site_ref(0)
+    }
+
+    pub fn next(&self, code: &impl SourceCode) -> Self {
+        let site = match self.to_site(code) {
+            Some(site) => site,
+            None => return Self::nil(),
+        };
+
+        code.cursor(site..).site_ref(2)
+    }
+
     /// Returns `true` if this instance will never resolve to a valid [Site](crate::lexis::Site).
     ///
     /// It is guaranteed that `SiteRef::nil().is_nil()` is always `true`, but in general if

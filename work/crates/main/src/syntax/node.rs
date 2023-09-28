@@ -160,7 +160,7 @@ pub trait Node: Sized + 'static {
     ///     regardless of input sequence, and to return a valid instance of [Node]. If the input
     ///     sequence contains syntax errors, the Algorithm recovers these error in a way that is
     ///     not specified. In this case the Algorithm could call `session`'s
-    ///     [error](crate::syntax::SyntaxSession::error) function to register syntax error.
+    ///     [error](crate::syntax::SyntaxSession::failure) function to register syntax error.
     ///
     /// ```rust
     /// use lady_deirdre::{
@@ -175,6 +175,7 @@ pub trait Node: Sized + 'static {
     ///         Children,
     ///         ROOT_RULE,
     ///         EMPTY_NODE_SET,
+    ///         RecoveryResult,
     ///     },
     ///     lexis::{SimpleToken, TokenCursor, TokenSet, EMPTY_TOKEN_SET},
     ///     Document,
@@ -309,9 +310,10 @@ pub trait Node: Sized + 'static {
     ///
     ///         // Registering a syntax error.
     ///         let span = session.site_ref(0)..session.site_ref(0);
-    ///         session.attach_error(ParseError {
+    ///         session.failure(ParseError {
     ///             span,
     ///             context: PARENS_RULE,
+    ///             recovery: RecoveryResult::UnexpectedEOI,
     ///             expected_tokens: &EMPTY_TOKEN_SET,
     ///             expected_nodes: &EMPTY_NODE_SET,
     ///         });

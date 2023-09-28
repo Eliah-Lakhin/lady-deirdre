@@ -286,7 +286,7 @@ use crate::{
 ///     .join("\n");
 /// assert_eq!(
 ///     errors.as_str(),
-///     "1:3..1:4: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.",
+///     "1:2 (3 chars): Unexpected input in Brackets.",
 /// );
 ///
 /// // Syntax Tree is a mutable structure.

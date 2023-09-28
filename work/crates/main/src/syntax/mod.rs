@@ -58,7 +58,7 @@ pub use crate::syntax::{
     morphism::{PolyRef, PolyVariant, RefKind},
     no::NoSyntax,
     node::{Node, NodeRef},
-    recovery::{Recovery, UNLIMITED_RECOVERY},
+    recovery::{Recovery, RecoveryResult, UNLIMITED_RECOVERY},
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,

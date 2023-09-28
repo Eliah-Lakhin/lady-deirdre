@@ -52,6 +52,7 @@ use crate::{
         SourceCode,
         ToSpan,
         TokenRule,
+        TokenSet,
         EOI,
     },
     std::*,
@@ -186,6 +187,8 @@ pub trait Token: Copy + Eq + Sized + 'static {
     ///     Token,
     ///     TokenBuffer,
     ///     TokenRule,
+    ///     TokenSet,
+    ///     EMPTY_TOKEN_SET,
     ///     SourceCode,
     ///     LexisSession,
     ///     Chunk,
@@ -278,6 +281,10 @@ pub trait Token: Copy + Eq + Sized + 'static {
     ///             _ => None,
     ///         }
     ///     }
+    ///
+    ///     fn blanks() -> &'static TokenSet {
+    ///         &EMPTY_TOKEN_SET
+    ///     }
     /// }
     ///
     /// let buf = TokenBuffer::<NumOrWord>::from("foo123_bar");
@@ -306,6 +313,8 @@ pub trait Token: Copy + Eq + Sized + 'static {
     fn name(rule: TokenRule) -> Option<&'static str>;
 
     fn describe(rule: TokenRule, verbose: bool) -> Option<&'static str>;
+
+    fn blanks() -> &'static TokenSet;
 }
 
 /// A weak reference of the [Token] and its [Chunk](crate::lexis::Chunk) metadata inside the source
@@ -560,6 +569,13 @@ impl TokenRef {
         self.deref(code)
             .map(|token| T::describe(token.rule(), verbose))
             .flatten()
+    }
+
+    #[inline(always)]
+    pub fn is_blank<T: Token>(&self, code: &impl SourceCode<Token = T>) -> bool {
+        let blanks = T::blanks();
+
+        blanks.contains(self.rule(code))
     }
 
     /// Returns `true` if and only if referred weak Token reference belongs to specified

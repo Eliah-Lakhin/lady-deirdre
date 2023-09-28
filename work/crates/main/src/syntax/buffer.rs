@@ -184,6 +184,7 @@ impl<N: Node> SyntaxBuffer<N> {
             primary: None,
             nodes: Repository::with_capacity(1),
             errors: Repository::default(),
+            failing: false,
             token_cursor,
             _code_lifetime: Default::default(),
         };

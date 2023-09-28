@@ -41,7 +41,7 @@
 use std::fmt::{Debug, Display, Formatter};
 
 use lady_deirdre::{
-    lexis::{LexisSession, SourceCode, Token, TokenCursor, TokenRule},
+    lexis::{LexisSession, SourceCode, Token, TokenCursor, TokenRule, TokenSet, EMPTY_TOKEN_SET},
     syntax::{NoSyntax, SimpleNode},
     Document,
 };
@@ -155,6 +155,10 @@ fn test_document_lexis() {
             }
 
             None
+        }
+
+        fn blanks() -> &'static TokenSet {
+            &EMPTY_TOKEN_SET
         }
     }
 

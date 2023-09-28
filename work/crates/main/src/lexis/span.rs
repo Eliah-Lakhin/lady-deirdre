@@ -293,7 +293,7 @@ pub unsafe trait ToSpan {
     /// let doc = Document::<SimpleNode>::from("foo\nbar baz");
     ///
     /// assert_eq!(doc.substring(2..7), "o\nbar");
-    /// assert_eq!((2..7).display(&doc).to_string(), "1:3..2:3");
+    /// assert_eq!((2..7).display(&doc).to_string(), "1:3 (5 chars, 1 line break)");
     /// ```
     #[inline(always)]
     fn display<'a, Code: SourceCode>(&self, code: &'a Code) -> DisplaySpan<'a, Code> {
@@ -461,16 +461,14 @@ where
     Code: SourceCode,
 {
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        let mut span = match &self.span {
+        let span = match &self.span {
             None => return formatter.write_str("?"),
             Some(span) => span.clone(),
         };
 
         if !formatter.alternate() {
-            match span.start + 1 < span.end {
-                true => span.end -= 1,
-                false => span.end = span.start,
-            }
+            let chars = span.end - span.start;
+            let breaks = self.code.chars(&span).filter(|ch| *ch == '\n').count();
 
             let span = match span.to_position_span(self.code) {
                 Some(span) => span,
@@ -479,10 +477,26 @@ where
                 None => unsafe { debug_unreachable!("Invalid position span.") },
             };
 
-            return match span.start == span.end {
-                true => formatter.write_fmt(format_args!("{}", span.start)),
-                false => formatter.write_fmt(format_args!("{}..{}", span.start, span.end)),
-            };
+            formatter.write_fmt(format_args!("{}", span.start))?;
+
+            if chars > 0 {
+                formatter.write_str(" (")?;
+
+                match chars > 1 {
+                    false => formatter.write_str("1 char")?,
+                    true => formatter.write_fmt(format_args!("{chars} chars"))?,
+                }
+
+                match breaks {
+                    0 => (),
+                    1 => formatter.write_str(", 1 line break")?,
+                    _ => formatter.write_fmt(format_args!(", {breaks} line breaks"))?,
+                }
+
+                formatter.write_str(")")?;
+            }
+
+            return Ok(());
         }
 
         formatter

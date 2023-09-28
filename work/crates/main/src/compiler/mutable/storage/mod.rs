@@ -77,7 +77,7 @@ mod tests {
             references::References,
             tree::Tree,
         },
-        lexis::{LexisSession, Token, TokenRule},
+        lexis::{LexisSession, Token, TokenRule, TokenSet},
         std::*,
         syntax::{Children, Node, NodeRef, NodeRule, ParseError, SyntaxSession},
     };
@@ -904,6 +904,10 @@ mod tests {
         }
 
         fn describe(_index: TokenRule, _verbose: bool) -> Option<&'static str> {
+            unimplemented!()
+        }
+
+        fn blanks() -> &'static TokenSet {
             unimplemented!()
         }
     }

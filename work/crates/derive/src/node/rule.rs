@@ -165,21 +165,30 @@ impl Rule {
         match with_trivia {
             false => {
                 init_first = None;
-                init_step = None;
+                init_step = quote_spanned!(span=>
+                    let step_start_ref = #core::lexis::TokenCursor::site_ref(session, 0);
+                );
             }
 
             true => match surround_trivia {
-                false => {
-                    init_first = Some(quote_spanned!(span=> let mut first = true;));
-                    init_step = Some(quote_spanned!(span=> match first {
-                        true => first = false,
-                        false => skip_trivia(session),
-                    }));
-                }
-
                 true => {
                     init_first = None;
-                    init_step = Some(quote_spanned!(span=> skip_trivia(session);));
+                    init_step = quote_spanned!(span=>
+                        let step_start_ref = #core::lexis::TokenCursor::site_ref(session, 0);
+                        skip_trivia(session);
+                    );
+                }
+
+                false => {
+                    init_first = Some(quote_spanned!(span=> let mut first = true;));
+                    init_step = quote_spanned!(span=>
+                        let step_start_ref = #core::lexis::TokenCursor::site_ref(session, 0);
+
+                        match first {
+                            true => first = false,
+                            false => skip_trivia(session),
+                        }
+                    );
                 }
             },
         }
@@ -216,7 +225,6 @@ impl Rule {
 
         quote_spanned!(span=>
             let mut state = #start;
-            let mut site = #core::lexis::SiteRef::nil();
             #init_first
             #init_vars
 
@@ -501,15 +509,18 @@ impl Rule {
                             .compile(span);
 
                         quote_spanned!(span=>
-                            site = #core::lexis::TokenCursor::site_ref(session, 0);
-                            #core::syntax::SyntaxSession::attach_error(
+                            let step_end_ref = #core::lexis::TokenCursor::site_ref(session, 0);
+
+                            #core::syntax::SyntaxSession::failure(
                                 session,
                                 #core::syntax::ParseError {
-                                    span: site..site,
+                                    span: step_start_ref..step_end_ref,
                                     context: #context,
+                                    recovery: #core::syntax::RecoveryResult::InsertRecover,
                                     expected_tokens: &#var,
                                     expected_nodes: &#core::syntax::EMPTY_NODE_SET,
-                                });
+                                },
+                            );
                         )
                         .to_tokens(&mut body);
                     }
@@ -530,15 +541,18 @@ impl Rule {
                         let var = globals.rules([index.clone()].into_iter()).compile(span);
 
                         quote_spanned!(span=>
-                            site = #core::lexis::TokenCursor::site_ref(session, 0);
-                            #core::syntax::SyntaxSession::attach_error(
+                            let step_end_ref = #core::lexis::TokenCursor::site_ref(session, 0);
+
+                            #core::syntax::SyntaxSession::failure(
                                 session,
                                 #core::syntax::ParseError {
-                                    span: site..site,
+                                    span: step_start_ref..step_end_ref,
                                     context: #context,
+                                    recovery: #core::syntax::RecoveryResult::InsertRecover,
                                     expected_tokens: &#core::lexis::EMPTY_TOKEN_SET,
                                     expected_nodes: &#var,
-                                });
+                                },
+                            );
                         )
                         .to_tokens(&mut body);
                     }
@@ -659,11 +673,6 @@ impl Rule {
             false if covered.len() < total_alphabet_len => {
                 let recovery = recovery_var.compile(span);
 
-                quote_spanned!(span=>
-                    site = #core::lexis::TokenCursor::site_ref(session, 0);
-                )
-                .to_tokens(&mut stream);
-
                 let delimiter_halt = match delimiter {
                     Some(delimiter) if !covered.contains(delimiter) => {
                         let _ = covered.insert(delimiter.clone());
@@ -677,25 +686,27 @@ impl Rule {
                 let expectations = Self::make_pattern(input, globals, covered).compile(span);
 
                 quote_spanned!(span=>
-                    let mut recovered = #core::syntax::Recovery::recover(
+                    let recovery = #core::syntax::Recovery::recover(
                         &#recovery,
                         session,
                         &#expectations,
                     );
-                )
-                .to_tokens(&mut stream);
 
-                quote_spanned!(span=>
-                    let end_site = #core::lexis::TokenCursor::site_ref(session, 0);
+                    let mut recovered = #core::syntax::RecoveryResult::recovered(
+                        &recovery,
+                    );
 
-                    #core::syntax::SyntaxSession::attach_error(
+                    let step_end_ref = #core::lexis::TokenCursor::site_ref(session, 0);
+
+                    #core::syntax::SyntaxSession::failure(
                         session,
                         #core::syntax::ParseError {
-                            span: site..end_site,
+                            span: step_start_ref..step_end_ref,
                             context: #context,
+                            recovery,
                             expected_tokens: &#expected_tokens_var,
                             expected_nodes: &#expected_nodes_var,
-                        }
+                        },
                     );
                 )
                 .to_tokens(&mut stream);
@@ -719,7 +730,7 @@ impl Rule {
 
                 quote_spanned!(span=>
                     if !recovered {
-                        break
+                        break;
                     }
                 )
                 .to_tokens(&mut stream);

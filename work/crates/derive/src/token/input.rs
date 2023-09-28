@@ -607,6 +607,57 @@ impl TokenInput {
         )
     }
 
+    fn compile_blank_fn(&self) -> TokenStream {
+        let ident = &self.ident;
+        let span = ident.span();
+        let core = span.face_core();
+
+        let this = match self.generics.params.is_empty() {
+            true => ident.to_token_stream(),
+
+            false => {
+                let (_, ty_generics, _) = self.generics.split_for_impl();
+
+                quote_spanned!(span=> #ident::#ty_generics)
+            }
+        };
+
+        let variants = self
+            .variants
+            .iter()
+            .filter_map(|variant| {
+                let span = match variant.blank {
+                    Some(span) => span,
+                    None => return None,
+                };
+
+                let ident = &variant.ident;
+
+                Some(quote_spanned!(span=> #this::#ident as u8))
+            })
+            .collect::<Vec<_>>();
+
+        let body = match variants.is_empty() {
+            true => quote_spanned!(span=> &#core::lexis::EMPTY_TOKEN_SET),
+
+            false => quote_spanned!(span=>
+                static BLANKS: #core::lexis::TokenSet
+                    = #core::lexis::TokenSet::inclusive(&[
+                        #(#variants,)*
+                    ]);
+
+                &BLANKS
+            ),
+        };
+
+        quote_spanned!(span=>
+            #[inline(always)]
+            fn blanks() -> &'static #core::lexis::TokenSet {
+                #body
+            }
+        )
+    }
+
     fn compile_name_fn(&self) -> TokenStream {
         let span = self.ident.span();
         let core = span.face_core();
@@ -694,6 +745,7 @@ impl ToTokens for TokenInput {
         let eoi = self.compile_eoi_fn();
         let mismatch = self.compile_mismatch_fn();
         let rule = self.compile_rule_fn();
+        let blanks = self.compile_blank_fn();
         let name = self.compile_name_fn();
         let description = self.compile_description_fn();
 
@@ -707,6 +759,7 @@ impl ToTokens for TokenInput {
                 #rule
                 #name
                 #description
+                #blanks
             }
         )
         .to_tokens(tokens)

@@ -46,10 +46,10 @@ use crate::{
 
 pub struct MutableCursor<'unit, N: Node> {
     unit: &'unit MutableUnit<N>,
-    next_child_cursor: ChildCursor<N>,
-    end_child_cursor: ChildCursor<N>,
-    peek_child_cursor: ChildCursor<N>,
+    next_chunk_cursor: ChildCursor<N>,
+    peek_chunk_cursor: ChildCursor<N>,
     peek_distance: TokenCount,
+    end_chunk_cursor: ChildCursor<N>,
 }
 
 impl<'unit, N: Node> Identifiable for MutableCursor<'unit, N> {
@@ -64,15 +64,15 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return false;
         }
 
-        unsafe { self.next_child_cursor.next() };
+        unsafe { self.next_chunk_cursor.next() };
 
         match self.peek_distance == 0 {
             true => {
-                self.peek_child_cursor = self.next_child_cursor;
+                self.peek_chunk_cursor = self.next_chunk_cursor;
             }
 
             false => {
@@ -86,7 +86,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     #[inline(always)]
     fn skip(&mut self, mut distance: TokenCount) {
         if distance == self.peek_distance {
-            self.next_child_cursor = self.peek_child_cursor;
+            self.next_chunk_cursor = self.peek_chunk_cursor;
             self.peek_distance = 0;
             return;
         }
@@ -102,7 +102,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
     #[inline(always)]
     fn token(&mut self, distance: TokenCount) -> Self::Token {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return <Self::Token as Token>::eoi();
         }
 
@@ -110,12 +110,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return <Self::Token as Token>::eoi();
         }
 
-        unsafe { self.peek_child_cursor.token() }
+        unsafe { self.peek_chunk_cursor.token() }
     }
 
     #[inline(always)]
     fn site(&mut self, distance: TokenCount) -> Option<Site> {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return None;
         }
 
@@ -123,12 +123,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return None;
         }
 
-        Some(unsafe { self.unit.tree().site_of(&self.peek_child_cursor) })
+        Some(unsafe { self.unit.tree().site_of(&self.peek_chunk_cursor) })
     }
 
     #[inline(always)]
     fn length(&mut self, distance: TokenCount) -> Option<Length> {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return None;
         }
 
@@ -136,12 +136,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return None;
         }
 
-        Some(*unsafe { self.peek_child_cursor.span() })
+        Some(*unsafe { self.peek_chunk_cursor.span() })
     }
 
     #[inline(always)]
     fn string(&mut self, distance: TokenCount) -> Option<&'unit str> {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return None;
         }
 
@@ -149,12 +149,12 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return None;
         }
 
-        Some(unsafe { self.peek_child_cursor.string() })
+        Some(unsafe { self.peek_chunk_cursor.string() })
     }
 
     #[inline(always)]
     fn token_ref(&mut self, distance: TokenCount) -> TokenRef {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return TokenRef::nil();
         }
 
@@ -162,7 +162,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return TokenRef::nil();
         }
 
-        let entry_index = unsafe { self.peek_child_cursor.chunk_entry_index() };
+        let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
         let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
 
@@ -174,7 +174,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
     #[inline(always)]
     fn site_ref(&mut self, distance: TokenCount) -> SiteRef {
-        if unsafe { self.next_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+        if unsafe { self.next_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
             return self.end_site_ref();
         }
 
@@ -182,7 +182,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
             return self.end_site_ref();
         }
 
-        let entry_index = unsafe { self.peek_child_cursor.chunk_entry_index() };
+        let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
         let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
 
@@ -195,11 +195,11 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
-        if self.end_child_cursor.is_dangling() {
+        if self.end_chunk_cursor.is_dangling() {
             return SiteRef::new_code_end(self.unit.id());
         }
 
-        let entry_index = unsafe { self.end_child_cursor.chunk_entry_index() };
+        let entry_index = unsafe { self.end_chunk_cursor.chunk_entry_index() };
 
         let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
 
@@ -228,10 +228,10 @@ impl<'unit, N: Node> MutableCursor<'unit, N> {
 
         Self {
             unit,
-            next_child_cursor: next_chunk_cursor,
-            end_child_cursor: end_chunk_cursor,
-            peek_child_cursor: next_chunk_cursor,
+            next_chunk_cursor,
+            peek_chunk_cursor: next_chunk_cursor,
             peek_distance: 0,
+            end_chunk_cursor,
         }
     }
 
@@ -242,34 +242,34 @@ impl<'unit, N: Node> MutableCursor<'unit, N> {
         while self.peek_distance < target {
             self.peek_distance += 1;
 
-            unsafe { self.peek_child_cursor.next() };
+            unsafe { self.peek_chunk_cursor.next() };
 
-            if unsafe { self.peek_child_cursor.same_chunk_as(&self.end_child_cursor) } {
+            if unsafe { self.peek_chunk_cursor.same_chunk_as(&self.end_chunk_cursor) } {
                 self.peek_distance = 0;
-                self.peek_child_cursor = self.next_child_cursor;
+                self.peek_chunk_cursor = self.next_chunk_cursor;
                 return true;
             }
         }
 
         if self.peek_distance > target * 2 {
             self.peek_distance = 0;
-            self.peek_child_cursor = self.next_child_cursor;
+            self.peek_chunk_cursor = self.next_chunk_cursor;
 
             while self.peek_distance < target {
                 self.peek_distance += 1;
 
-                unsafe { self.peek_child_cursor.next() };
+                unsafe { self.peek_chunk_cursor.next() };
 
-                debug_assert!(!self.peek_child_cursor.is_dangling(), "Dangling peek ref.");
+                debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
             }
 
             return false;
         }
 
         while self.peek_distance > target {
-            unsafe { self.peek_child_cursor.back() }
+            unsafe { self.peek_chunk_cursor.back() }
 
-            debug_assert!(!self.peek_child_cursor.is_dangling(), "Dangling peek ref.");
+            debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
 
             self.peek_distance -= 1;
         }

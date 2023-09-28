@@ -85,5 +85,6 @@ pub enum JsonToken {
     Number,
 
     #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
+    #[blank]
     Whitespace,
 }

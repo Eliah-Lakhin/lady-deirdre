@@ -95,7 +95,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
 
     fn leave_node(&mut self, node: Self::Node) -> NodeRef;
 
-    fn attach_node(&mut self, node: Self::Node) -> NodeRef;
+    fn node(&mut self, node: Self::Node) -> NodeRef;
 
     fn lift_sibling(&mut self, sibling_ref: &NodeRef);
 
@@ -110,7 +110,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// [RuleIndex](crate::syntax::NodeRule) using this function.
     ///
     /// The function returns a [`weak reference`](crate::syntax::ErrorRef) into registered error.
-    fn attach_error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef;
+    fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef;
 }
 
 pub(super) struct SequentialSyntaxSession<
@@ -123,6 +123,7 @@ pub(super) struct SequentialSyntaxSession<
     pub(super) primary: Option<N>,
     pub(super) nodes: Repository<N>,
     pub(super) errors: Repository<N::Error>,
+    pub(super) failing: bool,
     pub(super) token_cursor: C,
     pub(super) _code_lifetime: PhantomData<&'code ()>,
 }
@@ -147,12 +148,20 @@ where
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        self.token_cursor.advance()
+        let advanced = self.token_cursor.advance();
+
+        self.failing = self.failing && !advanced;
+
+        advanced
     }
 
     #[inline(always)]
     fn skip(&mut self, distance: TokenCount) {
-        self.token_cursor.skip(distance)
+        let start = self.token_cursor.site(0);
+
+        self.token_cursor.skip(distance);
+
+        self.failing = self.failing && start == self.token_cursor.site(0);
     }
 
     #[inline(always)]
@@ -252,7 +261,7 @@ where
     }
 
     #[inline(always)]
-    fn attach_node(&mut self, node: Self::Node) -> NodeRef {
+    fn node(&mut self, node: Self::Node) -> NodeRef {
         NodeRef {
             id: self.id,
             cluster_entry: Entry::Primary,
@@ -321,12 +330,18 @@ where
     }
 
     #[inline(always)]
-    fn attach_error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
-        ErrorRef {
-            id: self.id,
-            cluster_entry: Entry::Primary,
-            error_entry: self.errors.insert(error.into()),
+    fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
+        if !self.failing {
+            self.failing = true;
+
+            return ErrorRef {
+                id: self.id,
+                cluster_entry: Entry::Primary,
+                error_entry: self.errors.insert(error.into()),
+            };
         }
+
+        return ErrorRef::nil();
     }
 }
 

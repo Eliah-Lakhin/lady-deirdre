@@ -65,6 +65,7 @@ pub(super) struct TokenVariant {
     //todo turn to Expr
     pub(super) constructor: Option<Ident>,
     pub(super) priority: isize,
+    pub(super) blank: Option<Span>,
     pub(super) description: Description,
     pub(super) time: Duration,
 }
@@ -102,6 +103,7 @@ impl TryFrom<Variant> for TokenVariant {
 
         let mut rule = None;
         let mut constructor = None;
+        let mut blank = None;
         let mut description = Description::Unset;
         let mut priority = None;
         let mut time = Duration::default();
@@ -136,6 +138,14 @@ impl TryFrom<Variant> for TokenVariant {
                     }
 
                     constructor = Some(attr.parse_args::<Ident>()?);
+                }
+
+                "blank" => {
+                    if blank.is_some() {
+                        return Err(error!(span, "Duplicate Blank attribute.",));
+                    }
+
+                    blank = Some(span);
                 }
 
                 "describe" => {
@@ -199,6 +209,17 @@ impl TryFrom<Variant> for TokenVariant {
             }
         }
 
+        if let Some(blank) = &blank {
+            if rule.is_none() {
+                return Err(error!(
+                    *blank,
+                    "Blank attribute is not applicable to unparseable \
+                    variants.\nTo make the variant parsable annotate this \
+                    variant with #[rule(...)] attribute.",
+                ));
+            }
+        }
+
         let description = description.complete(|| {
             (
                 ident.span(),
@@ -236,6 +257,7 @@ impl TryFrom<Variant> for TokenVariant {
             automata: None,
             constructor,
             priority,
+            blank,
             description,
             time,
         })

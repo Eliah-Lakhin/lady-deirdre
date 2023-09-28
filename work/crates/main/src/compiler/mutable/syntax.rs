@@ -51,12 +51,14 @@ pub struct MutableSyntaxSession<'unit, N: Node> {
     updates: Option<&'unit mut StdSet<NodeRef>>,
     context: Vec<NodeRef>,
     pending: Pending<N>,
+    failing: bool,
     next_chunk_cursor: ChildCursor<N>,
     next_site: Site,
     peek_chunk_cursor: ChildCursor<N>,
     peek_distance: TokenCount,
     peek_site: Site,
     peek_caches: usize,
+    end_site: Site,
 }
 
 impl<'unit, N: Node> Identifiable for MutableSyntaxSession<'unit, N> {
@@ -114,6 +116,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         self.pending.leftmost = false;
+        self.failing = false;
 
         true
     }
@@ -136,6 +139,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
                 self.next_site = self.peek_site;
                 self.peek_distance = 0;
                 self.pending.leftmost = false;
+                self.failing = false;
             }
 
             false => {
@@ -281,6 +285,8 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
+        self.pending.lookahead_end_site = self.end_site;
+
         SiteRef::new_code_end(self.id)
     }
 }
@@ -483,7 +489,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
-    fn attach_node(&mut self, node: Self::Node) -> NodeRef {
+    fn node(&mut self, node: Self::Node) -> NodeRef {
         let node_entry = self.pending.nodes.insert(node);
 
         NodeRef {
@@ -551,14 +557,20 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
-    fn attach_error(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
+    fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
         self.pending.successful = false;
 
-        ErrorRef {
-            id: self.id,
-            cluster_entry: self.pending.cluster_entry,
-            error_entry: self.pending.errors.insert(error.into()),
+        if !self.failing {
+            self.failing = true;
+
+            return ErrorRef {
+                id: self.id,
+                cluster_entry: self.pending.cluster_entry,
+                error_entry: self.pending.errors.insert(error.into()),
+            };
         }
+
+        ErrorRef::nil()
     }
 }
 
@@ -628,6 +640,8 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             context
         };
 
+        let length = tree.length();
+
         let mut session = Self {
             id,
             tree,
@@ -635,12 +649,14 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             updates,
             context,
             pending,
+            failing: false,
             next_chunk_cursor: head,
             next_site: start,
             peek_chunk_cursor: head,
             peek_distance: 0,
             peek_site: start,
             peek_caches: 0,
+            end_site: length,
         };
 
         let primary = N::parse(&mut session, rule);

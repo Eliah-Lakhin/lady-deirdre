@@ -73,7 +73,7 @@ fn test_json_errors_1() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:2..1:5: Object format mismatch. Missing Entry or '}'.",
+        "1:2 (3 chars): Unexpected input in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -95,7 +95,7 @@ fn test_json_errors_2() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:15: Array format mismatch. Missing ','.",
+        "1:14 (1 char): Missing ',' in Array.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -117,7 +117,7 @@ fn test_json_errors_3() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:15..1:16: Array format mismatch. Expected Array, False, Null, Number, Object, String, True.",
+        "1:15 (1 char): Unexpected input in Array.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -139,8 +139,8 @@ fn test_json_errors_4() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:38..1:44: Array format mismatch. Missing ',' or ']'.\n\
-        1:50..1:56: Array format mismatch. Missing ',' or ']'.",
+        "1:38 (7 chars): Unexpected input in Array.\n\
+        1:50 (7 chars): Unexpected input in Array.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -160,7 +160,7 @@ fn test_json_errors_5() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:24..1:25: Object format mismatch. Missing Entry.",
+        "1:24 (1 char): Unexpected input in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -180,8 +180,8 @@ fn test_json_errors_6() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:18: Entry format mismatch. Expected Array, False, Null, Number, Object, String, True.\n\
-        1:18: Object format mismatch. Missing ',' or '}'.",
+        "1:17: Missing Array, False, Null, Number, Object, String, True in Entry.\n\
+        1:18 (1 char): Unexpected input in Object.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -203,11 +203,10 @@ fn test_json_errors_7() {
     let doc = code.into_immutable_unit::<JsonNode>();
 
     assert_eq!(
-        "1:19..1:20: Array format mismatch. Expected Array, False, Null, Number, Object, String, True, ']'.\n\
-        1:24..1:30: Array format mismatch. Missing ',' or ']'.\n\
-        1:49..1:58: Entry format mismatch. Missing ':'.\n\
-        1:67: Array format mismatch. Missing ',' or ']'.\n\
-        1:67: Object format mismatch. Missing ',' or '}'.",
+        "1:19 (1 char): Unexpected input in Array.\n\
+        1:24 (7 chars): Unexpected input in Array.\n\
+        1:49 (10 chars): Unexpected input in Entry.\n\
+        1:67: Unexpected end of input in Array.",
         doc.errors()
             .map(|error| error.display(&doc).to_string())
             .collect::<Vec<_>>()
@@ -494,10 +493,7 @@ fn test_json_incremental() {
 
     let mut doc = Document::<DebugNode>::from("");
     assert_eq!(doc.substring(..), r#""#);
-    assert_eq!(
-        doc.debug_errors(),
-        "1:1: Root format mismatch. Missing Object.",
-    );
+    assert_eq!(doc.debug_errors(), "1:1: Missing Object.",);
     assert_eq!(doc.to_json_string(), r#"?"#);
     assert_eq!(doc.debug_print(), r#"0(?)"#);
 
@@ -508,7 +504,7 @@ fn test_json_incremental() {
     assert_eq!(doc.substring(..), r#"{"#);
     assert_eq!(
         doc.debug_errors(),
-        "1:2: Object format mismatch. Missing Entry or '}'.",
+        "1:2: Unexpected end of input in Object.",
     );
     assert_eq!(doc.to_json_string(), r#"{}"#);
     assert_eq!(doc.debug_print(), r#"1(1({}))"#);
@@ -526,10 +522,7 @@ fn test_json_incremental() {
     let node_ref = doc.write(1..1, r#""foo""#);
     assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{"foo"}"#,);
     assert_eq!(doc.substring(..), r#"{"foo"}"#);
-    assert_eq!(
-        doc.debug_errors(),
-        "1:7: Entry format mismatch. Missing ':'."
-    );
+    assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(doc.to_json_string(), r#"{"foo": ?}"#);
     assert_eq!(doc.debug_print(), r#"3(3({3("foo": ?)}))"#);
 
@@ -547,10 +540,7 @@ fn test_json_incremental() {
         doc.substring(..),
         r#"{"foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
     );
-    assert_eq!(
-        doc.debug_errors(),
-        "1:7: Entry format mismatch. Missing ':'."
-    );
+    assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(
         doc.to_json_string(),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
@@ -611,7 +601,7 @@ fn test_json_incremental() {
     assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}]}"#);
     assert_eq!(
         doc.debug_errors(),
-        "1:32: Object format mismatch. Missing ',' or '}'."
+        "1:32 (1 char): Unexpected input in Object."
     );
     assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(

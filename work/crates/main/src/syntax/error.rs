@@ -39,9 +39,9 @@ use crate::{
     arena::{Entry, Id, Identifiable},
     compiler::CompilationUnit,
     format::{Delimited, PrintString, Priority, SnippetFormatter},
-    lexis::{Length, SiteRefSpan, ToSpan, Token, TokenRule, TokenSet},
+    lexis::{Length, SiteRefSpan, SourceCode, ToSite, ToSpan, Token, TokenRule, TokenSet},
     std::*,
-    syntax::{ClusterRef, Node, NodeRule, NodeSet, SyntaxTree},
+    syntax::{ClusterRef, Node, NodeRule, NodeSet, RecoveryResult, SyntaxTree, ROOT_RULE},
 };
 
 /// A base syntax parse error object.
@@ -74,6 +74,8 @@ pub struct ParseError {
     /// A name of the rule that has failed.
     pub context: NodeRule,
 
+    pub recovery: RecoveryResult,
+
     /// A set of tokens that the parser was expected.
     ///
     /// Possibly empty set.
@@ -97,10 +99,8 @@ impl ParseError {
             #[inline(always)]
             fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                 match N::describe(self.error.context, true) {
-                    Some(context) => {
-                        formatter.write_fmt(format_args!("{context} format mismatch."))
-                    }
-                    None => formatter.write_str("Parse error."),
+                    Some(context) => formatter.write_fmt(format_args!("{context} syntax error.")),
+                    None => formatter.write_str("Syntax error."),
                 }
             }
         }
@@ -112,13 +112,17 @@ impl ParseError {
     }
 
     #[inline(always)]
-    pub fn message<N: Node>(&self) -> impl Display + '_ {
-        struct Describe<'error, N> {
+    pub fn message<N: Node>(
+        &self,
+        code: &impl SourceCode<Token = <N as Node>::Token>,
+    ) -> impl Display + '_ {
+        struct Message<'error, N> {
             error: &'error ParseError,
+            empty_span: bool,
             _node: PhantomData<N>,
         }
 
-        impl<'error, N: Node> Display for Describe<'error, N> {
+        impl<'error, N: Node> Display for Message<'error, N> {
             fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                 const LENGTH_MAX: Length = 80;
 
@@ -163,17 +167,34 @@ impl ParseError {
                 struct OutString {
                     alt: bool,
                     set: StdSet<&'static str>,
+                    empty_span: bool,
+                    context: PrintString<'static>,
+                    recovery: RecoveryResult,
                     components: Vec<TokenOrNode>,
                     exhaustive: bool,
                 }
 
                 impl OutString {
-                    fn new(alt: bool, capacity: usize) -> Self {
+                    fn new<N: Node>(
+                        alt: bool,
+                        capacity: usize,
+                        empty_span: bool,
+                        context: NodeRule,
+                        recovery: RecoveryResult,
+                    ) -> Self {
                         let set = StdSet::new_std_set(capacity);
+
+                        let context = N::describe(context, true)
+                            .filter(|_| context != ROOT_RULE)
+                            .map(PrintString::borrowed)
+                            .unwrap_or(PrintString::empty());
 
                         Self {
                             alt,
                             set,
+                            empty_span,
+                            context,
+                            recovery,
                             components: Vec::with_capacity(capacity),
                             exhaustive: true,
                         }
@@ -218,80 +239,152 @@ impl ParseError {
                         true
                     }
 
-                    fn string(&self) -> PrintString<'static> {
-                        static MISSING: PrintString<'static> = PrintString::borrowed("missing");
-                        static MISSING_ALT: PrintString<'static> = PrintString::borrowed("Missing");
+                    #[inline(always)]
+                    fn missing_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> = PrintString::borrowed("missing");
+                        static ALT_STR: PrintString<'static> = PrintString::borrowed("Missing");
 
-                        static EXPECTED: PrintString<'static> = PrintString::borrowed("expected");
-                        static EXPECTED_ALT: PrintString<'static> =
-                            PrintString::borrowed("Expected");
+                        match self.alt {
+                            false => STRING.clone(),
+                            true => ALT_STR.clone(),
+                        }
+                    }
 
-                        static EOI: PrintString<'static> =
+                    #[inline(always)]
+                    fn unexpected_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> =
+                            PrintString::borrowed("unexpected input");
+                        static ALT_STR: PrintString<'static> =
+                            PrintString::borrowed("Unexpected input");
+
+                        match self.alt {
+                            false => STRING.clone(),
+                            true => ALT_STR.clone(),
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn in_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> = PrintString::borrowed(" in ");
+                        static ALT_STR: PrintString<'static> = PrintString::borrowed(" in ");
+
+                        match self.alt {
+                            false => STRING.clone(),
+                            true => ALT_STR.clone(),
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn eoi_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> =
                             PrintString::borrowed("unexpected end of input");
-                        static EOI_ALT: PrintString<'static> =
+                        static ALT_STR: PrintString<'static> =
                             PrintString::borrowed("Unexpected end of input");
 
-                        static OR: PrintString<'static> = PrintString::borrowed(" or ");
-                        static COMMA: PrintString<'static> = PrintString::borrowed(", ");
+                        match self.alt {
+                            false => STRING.clone(),
+                            true => ALT_STR.clone(),
+                        }
+                    }
 
-                        static ETC: PrintString<'static> = PrintString::borrowed("…");
-                        static ETC_ALT: PrintString<'static> = PrintString::borrowed("...");
+                    #[inline(always)]
+                    fn or_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> = PrintString::borrowed(" or ");
 
+                        STRING.clone()
+                    }
+
+                    #[inline(always)]
+                    fn comma_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> = PrintString::borrowed(", ");
+
+                        STRING.clone()
+                    }
+
+                    #[inline(always)]
+                    fn etc_str(&self) -> PrintString<'static> {
+                        static STRING: PrintString<'static> = PrintString::borrowed("…");
+                        static ALT_STR: PrintString<'static> = PrintString::borrowed("...");
+
+                        match self.alt {
+                            false => STRING.clone(),
+                            true => ALT_STR.clone(),
+                        }
+                    }
+
+                    fn string(&self) -> PrintString<'static> {
                         let mut result = PrintString::empty();
 
-                        match self.components.len() {
-                            0 => {
-                                result.append(match self.alt {
-                                    false => EOI.clone(),
-                                    true => EOI_ALT.clone(),
-                                });
+                        let print_components;
+
+                        match self.recovery {
+                            RecoveryResult::InsertRecover => {
+                                result.append(self.missing_str());
+                                print_components = true;
                             }
 
-                            1 | 2 => {
-                                result.append(match self.alt {
-                                    false => MISSING.clone(),
-                                    true => MISSING_ALT.clone(),
-                                });
+                            RecoveryResult::PanicRecover if self.empty_span => {
+                                result.append(self.missing_str());
+                                print_components = true;
                             }
 
-                            _ => {
-                                result.append(match self.alt {
-                                    false => EXPECTED.clone(),
-                                    true => EXPECTED_ALT.clone(),
-                                });
+                            RecoveryResult::PanicRecover => {
+                                result.append(self.unexpected_str());
+                                print_components = false;
+                            }
+
+                            RecoveryResult::UnexpectedEOI => {
+                                result.append(self.eoi_str());
+                                print_components = false;
+                            }
+
+                            RecoveryResult::UnexpectedToken => {
+                                result.append(self.missing_str());
+                                print_components = true;
+                            }
+                        };
+
+                        if print_components {
+                            for component in self.components.iter().delimited() {
+                                match component.is_first {
+                                    true => result.push(' '),
+                                    false => match self.components.len() == 2 && self.exhaustive {
+                                        true => result.append(self.or_str()),
+                                        false => result.append(self.comma_str()),
+                                    },
+                                }
+
+                                component.print_to(&mut result);
                             }
                         }
 
-                        for component in self.components.iter().delimited() {
-                            match component.is_first {
-                                true => result.push(' '),
-                                false => match self.components.len() == 2 && self.exhaustive {
-                                    true => result.append(OR.clone()),
-                                    false => result.append(COMMA.clone()),
-                                },
+                        match self.exhaustive {
+                            false => {
+                                result.append(self.etc_str());
                             }
 
-                            component.print_to(&mut result);
-                        }
+                            true => {
+                                if !self.context.is_empty() {
+                                    result.append(self.in_str());
+                                    result.append(self.context.clone());
+                                }
 
-                        if self.alt && self.exhaustive {
-                            result.push('.');
-                        }
-
-                        if !self.exhaustive {
-                            result.append(match self.alt {
-                                false => ETC.clone(),
-                                true => ETC_ALT.clone(),
-                            });
+                                if self.alt {
+                                    result.push('.');
+                                }
+                            }
                         }
 
                         result
                     }
                 }
 
-                let mut out = OutString::new(
+                let mut out = OutString::new::<N>(
                     formatter.alternate(),
                     self.error.expected_tokens.length() + self.error.expected_nodes.length(),
+                    self.empty_span,
+                    self.error.context,
+                    self.error.recovery,
                 );
 
                 for rule in self.error.expected_nodes {
@@ -318,8 +411,11 @@ impl ParseError {
             }
         }
 
-        Describe {
+        let span = self.aligned_span(code);
+
+        Message {
             error: self,
+            empty_span: span.start == span.end,
             _node: PhantomData::<N>,
         }
     }
@@ -334,12 +430,15 @@ impl ParseError {
         impl<'a, U: CompilationUnit> Display for DisplaySyntaxError<'a, U> {
             #[inline]
             fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+                let aligned_span = self.error.aligned_span(self.unit);
+
                 if !formatter.alternate() {
-                    formatter.write_fmt(format_args!("{}", self.error.span.display(self.unit)))?;
+                    formatter.write_fmt(format_args!("{}", aligned_span.display(self.unit)))?;
                     formatter.write_str(": ")?;
-                    formatter.write_fmt(format_args!("{:#}", self.error.title::<U::Node>()))?;
-                    formatter.write_str(" ")?;
-                    formatter.write_fmt(format_args!("{:#}", self.error.message::<U::Node>()))?;
+                    formatter.write_fmt(format_args!(
+                        "{:#}",
+                        self.error.message::<U::Node>(self.unit)
+                    ))?;
 
                     return Ok(());
                 }
@@ -349,15 +448,142 @@ impl ParseError {
                     .set_caption(format!("Unit({})", self.unit.id()))
                     .set_summary(self.error.title::<U::Node>().to_string())
                     .annotate(
-                        &self.error.span,
+                        aligned_span,
                         Priority::Primary,
-                        format!("{}", self.error.message::<U::Node>()),
+                        format!("{}", self.error.message::<U::Node>(self.unit)),
                     )
                     .finish()
             }
         }
 
         DisplaySyntaxError { error: self, unit }
+    }
+
+    #[inline(always)]
+    pub fn aligned_span(&self, code: &impl SourceCode) -> SiteRefSpan {
+        match self.recovery {
+            RecoveryResult::InsertRecover => self.widen_span(code),
+            _ => self.shorten_span(code),
+        }
+    }
+
+    fn widen_span(&self, code: &impl SourceCode) -> SiteRefSpan {
+        if !self.span.is_valid_span(code) {
+            return self.span.clone();
+        }
+
+        let mut start = self.span.start;
+        let mut end = self.span.end;
+
+        loop {
+            let previous = start.prev(code);
+
+            if previous == start {
+                break;
+            }
+
+            if !previous.is_valid_site(code) {
+                break;
+            }
+
+            if !previous.token_ref().is_blank(code) {
+                break;
+            }
+
+            start = previous;
+        }
+
+        loop {
+            if !end.token_ref().is_blank(code) {
+                break;
+            }
+
+            let next = end.next(code);
+
+            if next == end {
+                break;
+            }
+
+            if !end.is_valid_site(code) {
+                break;
+            }
+
+            end = next;
+        }
+
+        start..end
+    }
+
+    fn shorten_span(&self, code: &impl SourceCode) -> SiteRefSpan {
+        if !self.span.is_valid_span(code) {
+            return self.span.clone();
+        }
+
+        let mut start = self.span.start;
+        let mut end = self.span.end;
+
+        while start != end {
+            let previous = end.prev(code);
+
+            if previous == end {
+                break;
+            }
+
+            if !previous.is_valid_site(code) {
+                break;
+            }
+
+            if !previous.token_ref().is_blank(code) {
+                break;
+            }
+
+            end = previous;
+        }
+
+        while start != end {
+            if !start.token_ref().is_blank(code) {
+                break;
+            }
+
+            let next = start.next(code);
+
+            if next == start {
+                break;
+            }
+
+            if !next.is_valid_site(code) {
+                break;
+            }
+
+            start = next;
+        }
+
+        if start == end {
+            let mut site_ref = self.span.start;
+
+            loop {
+                let previous = site_ref.prev(code);
+
+                if previous == site_ref {
+                    break;
+                }
+
+                if !previous.is_valid_site(code) {
+                    break;
+                }
+
+                if !previous.token_ref().is_blank(code) {
+                    break;
+                }
+
+                site_ref = previous;
+            }
+
+            start = site_ref;
+            end = site_ref;
+        }
+
+        start..end
     }
 }
 
@@ -376,6 +602,7 @@ impl ParseError {
 ///         SimpleNode,
 ///         SyntaxTree,
 ///         ParseError,
+///         RecoveryResult,
 ///         NodeSet,
 ///         ROOT_RULE,
 ///         EMPTY_NODE_SET,
@@ -390,6 +617,7 @@ impl ParseError {
 ///     ParseError {
 ///         span: SiteRef::nil()..SiteRef::nil(),
 ///         context: ROOT_RULE,
+///         recovery: RecoveryResult::UnexpectedEOI,
 ///         expected_tokens: &EMPTY_TOKEN_SET,
 ///         expected_nodes: &EMPTY_NODE_SET,
 ///     },
@@ -397,7 +625,7 @@ impl ParseError {
 ///
 /// assert_eq!(
 ///     new_custom_error_ref.deref(&doc).unwrap().display(&doc).to_string(),
-///     "?: Root format mismatch. Unexpected end of input.",
+///     "?: Unexpected end of input.",
 /// );
 ///
 /// // This change touches "root" node of the syntax tree(the only node of the tree), as such

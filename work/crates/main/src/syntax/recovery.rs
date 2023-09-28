@@ -120,18 +120,18 @@ impl Recovery {
         &self,
         session: &mut impl SyntaxSession<'code>,
         until: &TokenSet,
-    ) -> bool {
+    ) -> RecoveryResult {
         let mut stack = GroupStack::new();
 
         loop {
             let rule = session.token(0).rule();
 
             if until.contains(rule) {
-                return true;
+                return RecoveryResult::PanicRecover;
             }
 
             if self.unexpected.contains(rule) {
-                return false;
+                return RecoveryResult::UnexpectedToken;
             }
 
             let mut group_id = 0u8;
@@ -146,7 +146,7 @@ impl Recovery {
             }
 
             if !session.advance() {
-                return false;
+                return RecoveryResult::UnexpectedEOI;
             }
         }
     }
@@ -205,6 +205,24 @@ impl Recovery {
 
         if stack.is_empty() {
             session.skip(distance);
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+pub enum RecoveryResult {
+    InsertRecover,
+    PanicRecover,
+    UnexpectedEOI,
+    UnexpectedToken,
+}
+
+impl RecoveryResult {
+    #[inline(always)]
+    pub fn recovered(&self) -> bool {
+        match self {
+            Self::InsertRecover | Self::PanicRecover => true,
+            _ => false,
         }
     }
 }

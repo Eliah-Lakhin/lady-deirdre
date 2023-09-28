@@ -59,7 +59,7 @@ mod utils;
 #[doc = include_str!("./token/readme.md")]
 #[proc_macro_derive(
     Token,
-    attributes(define, rule, priority, constructor, describe, opt, dump)
+    attributes(define, rule, priority, constructor, blank, describe, opt, dump)
 )]
 pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let token_input = parse_macro_input!(input as TokenInput);

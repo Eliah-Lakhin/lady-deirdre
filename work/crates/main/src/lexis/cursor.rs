@@ -407,7 +407,6 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
         token_ref.site_ref()
     }
 
-    #[inline]
     fn end_site_ref(&mut self) -> SiteRef {
         if self.end_site_ref.is_nil() {
             let mut index = self.next;
@@ -438,7 +437,6 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 }
 
 impl<'code, T: Token> TokenBufferCursor<'code, T> {
-    #[inline(always)]
     pub(super) fn new(buffer: &'code TokenBuffer<T>, span: SiteSpan) -> Self {
         let mut next = 0;
 
@@ -461,8 +459,8 @@ impl<'code, T: Token> TokenBufferCursor<'code, T> {
 
         Self {
             buffer,
-            end_site: span.end,
             next,
+            end_site: span.end,
             end_site_ref,
         }
     }

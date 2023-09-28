@@ -196,42 +196,37 @@ fn test_balance() {
     assert_eq!(document.substring(..), "(foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "1:13: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'."
+        "1:2 (11 chars): Unexpected end of input in Parenthesis."
     );
 
     unsafe { VERSION = 2 };
 
     document.write(1..1, "[{");
-    assert_eq!(document.debug_print(), "2:1<2:1(2:1[2:1{}])>");
+    assert_eq!(document.debug_print(), "2:0<2:0(2:0[2:1{}])>");
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "1:15: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
-        1:15: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
-        1:15: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
+        "1:4 (11 chars): Unexpected end of input in Braces."
     );
 
     unsafe { VERSION = 3 };
 
     document.write(6..6, ")");
-    assert_eq!(document.debug_print(), "3:0<3:0(3:1[3:1{}])>");
+    assert_eq!(document.debug_print(), "3:0<3:0(3:0[3:1{}])>");
     assert_eq!(document.substring(..), "([{foo) bar baz");
     assert_eq!(
         document.debug_errors(),
-        "1:7: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
-        1:7: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
+        "1:4 (3 chars): Missing Braces, Brackets, Parenthesis, '}' in Braces."
     );
 
     unsafe { VERSION = 4 };
 
     document.write(6..7, "");
-    assert_eq!(document.debug_print(), "4:1<4:1(4:1[4:1{}])>");
+    assert_eq!(document.debug_print(), "4:0<4:0(4:0[4:1{}])>");
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "1:15: Parenthesis format mismatch. Expected Braces, Brackets, Parenthesis, ')'.\n\
-        1:15: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'.\n\
-        1:15: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'."
+        "1:4 (11 chars): Unexpected end of input in Braces."
     );
 
     unsafe { VERSION = 5 };
@@ -252,8 +247,8 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "1:15..1:20: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
-        1:8: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
+        "1:11 (10 chars): Unexpected input.\n\
+        1:8: Missing Braces, Brackets, Parenthesis, ']' in Brackets."
     );
 
     unsafe { VERSION = 9 };
@@ -263,8 +258,8 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "1:16..1:21: Root format mismatch. Expected Braces, Brackets, Parenthesis.\n\
-        1:8: Brackets format mismatch. Expected Braces, Brackets, Parenthesis, ']'."
+        "1:11 (11 chars): Unexpected input.\n\
+        1:8: Missing Braces, Brackets, Parenthesis, ']' in Brackets."
     );
 
     unsafe { VERSION = 10 };
@@ -284,7 +279,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([({foo)[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "1:8: Braces format mismatch. Expected Braces, Brackets, Parenthesis, '}'.",
+        "1:5 (3 chars): Missing Braces, Brackets, Parenthesis, '}' in Braces.",
     );
 
     unsafe { VERSION = 12 };

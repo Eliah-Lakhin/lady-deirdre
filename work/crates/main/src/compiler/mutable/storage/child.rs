@@ -199,14 +199,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn string<'a>(&self) -> &'a str {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         let slice = unsafe { page.string.byte_slice(page.occupied, self.index) };
@@ -226,14 +226,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn token(&self) -> <N as Node>::Token {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         unsafe { page.tokens.get_unchecked(self.index).assume_init_read() }
@@ -248,14 +248,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn cache<'a>(&self) -> Option<&'a ClusterCache<N>> {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         match unsafe { page.clusters.get_unchecked(self.index).assume_init_ref() } {
@@ -274,14 +274,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn cache_mut<'a>(&mut self) -> Option<&'a mut ClusterCache<N>> {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         match unsafe {
@@ -304,14 +304,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn cache_index(&self) -> EntryIndex {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         match unsafe { page.clusters.get_unchecked(self.index).assume_init_ref() } {
@@ -332,14 +332,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn remove_cache(&self) -> EntryIndex {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         match unsafe {
@@ -364,14 +364,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn take_cache(&self) -> ClusterCache<N> {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         match unsafe {
@@ -399,14 +399,14 @@ impl<N: Node> ChildCursor<N> {
     ) -> Option<EntryIndex> {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         let previous = replace(
@@ -432,14 +432,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn update_cache(&self, cache: ClusterCache<N>) {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         match unsafe {
@@ -462,14 +462,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn chunk_entry_index(&self) -> EntryIndex {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         unsafe { *page.chunks.get_unchecked(self.index) }
@@ -482,14 +482,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn is_first(&self) -> bool {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         self.index == 0 && page.previous.is_none()
@@ -503,14 +503,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn is_last(&self) -> bool {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         self.index + 1 == page.occupied && page.next.is_none()
@@ -523,14 +523,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn next(&mut self) {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         if self.index + 1 < page.occupied {
@@ -562,14 +562,14 @@ impl<N: Node> ChildCursor<N> {
     pub(crate) unsafe fn back(&mut self) {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         if self.index > 0 {
@@ -609,14 +609,14 @@ impl<N: Node> ChildCursor<N> {
     ) {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to access dangling ChildRefIndex.",
+            "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
         debug_assert!(
             self.index < page.occupied,
-            "ChildRefIndex index out of bounds.",
+            "ChildCursor index out of bounds.",
         );
 
         page.take_lexis(spans, tokens, indices, text);
@@ -629,14 +629,14 @@ impl<N: Node> ChildCursor<N> {
     pub(super) unsafe fn branch_span(&self) -> Length {
         debug_assert!(
             !self.is_dangling(),
-            "An attempt to get span from dangling ChildRefIndex.",
+            "An attempt to get span from dangling ChildCursor.",
         );
 
         let branch = unsafe { self.item.as_branch_ref::<()>().as_ref() };
 
         debug_assert!(
             self.index < branch.inner.occupied,
-            "ChildRefIndex index is out of bounds.",
+            "ChildCursor index is out of bounds.",
         );
 
         unsafe { *branch.inner.spans.get_unchecked(self.index) }
