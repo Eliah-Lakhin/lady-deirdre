@@ -701,11 +701,17 @@ impl<N: Node> MutableUnit<N> {
 
         let cluster_entry = self.update_syntax(cover);
 
-        NodeRef {
+        let cover = NodeRef {
             id: self.id,
             cluster_entry,
             node_entry: Entry::Primary,
+        };
+
+        if self.watch {
+            self.updates.insert(cover);
         }
+
+        cover
     }
 
     pub fn mutations(&self) -> Mutations<'_, N> {
@@ -1348,7 +1354,7 @@ impl<'unit, N: Node> Mutations<'unit, N> {
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.into_iter().next().is_some()
+        self.into_iter().next().is_none()
     }
 
     #[inline(always)]

@@ -318,6 +318,10 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
             unsafe { self.pending.nodes.set_unchecked(index, node) };
 
+            if let Some(updates) = &mut self.updates {
+                updates.insert(node_ref);
+            }
+
             return node_ref;
         }
 
