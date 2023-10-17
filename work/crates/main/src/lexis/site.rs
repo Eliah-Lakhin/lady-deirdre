@@ -188,10 +188,12 @@ impl SiteRef {
     }
 
     #[inline(always)]
-    pub fn token_ref(&self) -> TokenRef {
-        match self.0 {
+    pub fn token_ref(&self) -> &TokenRef {
+        static NIL: TokenRef = TokenRef::nil();
+
+        match &self.0 {
             SiteRefInner::ChunkStart(token_ref) => token_ref,
-            SiteRefInner::CodeEnd(_) => TokenRef::nil(),
+            SiteRefInner::CodeEnd(_) => &NIL,
         }
     }
 
@@ -226,6 +228,14 @@ impl SiteRef {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.is_nil(),
             SiteRefInner::CodeEnd(_) => false,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_code_end(&self) -> bool {
+        match &self.0 {
+            SiteRefInner::CodeEnd(_) => true,
+            _ => false,
         }
     }
 
