@@ -421,6 +421,13 @@ impl Identifiable for NodeRef {
     }
 }
 
+impl Default for NodeRef {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::nil()
+    }
+}
+
 impl PolyRef for NodeRef {
     #[inline(always)]
     fn kind(&self) -> RefKind {

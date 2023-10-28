@@ -66,11 +66,12 @@ pub type EntryVersion = usize;
 ///
 /// See [module documentation](crate::arena) for details on how to avoid this problem in the end
 /// API design.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Entry {
     /// Indicates invalid reference.
     ///
     /// This type of reference cannot be dereferenced.
+    #[default]
     Nil,
 
     /// Indicates a reference to a single data item that resides outside of the main collection.

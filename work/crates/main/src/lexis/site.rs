@@ -146,6 +146,13 @@ impl Identifiable for SiteRef {
     }
 }
 
+impl Default for SiteRef {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::nil()
+    }
+}
+
 unsafe impl ToSite for SiteRef {
     #[inline(always)]
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {

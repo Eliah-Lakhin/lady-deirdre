@@ -396,6 +396,13 @@ impl Identifiable for TokenRef {
     }
 }
 
+impl Default for TokenRef {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::nil()
+    }
+}
+
 impl PolyRef for TokenRef {
     #[inline(always)]
     fn kind(&self) -> RefKind {
