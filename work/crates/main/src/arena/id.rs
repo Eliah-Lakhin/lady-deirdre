@@ -64,6 +64,13 @@ pub struct Id {
     inner: u64,
 }
 
+impl Identifiable for Id {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        *self
+    }
+}
+
 impl Debug for Id {
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         if self.is_nil() {
