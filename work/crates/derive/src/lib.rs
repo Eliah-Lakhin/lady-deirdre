@@ -35,6 +35,8 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+//todo consider replacing HashMap with AHashMap
+
 #![doc = include_str!("../readme.md")]
 //TODO check warnings regularly
 #![allow(warnings)]

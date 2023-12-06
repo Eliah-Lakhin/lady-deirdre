@@ -35,13 +35,15 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(debug_assertions)]
+use crate::syntax::ROOT_RULE;
 use crate::{
     arena::{Entry, Id, Identifiable, Repository},
     compiler::mutable::storage::{ChildCursor, ClusterCache, References, Tree},
     lexis::{Length, Site, SiteRef, Token, TokenCount, TokenCursor, TokenRef},
     report::{debug_assert, debug_assert_eq},
     std::*,
-    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, NodeRule, SyntaxSession, ROOT_RULE},
+    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, NodeRule, SyntaxSession},
 };
 
 pub struct MutableSyntaxSession<'unit, N: Node> {
@@ -287,7 +289,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     fn end_site_ref(&mut self) -> SiteRef {
         self.pending.lookahead_end_site = self.end_site;
 
-        SiteRef::new_code_end(self.id)
+        SiteRef::end_of(self.id)
     }
 }
 
@@ -702,7 +704,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
                 .site_ref()
             }
 
-            true => SiteRef::new_code_end(self.id),
+            true => SiteRef::end_of(self.id),
         }
     }
 

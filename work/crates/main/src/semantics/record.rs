@@ -36,125 +36,95 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable},
-    compiler::{CompilationUnit, Lexis, Syntax},
-    format::SnippetFormatter,
-    lexis::{SourceCode, Token, TokenBuffer},
+    arena::EntryVersion,
+    report::debug_unreachable,
+    semantics::{AttrContext, AttrRef, AttrResult},
     std::*,
-    syntax::{Node, SyntaxBuffer},
+    syntax::NodeRef,
 };
 
-pub struct ImmutableUnit<N: Node> {
-    lexis: TokenBuffer<N::Token>,
-    syntax: SyntaxBuffer<N>,
+pub(super) struct Record {
+    pub(super) verified_at: EntryVersion,
+    pub(super) cache: Option<Cache>,
+    pub(super) node_ref: NodeRef,
+    pub(super) function: &'static dyn Function,
 }
 
-impl<N: Node> Identifiable for ImmutableUnit<N> {
+impl Record {
     #[inline(always)]
-    fn id(&self) -> Id {
-        self.lexis.id()
-    }
-}
-
-impl<N: Node> Debug for ImmutableUnit<N> {
-    #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .debug_struct("ImmutableUnit")
-            .field("id", &self.lexis.id())
-            .field("length", &self.lexis.length())
-            .finish_non_exhaustive()
-    }
-}
-
-impl<N: Node> Display for ImmutableUnit<N> {
-    #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .snippet(self)
-            .set_caption(format!("ImmutableUnit({})", self.id()))
-            .finish()
-    }
-}
-
-impl<N: Node> Lexis for ImmutableUnit<N> {
-    type Lexis = TokenBuffer<N::Token>;
-
-    #[inline(always)]
-    fn lexis(&self) -> &Self::Lexis {
-        &self.lexis
-    }
-}
-
-impl<N: Node> Syntax for ImmutableUnit<N> {
-    type Syntax = SyntaxBuffer<N>;
-
-    #[inline(always)]
-    fn syntax(&self) -> &Self::Syntax {
-        &self.syntax
-    }
-
-    #[inline(always)]
-    fn syntax_mut(&mut self) -> &mut Self::Syntax {
-        &mut self.syntax
-    }
-}
-
-impl<N, S> From<S> for ImmutableUnit<N>
-where
-    N: Node,
-    S: Borrow<str>,
-{
-    #[inline(always)]
-    fn from(string: S) -> Self {
-        Self::new(string.borrow())
-    }
-}
-
-impl<T: Token> TokenBuffer<T> {
-    #[inline(always)]
-    pub fn into_immutable_unit<N>(mut self) -> ImmutableUnit<N>
-    where
-        N: Node<Token = T>,
-    {
-        self.reset_id();
-
-        let syntax = SyntaxBuffer::new(self.id(), self.cursor(..));
-
-        ImmutableUnit {
-            lexis: self,
-            syntax,
+    pub(super) fn new<T: Eq + Send + Sync + 'static>(
+        node_ref: NodeRef,
+        function: &'static (impl Fn(&mut AttrContext) -> AttrResult<T> + Send + Sync + 'static),
+    ) -> Self {
+        Self {
+            verified_at: 0,
+            cache: None,
+            node_ref,
+            function,
         }
     }
 }
 
-impl<N: Node> CompilationUnit for ImmutableUnit<N> {
-    #[inline(always)]
-    fn is_mutable(&self) -> bool {
-        false
-    }
+pub(super) struct Cache {
+    pub(super) dirty: bool,
+    pub(super) updated_at: EntryVersion,
+    pub(super) memo: Box<dyn Memo>,
+    pub(super) deps: StdSet<AttrRef>,
+}
 
+impl Cache {
+    // Safety: `T` properly describes `memo` type.
     #[inline(always)]
-    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
-        self.lexis.reset_id();
+    pub(super) unsafe fn downcast_ref<T: 'static>(&self) -> &T {
+        if self.memo.memo_type_id() != TypeId::of::<T>() {
+            // Safety: Upheld by the caller.
+            unsafe { debug_unreachable!("Incorrect memo type.") }
+        }
 
-        self.lexis
-    }
-
-    #[inline(always)]
-    fn into_immutable_unit(self) -> ImmutableUnit<N> {
-        self
+        // Safety: Upheld by the caller.
+        unsafe { &*(self.memo.deref() as *const dyn Memo as *const T) }
     }
 }
 
-impl<N: Node> ImmutableUnit<N> {
-    pub fn new(text: impl AsRef<str>) -> Self {
-        let mut lexis = TokenBuffer::<N::Token>::default();
+pub(super) trait Memo: Send + Sync + 'static {
+    fn memo_type_id(&self) -> TypeId;
 
-        lexis.append(text.borrow());
+    // Safety: `self` and `other` represent the same types.
+    unsafe fn memo_eq(&self, other: &dyn Memo) -> bool;
+}
 
-        let syntax = SyntaxBuffer::new(lexis.id(), lexis.cursor(..));
+impl<T: Eq + Send + Sync + 'static> Memo for T {
+    #[inline(always)]
+    fn memo_type_id(&self) -> TypeId {
+        TypeId::of::<T>()
+    }
 
-        Self { lexis, syntax }
+    #[inline(always)]
+    unsafe fn memo_eq(&self, other: &dyn Memo) -> bool {
+        if self.memo_type_id() != other.memo_type_id() {
+            // Safety: Upheld by the caller.
+            unsafe { debug_unreachable!("Incorrect memo type.") }
+        }
+
+        // Safety: Upheld by the caller.
+        let other = unsafe { &*(other as *const dyn Memo as *const T) };
+
+        self.eq(other)
+    }
+}
+
+pub(super) trait Function: Send + Sync + 'static {
+    fn invoke(&self, context: &mut AttrContext) -> AttrResult<Box<dyn Memo>>;
+}
+
+impl<T, F> Function for F
+where
+    T: Eq + Send + Sync + 'static,
+    F: Fn(&mut AttrContext) -> AttrResult<T>,
+    F: Send + Sync + 'static,
+{
+    #[inline(always)]
+    fn invoke(&self, context: &mut AttrContext) -> AttrResult<Box<dyn Memo>> {
+        Ok(Box::new(self(context)?))
     }
 }

@@ -131,10 +131,10 @@ impl SnippetConfig {
         }
 
         match priority {
-            Priority::Default => Style::default().underline(),
-            Priority::Primary => Style::default().bold().red(),
-            Priority::Secondary => Style::default().bold().blue(),
-            Priority::Note => Style::default().bold().yellow(),
+            Priority::Default => Style::default().invert(),
+            Priority::Primary => Style::default().invert().red(),
+            Priority::Secondary => Style::default().invert().blue(),
+            Priority::Note => Style::default().invert().yellow(),
         }
     }
 
@@ -150,7 +150,7 @@ impl SnippetConfig {
     fn placeholder(&self) -> char {
         match self.ascii_drawing {
             true => ' ',
-            false => '▒',
+            false => ' ',
         }
     }
 
@@ -755,7 +755,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
             if self.config.style {
                 if let Some(highlighter) = &mut self.highlighter {
-                    token_style = Some(highlighter.token_style(dim, chunk.token))
+                    token_style = highlighter.token_style(dim, chunk.token);
                 }
             }
 
@@ -806,7 +806,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                 }
 
                 scanner.pending.code.style = match scanner.top() {
-                    None => token_style.flatten().unwrap_or(code_style),
+                    None => token_style.unwrap_or(code_style),
 
                     Some(top) => {
                         let priority = match self.annotations.get(top) {

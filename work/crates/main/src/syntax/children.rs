@@ -114,7 +114,7 @@ impl FromIterator<(&'static str, Child)> for Children {
     fn from_iter<T: IntoIterator<Item = (&'static str, Child)>>(iter: T) -> Self {
         let vector = iter.into_iter().collect::<Vec<_>>();
 
-        let mut map = StdMap::new_std_map(vector.len());
+        let mut map = StdMap::new_std_map_with_capacity(vector.len());
 
         for (index, (key, _)) in vector.iter().enumerate() {
             if map.insert(*key, index).is_some() {
@@ -131,17 +131,13 @@ impl Children {
     pub fn new() -> Self {
         Self {
             vector: Vec::new(),
-            map: StdMap::new(),
+            map: StdMap::new_std_map(),
         }
     }
 
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
-        #[cfg(not(feature = "std"))]
-        let map = StdMap::new();
-
-        #[cfg(feature = "std")]
-        let map = StdMap::with_capacity(capacity);
+        let map = StdMap::new_std_map_with_capacity(capacity);
 
         Self {
             vector: Vec::with_capacity(capacity),
@@ -280,9 +276,24 @@ impl<'a> Iterator for ChildrenIter<'a> {
         let (_, result) = self.iterator.next()?;
         Some(result)
     }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iterator.size_hint()
+    }
 }
 
 impl<'a> FusedIterator for ChildrenIter<'a> {}
+
+impl<'a> DoubleEndedIterator for ChildrenIter<'a> {
+    #[inline(always)]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let (_, result) = self.iterator.next_back()?;
+        Some(result)
+    }
+}
+
+impl<'a> ExactSizeIterator for ChildrenIter<'a> {}
 
 #[repr(transparent)]
 pub struct ChildrenIntoIter {
@@ -297,9 +308,24 @@ impl Iterator for ChildrenIntoIter {
         let (_, result) = self.iterator.next()?;
         Some(result)
     }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iterator.size_hint()
+    }
 }
 
 impl FusedIterator for ChildrenIntoIter {}
+
+impl DoubleEndedIterator for ChildrenIntoIter {
+    #[inline(always)]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let (_, result) = self.iterator.next_back()?;
+        Some(result)
+    }
+}
+
+impl ExactSizeIterator for ChildrenIntoIter {}
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Child {
@@ -397,9 +423,12 @@ impl<'a> IntoIterator for &'a Child {
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
+        let len = self.len();
+
         ChildIter {
             child: self,
             index: 0,
+            len,
         }
     }
 }
@@ -410,9 +439,12 @@ impl IntoIterator for Child {
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
+        let len = self.len();
+
         ChildIntoIter {
             child: self,
             index: 0,
+            len,
         }
     }
 }
@@ -505,6 +537,7 @@ impl Child {
 pub struct ChildIter<'a> {
     child: &'a Child,
     index: usize,
+    len: usize,
 }
 
 impl<'a> Iterator for ChildIter<'a> {
@@ -512,19 +545,40 @@ impl<'a> Iterator for ChildIter<'a> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.len {
+            return None;
+        }
+
         let result = self.child.get(self.index)?;
 
         self.index += 1;
 
         Some(result)
     }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.len - self.index;
+
+        (remaining, Some(remaining))
+    }
 }
 
 impl<'a> FusedIterator for ChildIter<'a> {}
 
+impl<'a> DoubleEndedIterator for ChildIter<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.len = self.len.checked_sub(1)?;
+        self.child.get(self.len)
+    }
+}
+
+impl<'a> ExactSizeIterator for ChildIter<'a> {}
+
 pub struct ChildIntoIter {
     child: Child,
     index: usize,
+    len: usize,
 }
 
 impl Iterator for ChildIntoIter {
@@ -538,6 +592,22 @@ impl Iterator for ChildIntoIter {
 
         Some(result.as_variant())
     }
+
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.len - self.index;
+
+        (remaining, Some(remaining))
+    }
 }
 
 impl FusedIterator for ChildIntoIter {}
+
+impl DoubleEndedIterator for ChildIntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.len = self.len.checked_sub(1)?;
+        Some(self.child.get(self.len)?.as_variant())
+    }
+}
+
+impl ExactSizeIterator for ChildIntoIter {}

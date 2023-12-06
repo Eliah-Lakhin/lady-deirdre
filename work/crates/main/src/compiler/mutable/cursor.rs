@@ -196,7 +196,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
     #[inline(always)]
     fn end_site_ref(&mut self) -> SiteRef {
         if self.end_chunk_cursor.is_dangling() {
-            return SiteRef::new_code_end(self.unit.id());
+            return SiteRef::end_of(self.unit.id());
         }
 
         let entry_index = unsafe { self.end_chunk_cursor.chunk_entry_index() };

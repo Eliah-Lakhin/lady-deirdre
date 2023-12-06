@@ -57,10 +57,9 @@ pub use crate::utils::{
     dump::Dump,
     expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
     facade::Facade,
-    map::{Map, MapImpl},
+    map::Map,
     predictable::PredictableCollection,
     set::{Set, SetImpl},
-    transitions::Transitions,
 };
 
 pub mod dump_kw {

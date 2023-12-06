@@ -182,7 +182,7 @@ impl ParseError {
                         context: NodeRule,
                         recovery: RecoveryResult,
                     ) -> Self {
-                        let set = StdSet::new_std_set(capacity);
+                        let set = StdSet::new_std_set_with_capacity(capacity);
 
                         let context = N::describe(context, true)
                             .filter(|_| context != ROOT_RULE)
@@ -640,7 +640,7 @@ impl ParseError {
 ///
 /// For details on the Weak references framework design see [Arena](crate::arena) module
 /// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ErrorRef {
     /// An [identifier](crate::arena::Id) of the [SyntaxTree](crate::syntax::SyntaxTree) instance
     /// this weakly referred error object belongs to.

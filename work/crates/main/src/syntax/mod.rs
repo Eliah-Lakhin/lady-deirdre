@@ -62,5 +62,5 @@ pub use crate::syntax::{
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,
-    tree::{ErrorIter, NodeIter, SyntaxTree, Visitor},
+    tree::{ErrorIter, ErrorRefsIter, NodeIter, NodeRefsIter, SyntaxTree, Visitor},
 };

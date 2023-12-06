@@ -436,6 +436,7 @@ impl NodeVariant {
                 input
                     .make_fn(
                         function_ident,
+                        false,
                         vec![],
                         Some(input.this()),
                         parser.to_token_stream(),
@@ -501,6 +502,7 @@ impl NodeVariant {
             input
                 .make_fn(
                     function_ident,
+                    false,
                     vec![],
                     Some(input.this()),
                     quote_spanned!(span=>

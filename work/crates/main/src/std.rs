@@ -38,43 +38,39 @@
 //TODO cleanup unused reexports.
 
 #[cfg(not(feature = "std"))]
-pub use ::alloc::{
-    borrow::{Cow, ToOwned},
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+extern crate core;
+
+#[cfg(not(feature = "std"))]
+pub(crate) use alloc::{
+    borrow::Cow,
     boxed::Box,
-    collections::{
-        btree_set::Iter as StdSetIter,
-        BTreeMap as StdMap,
-        BTreeSet as StdSet,
-        LinkedList,
-        VecDeque,
-    },
+    collections::{btree_set::Iter as StdSetIter, BTreeMap, BTreeSet, VecDeque},
     format,
-    rc::{Rc, Weak as SyncWeak},
     string::{String, ToString},
-    sync::Arc,
     vec::{IntoIter, Vec},
 };
 #[cfg(not(feature = "std"))]
-pub use ::core::{
-    any::{Any, TypeId},
+pub(crate) use core::{
+    any::TypeId,
     assert_eq,
     assert_ne,
-    borrow::{Borrow, BorrowMut},
+    borrow::Borrow,
     cell::UnsafeCell,
     clone::Clone,
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     column,
     concat,
-    convert::{AsRef, From, Into},
+    convert::{AsRef, From, Into, TryFrom},
     default::Default,
     file,
-    fmt::{Arguments as FmtArguments, Debug, Display, Formatter, Result as FmtResult},
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
     format_args,
-    hash::{Hash, Hasher},
+    hash::{BuildHasher, Hash, Hasher},
     hint::{spin_loop, unreachable_unchecked},
     iter::{
         repeat,
-        Copied,
         DoubleEndedIterator,
         Enumerate,
         ExactSizeIterator,
@@ -84,14 +80,12 @@ pub use ::core::{
         FusedIterator,
         IntoIterator,
         Iterator,
-        Map,
         Peekable,
     },
     line,
     marker::{Copy, PhantomData, Send, Sized, Sync},
     matches,
-    mem::{forget, replace, take, transmute, ManuallyDrop, MaybeUninit},
-    num::NonZeroUsize,
+    mem::{replace, take, transmute, MaybeUninit},
     ops::{
         AddAssign,
         Deref,
@@ -101,7 +95,6 @@ pub use ::core::{
         FnMut,
         FnOnce,
         Index,
-        IndexMut,
         Range,
         RangeFrom,
         RangeFull,
@@ -112,11 +105,10 @@ pub use ::core::{
     option::Option,
     option::Option::*,
     panic,
-    ptr::{copy, copy_nonoverlapping, swap, NonNull},
-    result::Result,
+    ptr::{copy, copy_nonoverlapping, NonNull},
     result::Result::{Err, Ok},
-    slice::Iter,
-    str::{from_utf8, from_utf8_unchecked, Chars},
+    slice::{Iter, IterMut},
+    str::{from_utf8, from_utf8_unchecked},
     sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering},
     todo,
     unimplemented,
@@ -126,20 +118,26 @@ pub use ::core::{
 #[cfg(feature = "std")]
 extern crate std;
 #[cfg(feature = "std")]
-pub use std::{
-    any::{Any, TypeId},
+pub(crate) use std::{
+    any::TypeId,
     assert_eq,
     assert_ne,
-    borrow::{Borrow, BorrowMut, Cow, ToOwned},
+    borrow::{Borrow, Cow},
     boxed::Box,
     cell::UnsafeCell,
     clone::Clone,
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     collections::{
+        hash_map::{
+            Drain,
+            Entry as HashMapEntry,
+            IntoIter as HashMapIntoIter,
+            OccupiedEntry,
+            RandomState,
+            VacantEntry,
+        },
         hash_set::Iter as StdSetIter,
-        HashMap as StdMap,
-        HashSet as StdSet,
-        LinkedList,
+        HashMap,
         VecDeque,
     },
     column,
@@ -147,21 +145,13 @@ pub use std::{
     convert::{AsRef, From, Into, TryFrom},
     default::Default,
     file,
-    fmt::{
-        Arguments as FmtArguments,
-        Debug,
-        Display,
-        Error as FmtError,
-        Formatter,
-        Result as FmtResult,
-    },
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
     format,
     format_args,
-    hash::{Hash, Hasher},
+    hash::{BuildHasher, Hash, Hasher},
     hint::{spin_loop, unreachable_unchecked},
     iter::{
         repeat,
-        Copied,
         DoubleEndedIterator,
         Enumerate,
         ExactSizeIterator,
@@ -171,14 +161,12 @@ pub use std::{
         FusedIterator,
         IntoIterator,
         Iterator,
-        Map,
         Peekable,
     },
     line,
     marker::{Copy, PhantomData, Send, Sized, Sync},
     matches,
-    mem::{forget, replace, take, transmute, ManuallyDrop, MaybeUninit},
-    num::NonZeroUsize,
+    mem::{drop, replace, size_of, take, transmute, ManuallyDrop, MaybeUninit},
     ops::{
         AddAssign,
         Deref,
@@ -188,7 +176,6 @@ pub use std::{
         FnMut,
         FnOnce,
         Index,
-        IndexMut,
         Range,
         RangeFrom,
         RangeFull,
@@ -199,35 +186,48 @@ pub use std::{
     option::Option,
     option::Option::*,
     panic,
-    println,
-    ptr::{copy, copy_nonoverlapping, swap, NonNull},
-    rc::{Rc, Weak as SyncWeak},
+    ptr::{copy, copy_nonoverlapping, NonNull},
     result::Result,
     result::Result::{Err, Ok},
-    slice::Iter,
-    str::{from_utf8, from_utf8_unchecked, Chars},
+    slice::{Iter, IterMut},
+    str::{from_utf8, from_utf8_unchecked},
     string::{String, ToString},
     sync::{
-        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering},
-        Arc,
-        Weak as AsyncWeak,
+        atomic::{fence, AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering},
+        OnceLock,
+        RwLock,
+        RwLockReadGuard,
+        RwLockWriteGuard,
     },
-    thread::panicking,
-    todo,
+    thread::{available_parallelism, panicking, spawn},
+    thread_local,
     unimplemented,
     unreachable,
     vec::IntoIter,
     vec::Vec,
 };
 
+#[cfg(feature = "std")]
+pub(crate) type StdMap<K, V> = HashMap<K, V>;
+
+#[cfg(not(feature = "std"))]
+pub(crate) type StdMap<K, V> = BTreeMap<K, V>;
+
 pub(crate) trait StdMapEx<K, V> {
-    fn new_std_map(capacity: usize) -> Self;
+    fn new_std_map() -> Self;
+
+    fn new_std_map_with_capacity(capacity: usize) -> Self;
 }
 
 #[cfg(feature = "std")]
 impl<K, V> StdMapEx<K, V> for StdMap<K, V> {
     #[inline(always)]
-    fn new_std_map(capacity: usize) -> Self {
+    fn new_std_map() -> Self {
+        Self::new()
+    }
+
+    #[inline(always)]
+    fn new_std_map_with_capacity(capacity: usize) -> Self {
         Self::with_capacity(capacity)
     }
 }
@@ -235,27 +235,70 @@ impl<K, V> StdMapEx<K, V> for StdMap<K, V> {
 #[cfg(not(feature = "std"))]
 impl<K, V> StdMapEx<K, V> for StdMap<K, V> {
     #[inline(always)]
-    fn new_std_map(_capacity: usize) -> Self {
+    fn new_std_map() -> Self {
+        Self::new()
+    }
+
+    #[inline(always)]
+    fn new_std_map_with_capacity(_capacity: usize) -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "std")]
+pub(crate) type StdSet<T> = std::collections::HashSet<T>;
+
+#[cfg(not(feature = "std"))]
+pub(crate) type StdSet<T> = BTreeSet<T>;
+
 pub(crate) trait StdSetEx<K> {
-    fn new_std_set(capacity: usize) -> Self;
+    fn new_std_set() -> Self;
+
+    fn new_std_set_with_capacity(capacity: usize) -> Self;
+
+    fn std_set_drain(&mut self, capacity: usize) -> Vec<K>
+    where
+        K: Eq + Hash;
 }
 
 #[cfg(feature = "std")]
 impl<K> StdSetEx<K> for StdSet<K> {
+    fn new_std_set() -> Self {
+        Self::new()
+    }
+
     #[inline(always)]
-    fn new_std_set(capacity: usize) -> Self {
+    fn new_std_set_with_capacity(capacity: usize) -> Self {
         Self::with_capacity(capacity)
+    }
+
+    #[inline(always)]
+    fn std_set_drain(&mut self, capacity: usize) -> Vec<K>
+    where
+        K: Eq + Hash,
+    {
+        let result = self.drain().collect();
+
+        self.shrink_to(capacity);
+
+        result
     }
 }
 
 #[cfg(not(feature = "std"))]
-impl<K> StdSetEx<K> for StdMap<K> {
+impl<K> StdSetEx<K> for StdSet<K> {
     #[inline(always)]
-    fn new_std_set(_capacity: usize) -> Self {
+    fn new_std_set() -> Self {
         Self::new()
+    }
+
+    #[inline(always)]
+    fn new_std_set_with_capacity(_capacity: usize) -> Self {
+        Self::new()
+    }
+
+    #[inline(always)]
+    fn std_set_drain(&mut self, _capacity: usize) -> Vec<K> {
+        replace(self, Self::new_std_set()).into_iter().collect()
     }
 }

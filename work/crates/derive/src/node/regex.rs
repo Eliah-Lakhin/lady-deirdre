@@ -714,15 +714,19 @@ impl ExpressionOperator for Operator {
     #[inline]
     fn parse(&mut self, input: ParseStream) -> Result<()> {
         match self {
-            Self::Union => drop(input.parse::<Token![|]>()?),
+            Self::Union => {
+                let _ = input.parse::<Token![|]>()?;
+            }
 
             Self::Concat => {
                 if input.peek(Token![&]) {
-                    drop(input.parse::<Token![&]>()?)
+                    let _ = input.parse::<Token![&]>()?;
                 }
             }
 
-            Self::Optional => drop(input.parse::<Token![?]>()?),
+            Self::Optional => {
+                let _ = input.parse::<Token![?]>()?;
+            }
 
             Self::OneOrMore(sep) => {
                 let _ = input.parse::<Token![+]>()?;

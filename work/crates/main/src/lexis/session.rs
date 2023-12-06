@@ -35,9 +35,11 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(debug_assertions)]
+use crate::report::system_panic;
 use crate::{
     lexis::{ByteIndex, Site, Token, TokenBuffer},
-    report::{debug_assert, debug_assert_ne, system_panic},
+    report::{debug_assert, debug_assert_ne},
     std::*,
 };
 

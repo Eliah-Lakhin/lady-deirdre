@@ -185,13 +185,13 @@ impl SiteRef {
     }
 
     #[inline(always)]
-    pub(crate) const fn new_code_end(code_id: Id) -> Self {
-        Self(SiteRefInner::CodeEnd(code_id))
+    pub const fn start_of(reference: TokenRef) -> Self {
+        Self(SiteRefInner::ChunkStart(reference))
     }
 
     #[inline(always)]
-    pub(super) const fn new_chunk_start(reference: TokenRef) -> Self {
-        Self(SiteRefInner::ChunkStart(reference))
+    pub const fn end_of(code_id: Id) -> Self {
+        Self(SiteRefInner::CodeEnd(code_id))
     }
 
     #[inline(always)]

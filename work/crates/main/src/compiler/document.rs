@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    compiler::{CompilationUnit, ImmutableUnit, MutableUnit},
+    compiler::{CompilationUnit, ImmutableUnit, MutableUnit, Mutations},
     lexis::{
         Length,
         Site,
@@ -291,6 +291,16 @@ impl<N: Node> CompilationUnit for Document<N> {
 
 impl<N: Node> Document<N> {
     #[inline(always)]
+    pub fn new_mutable(text: impl AsRef<str>, watch: bool) -> Self {
+        Self::Mutable(MutableUnit::new(text, watch))
+    }
+
+    #[inline(always)]
+    pub fn new_immutable(text: impl AsRef<str>) -> Self {
+        Self::Immutable(ImmutableUnit::new(text))
+    }
+
+    #[inline(always)]
     pub fn is_mutable(&self) -> bool {
         match self {
             Self::Mutable(..) => true,
@@ -314,6 +324,14 @@ impl<N: Node> Document<N> {
         };
 
         unit.write(span, text)
+    }
+
+    #[inline(always)]
+    pub fn mutations(&mut self) -> Option<Mutations<N>> {
+        match self {
+            Self::Mutable(unit) => Some(unit.mutations()),
+            Self::Immutable(..) => None,
+        }
     }
 
     #[inline(always)]

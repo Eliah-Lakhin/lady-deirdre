@@ -65,6 +65,8 @@ use crate::{
     syntax::{Cluster, ClusterRef, NoSyntax, Node, NodeRef, SyntaxTree, NON_RULE, ROOT_RULE},
 };
 
+const UPDATES_CAPACITY: usize = 100;
+
 /// An incrementally managed compilation unit.
 ///
 /// Document is a storage of a compilation unit(a source code of the file) with incremental update
@@ -551,8 +553,9 @@ impl<N: Node> Default for MutableUnit<N> {
         let id = Id::new();
         let mut tree = Tree::default();
         let mut references = References::default();
+        let mut updates = StdSet::new_std_set();
 
-        let root_cluster = Self::initial_parse(id, &mut tree, &mut references);
+        let root_cluster = Self::initial_parse(id, &mut tree, &mut references, &mut updates, false);
 
         Self {
             id,
@@ -560,7 +563,7 @@ impl<N: Node> Default for MutableUnit<N> {
             tree,
             token_count: 0,
             references,
-            updates: StdSet::new(),
+            updates,
             watch: false,
         }
     }
@@ -573,11 +576,7 @@ where
 {
     #[inline(always)]
     fn from(string: S) -> Self {
-        let mut buffer = TokenBuffer::<N::Token>::default();
-
-        buffer.append(string.borrow());
-
-        buffer.into_mutable_unit()
+        Self::new(string.borrow(), false)
     }
 }
 
@@ -635,6 +634,54 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
 }
 
 impl<N: Node> MutableUnit<N> {
+    #[inline(always)]
+    pub fn new(text: impl AsRef<str>, watch: bool) -> Self {
+        let mut buffer = TokenBuffer::<N::Token>::default();
+
+        buffer.append(text);
+
+        Self::from_token_buffer(buffer, watch)
+    }
+
+    fn from_token_buffer(mut buffer: TokenBuffer<N::Token>, watch: bool) -> Self {
+        let id = Id::new();
+
+        let token_count = buffer.token_count();
+        let spans = take(&mut buffer.spans).into_vec().into_iter();
+        let indices = take(&mut buffer.indices).into_vec().into_iter();
+        let tokens = take(&mut buffer.tokens).into_vec().into_iter();
+        let mut references = References::with_capacity(token_count);
+
+        let mut tree = unsafe {
+            Tree::from_chunks(
+                &mut references,
+                token_count,
+                spans,
+                indices,
+                tokens,
+                buffer.text.as_str(),
+            )
+        };
+
+        let mut updates = match watch {
+            true => StdSet::new_std_set_with_capacity(UPDATES_CAPACITY),
+            false => StdSet::new_std_set(),
+        };
+
+        let root_cluster =
+            MutableUnit::initial_parse(id, &mut tree, &mut references, &mut updates, watch);
+
+        Self {
+            id,
+            root_cluster,
+            tree,
+            token_count,
+            references,
+            updates,
+            watch,
+        }
+    }
+
     /// Replaces a spanned substring of the source code with provided `text` string, and re-parses
     /// Document's lexical and syntax structure relatively to these changes.
     ///
@@ -714,21 +761,8 @@ impl<N: Node> MutableUnit<N> {
         cover
     }
 
-    pub fn mutations(&self) -> Mutations<'_, N> {
-        Mutations {
-            unit: self,
-            updates: &self.updates,
-        }
-    }
-
-    #[inline(always)]
-    pub fn watch_mutations(&mut self, watch: bool) {
-        self.watch = watch;
-    }
-
-    #[inline(always)]
-    pub fn flush_mutations(&mut self) {
-        self.updates.clear();
+    pub fn mutations(&mut self) -> Mutations<'_, N> {
+        Mutations { unit: self }
     }
 
     #[inline(always)]
@@ -1281,6 +1315,8 @@ impl<N: Node> MutableUnit<N> {
         id: Id,
         tree: &'unit mut Tree<N>,
         references: &'unit mut References<N>,
+        updates: &'unit mut StdSet<NodeRef>,
+        watch: bool,
     ) -> Cluster<N> {
         let head = tree.first();
 
@@ -1289,7 +1325,10 @@ impl<N: Node> MutableUnit<N> {
                 id,
                 tree,
                 references,
-                None,
+                match watch {
+                    true => Some(updates),
+                    false => None,
+                },
                 ROOT_RULE,
                 0,
                 head,
@@ -1297,26 +1336,24 @@ impl<N: Node> MutableUnit<N> {
             )
         };
 
+        if watch {
+            let cover = NodeRef {
+                id,
+                cluster_entry: Entry::Primary,
+                node_entry: Entry::Primary,
+            };
+
+            let _ = updates.insert(cover);
+        }
+
         cluster_cache.cluster
     }
 }
 
+#[repr(transparent)]
 pub struct Mutations<'unit, N: Node> {
-    unit: &'unit MutableUnit<N>,
-    updates: &'unit StdSet<NodeRef>,
+    unit: &'unit mut MutableUnit<N>,
 }
-
-impl<'unit, N: Node> Clone for Mutations<'unit, N> {
-    #[inline(always)]
-    fn clone(&self) -> Self {
-        Self {
-            unit: self.unit,
-            updates: self.updates,
-        }
-    }
-}
-
-impl<'unit, N: Node> Copy for Mutations<'unit, N> {}
 
 impl<'unit, N: Node> Debug for Mutations<'unit, N> {
     #[inline(always)]
@@ -1325,7 +1362,7 @@ impl<'unit, N: Node> Debug for Mutations<'unit, N> {
 
         let mut debug_set = formatter.debug_set();
 
-        for update in *self {
+        for update in &self.unit.updates {
             debug_set.entry(update);
         }
 
@@ -1333,59 +1370,47 @@ impl<'unit, N: Node> Debug for Mutations<'unit, N> {
     }
 }
 
-impl<'unit, N: Node> IntoIterator for Mutations<'unit, N> {
-    type Item = &'unit NodeRef;
-    type IntoIter = MutationsIter<'unit, N>;
+impl<'a, 'unit, N: Node> IntoIterator for &'a Mutations<'unit, N> {
+    type Item = &'a NodeRef;
+    type IntoIter = StdSetIter<'a, NodeRef>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
-        MutationsIter {
-            unit: self.unit,
-            iterator: self.updates.iter(),
-        }
+        self.unit.updates.iter()
     }
 }
 
 impl<'unit, N: Node> Mutations<'unit, N> {
     #[inline(always)]
-    pub fn unit(&self) -> &'unit MutableUnit<N> {
+    pub fn unit(&self) -> &MutableUnit<N> {
         self.unit
     }
 
     #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.into_iter().next().is_none()
+    pub fn watch(&mut self, watch: bool) {
+        self.unit.watch = watch;
+    }
+
+    #[inline(always)]
+    pub fn iter(&self) -> impl Iterator<Item = &NodeRef> + '_ {
+        self.unit.updates.iter()
     }
 
     #[inline(always)]
     pub fn contains(&self, node_ref: &NodeRef) -> bool {
-        self.updates.contains(node_ref)
+        self.unit.updates.contains(node_ref)
     }
-}
-
-pub struct MutationsIter<'unit, N: Node> {
-    unit: &'unit MutableUnit<N>,
-    iterator: StdSetIter<'unit, NodeRef>,
-}
-
-impl<'unit, N: Node> Iterator for MutationsIter<'unit, N> {
-    type Item = &'unit NodeRef;
 
     #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(update) = self.iterator.next() {
-            if !update.is_valid_ref(self.unit) {
-                continue;
-            }
+    pub fn take(&mut self) -> Vec<NodeRef> {
+        self.unit.updates.std_set_drain(UPDATES_CAPACITY)
+    }
 
-            return Some(update);
-        }
-
-        None
+    #[inline(always)]
+    pub fn flush(&mut self) {
+        self.unit.updates.clear();
     }
 }
-
-impl<'unit, N: Node> FusedIterator for MutationsIter<'unit, N> {}
 
 impl<T: Token> TokenBuffer<T> {
     /// Turns this buffer into incremental [Document](crate::Document) instance.
@@ -1404,40 +1429,11 @@ impl<T: Token> TokenBuffer<T> {
     /// let _doc = buf.into_document::<SimpleNode>();
     /// ```
     #[inline(always)]
-    pub fn into_mutable_unit<N>(mut self) -> MutableUnit<N>
+    pub fn into_mutable_unit<N>(self) -> MutableUnit<N>
     where
         N: Node<Token = T>,
     {
-        let id = Id::new();
-
-        let token_count = self.token_count();
-        let spans = take(&mut self.spans).into_vec().into_iter();
-        let indices = take(&mut self.indices).into_vec().into_iter();
-        let tokens = take(&mut self.tokens).into_vec().into_iter();
-        let mut references = References::with_capacity(token_count);
-
-        let mut tree = unsafe {
-            Tree::from_chunks(
-                &mut references,
-                token_count,
-                spans,
-                indices,
-                tokens,
-                self.text.as_str(),
-            )
-        };
-
-        let root_cluster = MutableUnit::initial_parse(id, &mut tree, &mut references);
-
-        MutableUnit {
-            id,
-            root_cluster,
-            tree,
-            token_count,
-            references,
-            updates: StdSet::new(),
-            watch: false,
-        }
+        MutableUnit::from_token_buffer(self, false)
     }
 }
 

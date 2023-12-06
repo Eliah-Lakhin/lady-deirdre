@@ -35,42 +35,42 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////
-// A part of this file's source code is an adaptation of David Tolnay's       //
-// "prettyplease" work.                                                       //
-//                                                                            //
-// David Tolnay's original work available here:                               //
-// https://github.com/dtolnay/prettyplease/tree/6f7a9eebd7052fd5c37a84135e1daa7599176e7e
-//                                                                            //
-// David Tolnay provided his work under the following terms:                  //
-//                                                                            //
-//   Permission is hereby granted, free of charge, to any                     //
-//   person obtaining a copy of this software and associated                  //
-//   documentation files (the "Software"), to deal in the                     //
-//   Software without restriction, including without                          //
-//   limitation the rights to use, copy, modify, merge,                       //
-//   publish, distribute, sublicense, and/or sell copies of                   //
-//   the Software, and to permit persons to whom the Software                 //
-//   is furnished to do so, subject to the following                          //
-//   conditions:                                                              //
-//                                                                            //
-//   The above copyright notice and this permission notice                    //
-//   shall be included in all copies or substantial portions                  //
-//   of the Software.                                                         //
-//                                                                            //
-//   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF                    //
-//   ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED                  //
-//   TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A                      //
-//   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT                      //
-//   SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY                 //
-//   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION                  //
-//   OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR                  //
-//   IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER                      //
-//   DEALINGS IN THE SOFTWARE.                                                //
-//                                                                            //
-// Kindly be advised that the terms governing the distribution of my work are //
-// distinct from those pertaining to the original work of David Tolnay.       //
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
+// A part of this file's source code is an adaptation of David Tolnay's                  //
+// "prettyplease" work.                                                                  //
+//                                                                                       //
+// David Tolnay's original work available here:                                          //
+// https://github.com/dtolnay/prettyplease/tree/6f7a9eebd7052fd5c37a84135e1daa7599176e7e //
+//                                                                                       //
+// David Tolnay provided his work under the following terms:                             //
+//                                                                                       //
+//   Permission is hereby granted, free of charge, to any                                //
+//   person obtaining a copy of this software and associated                             //
+//   documentation files (the "Software"), to deal in the                                //
+//   Software without restriction, including without                                     //
+//   limitation the rights to use, copy, modify, merge,                                  //
+//   publish, distribute, sublicense, and/or sell copies of                              //
+//   the Software, and to permit persons to whom the Software                            //
+//   is furnished to do so, subject to the following                                     //
+//   conditions:                                                                         //
+//                                                                                       //
+//   The above copyright notice and this permission notice                               //
+//   shall be included in all copies or substantial portions                             //
+//   of the Software.                                                                    //
+//                                                                                       //
+//   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF                               //
+//   ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED                             //
+//   TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A                                 //
+//   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT                                 //
+//   SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY                            //
+//   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION                             //
+//   OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR                             //
+//   IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER                                 //
+//   DEALINGS IN THE SOFTWARE.                                                           //
+//                                                                                       //
+// Kindly be advised that the terms governing the distribution of my work are            //
+// distinct from those pertaining to the original work of David Tolnay.                  //
+///////////////////////////////////////////////////////////////////////////////////////////
 
 use crate::std::*;
 

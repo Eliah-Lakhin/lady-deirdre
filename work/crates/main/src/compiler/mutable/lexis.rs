@@ -35,10 +35,12 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(debug_assertions)]
+use crate::report::system_panic;
 use crate::{
     compiler::mutable::storage::ChildCursor,
     lexis::{ByteIndex, Length, LexisSession, Site, Token, TokenCount, CHUNK_SIZE},
-    report::{debug_assert, debug_assert_ne, debug_unreachable, system_panic},
+    report::{debug_assert, debug_assert_ne, debug_unreachable},
     std::*,
     syntax::Node,
 };

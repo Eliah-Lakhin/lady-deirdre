@@ -179,6 +179,13 @@ impl Style {
     }
 
     #[inline(always)]
+    pub const fn invert(mut self) -> Self {
+        self.emphasis.invert = true;
+
+        self
+    }
+
+    #[inline(always)]
     pub const fn fg(mut self, color: Color) -> Self {
         self.fg = Some(color);
 
@@ -193,20 +200,30 @@ impl Style {
     }
 
     pub(super) fn change(from: &Self, to: &Self, target: &mut String) {
-        Emphasis::change(&from.emphasis, &to.emphasis, target);
+        if Emphasis::change(&from.emphasis, &to.emphasis, target) {
+            match (&from.fg, &to.fg) {
+                (Some(_), None) => Color::reset_fg(target),
+                (None, Some(to)) => to.apply_fg(target),
+                (Some(from), Some(to)) if from != to => to.apply_fg(target),
+                _ => (),
+            }
 
-        match (&from.fg, &to.fg) {
-            (Some(_), None) => Color::reset_fg(target),
-            (None, Some(to)) => to.apply_fg(target),
-            (Some(from), Some(to)) if from != to => to.apply_fg(target),
-            _ => (),
+            match (&from.bg, &to.bg) {
+                (Some(_), None) => Color::reset_bg(target),
+                (None, Some(to)) => to.apply_bg(target),
+                (Some(from), Some(to)) if from != to => to.apply_bg(target),
+                _ => (),
+            }
+
+            return;
         }
 
-        match (&from.bg, &to.bg) {
-            (Some(_), None) => Color::reset_bg(target),
-            (None, Some(to)) => to.apply_bg(target),
-            (Some(from), Some(to)) if from != to => to.apply_bg(target),
-            _ => (),
+        if let Some(to) = &to.fg {
+            to.apply_fg(target);
+        }
+
+        if let Some(to) = &to.bg {
+            to.apply_bg(target);
         }
     }
 
@@ -235,14 +252,8 @@ pub trait TerminalString: AsRef<str> {
 
         target.push_str(source);
 
-        style.emphasis.reset(&mut target);
-
-        if style.bg.is_some() {
-            Color::reset_bg(&mut target);
-        }
-
-        if style.fg.is_some() {
-            Color::reset_fg(&mut target);
+        if style.fg.is_some() || style.bg.is_some() || style.emphasis.is_some() {
+            reset_all(&mut target);
         }
 
         target
@@ -427,6 +438,7 @@ struct Emphasis {
     bold: bool,
     italic: bool,
     underline: bool,
+    invert: bool,
 }
 
 impl Emphasis {
@@ -436,7 +448,13 @@ impl Emphasis {
             bold: false,
             italic: false,
             underline: false,
+            invert: false,
         }
+    }
+
+    #[inline(always)]
+    fn is_some(&self) -> bool {
+        self.bold || self.italic || self.underline || self.invert
     }
 
     #[inline(always)]
@@ -452,18 +470,19 @@ impl Emphasis {
         if self.underline {
             target.push_str(escape!(4));
         }
-    }
 
-    #[inline(always)]
-    fn reset(&self, target: &mut String) {
-        if self.bold || self.italic || self.underline {
-            target.push_str(escape!());
+        if self.invert {
+            target.push_str(escape!(7));
         }
     }
 
     #[inline(always)]
-    fn change(from: &Self, to: &Self, target: &mut String) {
-        if from.bold <= to.bold && from.italic <= to.italic && from.underline <= to.italic {
+    fn change(from: &Self, to: &Self, target: &mut String) -> bool {
+        if from.bold <= to.bold
+            && from.italic <= to.italic
+            && from.underline <= to.underline
+            && from.invert <= to.invert
+        {
             if !from.bold && to.bold {
                 target.push_str(escape!(1));
             }
@@ -476,10 +495,21 @@ impl Emphasis {
                 target.push_str(escape!(4));
             }
 
-            return;
+            if !from.invert && to.invert {
+                target.push_str(escape!(7));
+            }
+
+            return true;
         }
 
-        from.reset(target);
+        reset_all(target);
         to.apply(target);
+
+        false
     }
+}
+
+#[inline(always)]
+fn reset_all(target: &mut String) {
+    target.push_str(escape!(0));
 }

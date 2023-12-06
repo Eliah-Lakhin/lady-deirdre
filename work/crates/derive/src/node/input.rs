@@ -1026,6 +1026,7 @@ impl NodeInput {
     pub(super) fn make_fn(
         &self,
         ident: Ident,
+        isolated_session: bool,
         params: Vec<TokenStream>,
         result: Option<TokenStream>,
         body: TokenStream,
@@ -1042,6 +1043,13 @@ impl NodeInput {
             false => None,
         };
 
+        let session_ty = match isolated_session {
+            true => quote_spanned!(span=> &impl #core::syntax::SyntaxSession<#code, Node = #this>),
+            false => {
+                quote_spanned!(span=> &mut impl #core::syntax::SyntaxSession<#code, Node = #this>)
+            }
+        };
+
         let result = match result {
             Some(ty) => Some(quote_spanned!(span=> -> #ty)),
             None => None,
@@ -1052,7 +1060,7 @@ impl NodeInput {
             quote_spanned!(span=>
                 #allowed_warnings
                 fn #ident #impl_generics (
-                    session: &mut impl #core::syntax::SyntaxSession<#code, Node = #this>,
+                    session: #session_ty,
                     #(
                     #params,
                     )*
@@ -1090,6 +1098,7 @@ impl NodeInput {
 
         self.make_fn(
             format_ident!("skip_trivia", span = span),
+            false,
             vec![],
             None,
             quote_spanned!(span=> #globals #body),

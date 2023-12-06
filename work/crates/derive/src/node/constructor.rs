@@ -324,6 +324,7 @@ impl Constructor {
 
                             let (fn_ident, fn_impl) = input.make_fn(
                                 format_ident!("default", span = *value_span),
+                                true,
                                 vec![],
                                 Some(ty.to_token_stream()),
                                 expr.to_token_stream(),
@@ -357,6 +358,7 @@ impl Constructor {
 
                 let (fn_ident, fn_impl) = input.make_fn(
                     format_ident!("constructor", span = span),
+                    true,
                     params,
                     Some(this),
                     expression.to_token_stream(),

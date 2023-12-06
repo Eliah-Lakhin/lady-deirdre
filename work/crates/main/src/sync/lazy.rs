@@ -35,126 +35,28 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    arena::{Id, Identifiable},
-    compiler::{CompilationUnit, Lexis, Syntax},
-    format::SnippetFormatter,
-    lexis::{SourceCode, Token, TokenBuffer},
-    std::*,
-    syntax::{Node, SyntaxBuffer},
-};
+use crate::std::*;
 
-pub struct ImmutableUnit<N: Node> {
-    lexis: TokenBuffer<N::Token>,
-    syntax: SyntaxBuffer<N>,
+pub struct Lazy<T: Send + Sync + 'static, F = fn() -> T> {
+    cell: OnceLock<T>,
+    init: F,
 }
 
-impl<N: Node> Identifiable for ImmutableUnit<N> {
+impl<T: Send + Sync + 'static> Deref for Lazy<T> {
+    type Target = T;
+
     #[inline(always)]
-    fn id(&self) -> Id {
-        self.lexis.id()
+    fn deref(&self) -> &Self::Target {
+        self.cell.get_or_init(self.init)
     }
 }
 
-impl<N: Node> Debug for ImmutableUnit<N> {
-    #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .debug_struct("ImmutableUnit")
-            .field("id", &self.lexis.id())
-            .field("length", &self.lexis.length())
-            .finish_non_exhaustive()
-    }
-}
-
-impl<N: Node> Display for ImmutableUnit<N> {
+impl<T: Send + Sync + 'static> Lazy<T> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .snippet(self)
-            .set_caption(format!("ImmutableUnit({})", self.id()))
-            .finish()
-    }
-}
-
-impl<N: Node> Lexis for ImmutableUnit<N> {
-    type Lexis = TokenBuffer<N::Token>;
-
-    #[inline(always)]
-    fn lexis(&self) -> &Self::Lexis {
-        &self.lexis
-    }
-}
-
-impl<N: Node> Syntax for ImmutableUnit<N> {
-    type Syntax = SyntaxBuffer<N>;
-
-    #[inline(always)]
-    fn syntax(&self) -> &Self::Syntax {
-        &self.syntax
-    }
-
-    #[inline(always)]
-    fn syntax_mut(&mut self) -> &mut Self::Syntax {
-        &mut self.syntax
-    }
-}
-
-impl<N, S> From<S> for ImmutableUnit<N>
-where
-    N: Node,
-    S: Borrow<str>,
-{
-    #[inline(always)]
-    fn from(string: S) -> Self {
-        Self::new(string.borrow())
-    }
-}
-
-impl<T: Token> TokenBuffer<T> {
-    #[inline(always)]
-    pub fn into_immutable_unit<N>(mut self) -> ImmutableUnit<N>
-    where
-        N: Node<Token = T>,
-    {
-        self.reset_id();
-
-        let syntax = SyntaxBuffer::new(self.id(), self.cursor(..));
-
-        ImmutableUnit {
-            lexis: self,
-            syntax,
+    pub const fn new(init: fn() -> T) -> Self {
+        Self {
+            cell: OnceLock::new(),
+            init,
         }
-    }
-}
-
-impl<N: Node> CompilationUnit for ImmutableUnit<N> {
-    #[inline(always)]
-    fn is_mutable(&self) -> bool {
-        false
-    }
-
-    #[inline(always)]
-    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
-        self.lexis.reset_id();
-
-        self.lexis
-    }
-
-    #[inline(always)]
-    fn into_immutable_unit(self) -> ImmutableUnit<N> {
-        self
-    }
-}
-
-impl<N: Node> ImmutableUnit<N> {
-    pub fn new(text: impl AsRef<str>) -> Self {
-        let mut lexis = TokenBuffer::<N::Token>::default();
-
-        lexis.append(text.borrow());
-
-        let syntax = SyntaxBuffer::new(lexis.id(), lexis.cursor(..));
-
-        Self { lexis, syntax }
     }
 }

@@ -35,126 +35,93 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    arena::{Id, Identifiable},
-    compiler::{CompilationUnit, Lexis, Syntax},
-    format::SnippetFormatter,
-    lexis::{SourceCode, Token, TokenBuffer},
-    std::*,
-    syntax::{Node, SyntaxBuffer},
+mod attr;
+mod db;
+mod record;
+mod result;
+
+pub use crate::semantics::{
+    attr::{Attr, AttrContext, AttrReadGuard, AttrRef},
+    db::Db,
+    result::{AttrError, AttrResult},
 };
 
-pub struct ImmutableUnit<N: Node> {
-    lexis: TokenBuffer<N::Token>,
-    syntax: SyntaxBuffer<N>,
-}
+#[cfg(test)]
+mod tests {
+    use crate::{
+        semantics::{Attr, AttrContext, AttrError, Db},
+        std::*,
+        sync::Lazy,
+        syntax::NodeRef,
+    };
 
-impl<N: Node> Identifiable for ImmutableUnit<N> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.lexis.id()
-    }
-}
+    #[test]
+    fn test_semantics_framework() {
+        static DB: Lazy<Db> = Lazy::new(|| Db::new());
 
-impl<N: Node> Debug for ImmutableUnit<N> {
-    #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .debug_struct("ImmutableUnit")
-            .field("id", &self.lexis.id())
-            .field("length", &self.lexis.length())
-            .finish_non_exhaustive()
-    }
-}
+        static ATTR_1: Lazy<Attr<usize>> = Lazy::new(|| {
+            Attr::new(&DB, NodeRef::nil(), &|_ctx: &mut AttrContext| {
+                LOG.write().unwrap().push(1);
+                Ok(*INPUT.read().unwrap().deref())
+            })
+        });
 
-impl<N: Node> Display for ImmutableUnit<N> {
-    #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .snippet(self)
-            .set_caption(format!("ImmutableUnit({})", self.id()))
-            .finish()
-    }
-}
+        static ATTR_2: Lazy<Attr<usize>> = Lazy::new(|| {
+            Attr::new(&DB, NodeRef::nil(), &|ctx: &mut AttrContext| {
+                LOG.write().unwrap().push(2);
+                let attr1 = ATTR_1.read(ctx)?;
+                Ok(*attr1 + 50)
+            })
+        });
 
-impl<N: Node> Lexis for ImmutableUnit<N> {
-    type Lexis = TokenBuffer<N::Token>;
+        static INPUT: Lazy<RwLock<usize>> = Lazy::new(|| RwLock::new(100));
+        static LOG: Lazy<RwLock<Vec<u8>>> = Lazy::new(|| RwLock::new(Vec::new()));
 
-    #[inline(always)]
-    fn lexis(&self) -> &Self::Lexis {
-        &self.lexis
-    }
-}
+        let _ = ATTR_1.deref();
+        let _ = ATTR_2.deref();
 
-impl<N: Node> Syntax for ImmutableUnit<N> {
-    type Syntax = SyntaxBuffer<N>;
+        {
+            let value = ATTR_2.read(&mut AttrContext::new()).unwrap();
 
-    #[inline(always)]
-    fn syntax(&self) -> &Self::Syntax {
-        &self.syntax
-    }
+            assert_eq!(value.deref(), &150);
+            assert_eq!(LOG.read().unwrap().deref(), &[2, 1]);
+        }
 
-    #[inline(always)]
-    fn syntax_mut(&mut self) -> &mut Self::Syntax {
-        &mut self.syntax
-    }
-}
+        ATTR_1.as_ref().invalidate().unwrap();
 
-impl<N, S> From<S> for ImmutableUnit<N>
-where
-    N: Node,
-    S: Borrow<str>,
-{
-    #[inline(always)]
-    fn from(string: S) -> Self {
-        Self::new(string.borrow())
-    }
-}
+        {
+            let value = ATTR_2.read(&mut AttrContext::new()).unwrap();
 
-impl<T: Token> TokenBuffer<T> {
-    #[inline(always)]
-    pub fn into_immutable_unit<N>(mut self) -> ImmutableUnit<N>
-    where
-        N: Node<Token = T>,
-    {
-        self.reset_id();
+            assert_eq!(value.deref(), &150);
+            assert_eq!(LOG.read().unwrap().deref(), &[2, 1, 1]);
+        }
 
-        let syntax = SyntaxBuffer::new(self.id(), self.cursor(..));
+        *INPUT.write().unwrap() = 30;
+        ATTR_1.as_ref().invalidate().unwrap();
 
-        ImmutableUnit {
-            lexis: self,
-            syntax,
+        {
+            let value = ATTR_2.read(&mut AttrContext::new()).unwrap();
+
+            assert_eq!(value.deref(), &80);
+            assert_eq!(LOG.read().unwrap().deref(), &[2, 1, 1, 1, 2]);
         }
     }
-}
 
-impl<N: Node> CompilationUnit for ImmutableUnit<N> {
-    #[inline(always)]
-    fn is_mutable(&self) -> bool {
-        false
-    }
+    #[test]
+    fn test_cycle_detection() {
+        static DB: Lazy<Db> = Lazy::new(|| Db::new());
 
-    #[inline(always)]
-    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
-        self.lexis.reset_id();
+        static ATTR: Lazy<Attr<usize>> = Lazy::new(|| {
+            Attr::new(&DB, NodeRef::nil(), &|ctx: &mut AttrContext| {
+                Ok(*ATTR.read(ctx)?.deref())
+            })
+        });
 
-        self.lexis
-    }
+        let _ = ATTR.deref();
 
-    #[inline(always)]
-    fn into_immutable_unit(self) -> ImmutableUnit<N> {
-        self
-    }
-}
-
-impl<N: Node> ImmutableUnit<N> {
-    pub fn new(text: impl AsRef<str>) -> Self {
-        let mut lexis = TokenBuffer::<N::Token>::default();
-
-        lexis.append(text.borrow());
-
-        let syntax = SyntaxBuffer::new(lexis.id(), lexis.cursor(..));
-
-        Self { lexis, syntax }
+        assert!(matches!(
+            ATTR.read(&mut AttrContext::new()),
+            Err(AttrError::CycleDetected)
+        ))
     }
 }

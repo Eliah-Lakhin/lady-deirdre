@@ -113,12 +113,7 @@ pub struct Repository<T> {
 impl<T> Default for Repository<T> {
     #[inline]
     fn default() -> Self {
-        Self {
-            entries: Vec::new(),
-            next: 0,
-            revision: 0,
-            modified: false,
-        }
+        Self::new()
     }
 }
 
@@ -129,28 +124,43 @@ impl<T> Debug for Repository<T> {
     }
 }
 
-pub type RepositoryIterator<'a, T> =
+pub type RepositoryIter<'a, T> =
     FilterMap<Iter<'a, RepositoryEntry<T>>, fn(&'a RepositoryEntry<T>) -> Option<&'a T>>;
+
+pub type RepositoryIterMut<'a, T> =
+    FilterMap<IterMut<'a, RepositoryEntry<T>>, fn(&'a mut RepositoryEntry<T>) -> Option<&'a mut T>>;
+
+pub type RepositoryEntriesIter<'a, T> = FilterMap<
+    Enumerate<Iter<'a, RepositoryEntry<T>>>,
+    fn((usize, &'a RepositoryEntry<T>)) -> Option<Entry>,
+>;
+
+pub type RepositoryIntoIter<T> =
+    FilterMap<IntoIter<RepositoryEntry<T>>, fn(RepositoryEntry<T>) -> Option<T>>;
 
 impl<'a, T> IntoIterator for &'a Repository<T> {
     type Item = &'a T;
-    type IntoIter = RepositoryIterator<'a, T>;
+    type IntoIter = RepositoryIter<'a, T>;
 
-    #[inline]
+    #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
-        self.entries.iter().filter_map(|entry| match entry {
-            RepositoryEntry::Occupied { data, .. } => Some(data),
-            _ => None,
-        })
+        self.iter()
     }
 }
 
-pub type RepositoryIntoIterator<T> =
-    FilterMap<IntoIter<RepositoryEntry<T>>, fn(RepositoryEntry<T>) -> Option<T>>;
+impl<'a, T> IntoIterator for &'a mut Repository<T> {
+    type Item = &'a mut T;
+    type IntoIter = RepositoryIterMut<'a, T>;
+
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
 
 impl<T> IntoIterator for Repository<T> {
     type Item = T;
-    type IntoIter = RepositoryIntoIterator<T>;
+    type IntoIter = RepositoryIntoIter<T>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
@@ -181,6 +191,16 @@ impl<T> FromIterator<T> for Repository<T> {
 }
 
 impl<T> Repository<T> {
+    #[inline(always)]
+    pub const fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+            next: 0,
+            revision: 0,
+            modified: false,
+        }
+    }
+
     /// Creates a new collection instance with pre-allocated memory for at least `capacity` items
     /// to be stored in.
     #[inline(always)]
@@ -250,10 +270,7 @@ impl<T> Repository<T> {
     pub fn insert_raw(&mut self, data: T) -> EntryIndex {
         let index = self.next;
 
-        if self.modified {
-            self.revision += 1;
-            self.modified = false;
-        }
+        self.commit(false);
 
         match self.entries.get_mut(self.next) {
             None => {
@@ -322,10 +339,7 @@ impl<T> Repository<T> {
     pub fn reserve(&mut self) -> EntryIndex {
         let index = self.next;
 
-        if self.modified {
-            self.revision += 1;
-            self.modified = false;
-        }
+        self.commit(false);
 
         match self.entries.get_mut(self.next) {
             None => {
@@ -406,7 +420,13 @@ impl<T> Repository<T> {
         }
     }
 
-    /// Forcefully raises repository internal version.
+    #[inline(always)]
+    pub fn revision(&self) -> EntryVersion {
+        self.revision
+    }
+
+    /// Raises repository internal version if the repository contain
+    /// uncommitted changes, or if the `force` flag is true.
     ///
     /// This is a low-level API. Normally an API user does not need to call this function manually,
     /// as the versions are managed automatically.
@@ -417,9 +437,11 @@ impl<T> Repository<T> {
     /// Note that raising of the Repository version does not affect exist entries. It only
     /// affects a newly inserted items, or the items upgraded by the Upgrade function.
     #[inline(always)]
-    pub fn commit(&mut self) {
-        self.revision += 1;
-        self.modified = false;
+    pub fn commit(&mut self, force: bool) {
+        if force || self.modified {
+            self.revision += 1;
+            self.modified = false;
+        }
     }
 
     /// Removes all items from this collection preserving allocated memory.
@@ -514,6 +536,36 @@ impl<T> Repository<T> {
 
             _ => None,
         }
+    }
+
+    #[inline(always)]
+    pub fn iter(&self) -> RepositoryIter<T> {
+        self.entries.iter().filter_map(|entry| match entry {
+            RepositoryEntry::Occupied { data, .. } => Some(data),
+            _ => None,
+        })
+    }
+
+    #[inline(always)]
+    pub fn iter_mut(&mut self) -> RepositoryIterMut<T> {
+        self.entries.iter_mut().filter_map(|entry| match entry {
+            RepositoryEntry::Occupied { data, .. } => Some(data),
+            _ => None,
+        })
+    }
+
+    #[inline(always)]
+    pub fn entries(&self) -> RepositoryEntriesIter<T> {
+        self.entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| match entry {
+                RepositoryEntry::Occupied { revision, .. } => Some(Entry::Repo {
+                    index,
+                    version: *revision,
+                }),
+                _ => None,
+            })
     }
 
     /// Returns item weak reference by internal index.
@@ -841,7 +893,7 @@ impl<T> Repository<T> {
     /// let item_a_index = repo.insert_raw(10);
     /// let item_b_index = repo.insert_raw(20);
     ///
-    /// // This is safe because `insert_index` returns valid index.
+    /// // This is safe because `insert_raw` returns valid index.
     /// let item_a_entry = unsafe { repo.entry_of(item_a_index) };
     /// let item_b_entry = unsafe { repo.entry_of(item_b_index) };
     ///
@@ -849,7 +901,7 @@ impl<T> Repository<T> {
     /// assert!(repo.contains(&item_b_entry));
     ///
     /// // Forcefully raises Repository version.
-    /// repo.commit();
+    /// repo.commit(true);
     ///
     /// // This is safe because the items referred by index are still exist in this repository.
     /// unsafe {

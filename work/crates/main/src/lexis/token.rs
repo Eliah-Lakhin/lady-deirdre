@@ -609,6 +609,6 @@ impl TokenRef {
     /// [Nil](crate::lexis::TokenRef::nil) references in particular).
     #[inline(always)]
     pub fn site_ref(self) -> SiteRef {
-        SiteRef::new_chunk_start(self)
+        SiteRef::start_of(self)
     }
 }

@@ -49,7 +49,11 @@ pub mod compiler;
 pub mod format;
 pub mod lexis;
 mod report;
+#[cfg(feature = "std")]
+pub mod semantics;
 mod std;
+#[cfg(feature = "std")]
+pub mod sync;
 pub mod syntax;
 
 pub use compiler::document::Document;
@@ -57,5 +61,3 @@ extern crate self as lady_deirdre;
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-#[cfg(not(feature = "std"))]
-extern crate core;

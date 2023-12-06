@@ -42,10 +42,15 @@ mod id;
 mod repository;
 mod sequence;
 
-pub(crate) use crate::arena::repository::RepositoryIterator;
 pub use crate::arena::{
     entry::{Entry, EntryIndex, EntryVersion},
     id::{Id, Identifiable},
-    repository::Repository,
+    repository::{
+        Repository,
+        RepositoryEntriesIter,
+        RepositoryIntoIter,
+        RepositoryIter,
+        RepositoryIterMut,
+    },
     sequence::Sequence,
 };

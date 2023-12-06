@@ -559,7 +559,7 @@ impl<N: Node> PageRef<N> {
         let mut dec = 0;
         let mut inc = 0;
 
-        references.chunks.commit();
+        references.chunks.commit(true);
 
         unsafe {
             page.string

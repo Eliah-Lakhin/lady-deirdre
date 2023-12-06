@@ -82,7 +82,7 @@ impl Debug for Id {
 
         let name = self.name();
 
-        if name.is_empty() {
+        if !name.is_empty() {
             formatter.write_str(", ")?;
             Debug::fmt(&name, formatter)?;
         }
@@ -265,7 +265,7 @@ impl IdNames {
             let map = match raw {
                 Some(map) => map,
                 None => {
-                    *raw = Some(StdMap::new());
+                    *raw = Some(StdMap::new_std_map());
 
                     match raw {
                         Some(map) => map,
