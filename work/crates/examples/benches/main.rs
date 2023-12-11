@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 //TODO check warnings regularly
-#![deny(warnings)]
+#![allow(warnings)]
 
 mod data;
 mod frameworks;

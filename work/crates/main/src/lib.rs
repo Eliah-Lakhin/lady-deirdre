@@ -44,19 +44,21 @@
 #![no_implicit_prelude]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+//todo since an important part of the crate requires "std",
+//     perhaps it would be reasonable to get rid of the no-std support completely.
+
+#[cfg(feature = "std")]
+pub mod analysis;
 pub mod arena;
-pub mod compiler;
 pub mod format;
 pub mod lexis;
 mod report;
-#[cfg(feature = "std")]
-pub mod semantics;
 mod std;
 #[cfg(feature = "std")]
 pub mod sync;
 pub mod syntax;
+pub mod units;
 
-pub use compiler::document::Document;
 extern crate self as lady_deirdre;
 
 #[cfg(not(feature = "std"))]

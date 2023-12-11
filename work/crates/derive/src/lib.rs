@@ -52,8 +52,9 @@ extern crate proc_macro;
 
 use quote::ToTokens;
 
-use crate::{node::NodeInput, token::TokenInput};
+use crate::{feature::FeatureInput, node::NodeInput, token::TokenInput};
 
+mod feature;
 mod node;
 mod token;
 mod utils;
@@ -88,6 +89,7 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         node,
         parent,
         child,
+        semantics,
         describe,
         dump,
     )
@@ -96,4 +98,12 @@ pub fn node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let node_input = parse_macro_input!(input as NodeInput);
 
     node_input.to_token_stream().into()
+}
+
+// todo link documentation
+#[proc_macro_derive(Feature, attributes(node, invalidate, dump))]
+pub fn feature(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let feature_input = parse_macro_input!(input as FeatureInput);
+
+    feature_input.to_token_stream().into()
 }

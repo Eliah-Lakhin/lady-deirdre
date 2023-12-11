@@ -53,7 +53,7 @@ pub(crate) use alloc::{
 };
 #[cfg(not(feature = "std"))]
 pub(crate) use core::{
-    any::TypeId,
+    any::{Any, TypeId},
     assert_eq,
     assert_ne,
     borrow::Borrow,
@@ -62,8 +62,9 @@ pub(crate) use core::{
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     column,
     concat,
-    convert::{AsRef, From, Into, TryFrom},
+    convert::{AsMut, AsRef, From, Into, TryFrom},
     default::Default,
+    error::Error,
     file,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
     format_args,
@@ -119,6 +120,7 @@ pub(crate) use core::{
 extern crate std;
 #[cfg(feature = "std")]
 pub(crate) use std::{
+    any::Any,
     any::TypeId,
     assert_eq,
     assert_ne,
@@ -138,12 +140,14 @@ pub(crate) use std::{
         },
         hash_set::Iter as StdSetIter,
         HashMap,
+        HashSet,
         VecDeque,
     },
     column,
     concat,
-    convert::{AsRef, From, Into, TryFrom},
+    convert::{AsMut, AsRef, From, Into, TryFrom},
     default::Default,
+    error::Error,
     file,
     fmt::{Debug, Display, Formatter, Result as FmtResult},
     format,
@@ -194,13 +198,18 @@ pub(crate) use std::{
     string::{String, ToString},
     sync::{
         atomic::{fence, AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering},
+        Arc,
+        Condvar,
+        Mutex,
         OnceLock,
         RwLock,
         RwLockReadGuard,
         RwLockWriteGuard,
+        Weak,
     },
     thread::{available_parallelism, panicking, spawn},
     thread_local,
+    todo,
     unimplemented,
     unreachable,
     vec::IntoIter,

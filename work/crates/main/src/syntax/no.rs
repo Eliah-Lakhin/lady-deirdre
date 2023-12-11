@@ -36,8 +36,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    analysis::{FeatureInitializer, FeatureInvalidator},
     lexis::Token,
     std::*,
+    sync::SyncBuildHasher,
     syntax::{Children, Node, NodeRef, NodeRule, ParseError, SyntaxSession, NON_RULE},
 };
 
@@ -53,7 +55,7 @@ use crate::{
 /// use lady_deirdre::{
 ///     syntax::{NoSyntax, SyntaxTree},
 ///     lexis::SimpleToken,
-///     Document,
+///     units::Document,
 /// };
 ///
 /// use std::mem::size_of;
@@ -111,6 +113,12 @@ impl<T: Token> Node for NoSyntax<T> {
     fn children(&self) -> Children {
         Children::new()
     }
+
+    #[inline(always)]
+    fn initialize<S: SyncBuildHasher>(&mut self, _initializer: &mut FeatureInitializer<Self, S>) {}
+
+    #[inline(always)]
+    fn invalidate<S: SyncBuildHasher>(&self, _invalidator: &mut FeatureInvalidator<Self, S>) {}
 
     #[inline(always)]
     fn name(_rule: NodeRule) -> Option<&'static str> {

@@ -38,9 +38,9 @@
 use std::ops::Range;
 
 use lady_deirdre::{
+    compiler::Document,
     lexis::{Length, Site, SiteSpan, SourceCode},
     syntax::SyntaxTree,
-    Document,
 };
 use lady_deirdre_examples::json::syntax::JsonNode;
 use rand::{

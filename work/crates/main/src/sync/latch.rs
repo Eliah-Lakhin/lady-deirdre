@@ -149,7 +149,7 @@ impl Latch {
     }
 
     #[inline(always)]
-    fn addr(&self) -> usize {
+    pub fn addr(&self) -> usize {
         self.data.as_ptr() as usize
     }
 }

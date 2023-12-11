@@ -79,7 +79,7 @@ use crate::{
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     lexis::{TokenBuffer, SimpleToken, SourceCode, Chunk},
 ///     syntax::{SyntaxBuffer, SimpleNode, Node},
 /// };
@@ -148,10 +148,10 @@ impl<T: Token> Display for TokenBuffer<T> {
     }
 }
 
-impl<T: Token, S: Borrow<str>> From<S> for TokenBuffer<T> {
+impl<T: Token, S: AsRef<str>> From<S> for TokenBuffer<T> {
     #[inline(always)]
     fn from(string: S) -> Self {
-        let string = string.borrow();
+        let string = string.as_ref();
 
         let mut buffer = TokenBuffer::with_capacity(string.len() / CHUNK_SIZE);
 
@@ -270,7 +270,7 @@ impl<'buffer, T: Token> IntoIterator for &'buffer TokenBuffer<T> {
 
 impl<T: Token> TokenBuffer<T> {
     #[inline(always)]
-    pub fn parse(string: impl Borrow<str>) -> Self {
+    pub fn parse(string: impl AsRef<str>) -> Self {
         Self::from(string)
     }
 

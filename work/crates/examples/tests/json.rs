@@ -41,7 +41,7 @@
 use lady_deirdre::{
     lexis::{SourceCode, TokenBuffer, TokenRef},
     syntax::{Child, Node, NodeRef, ParseError, PolyRef, SyntaxTree},
-    Document,
+    units::Document,
 };
 use lady_deirdre_examples::json::{formatter::ToJsonString, lexis::JsonToken, syntax::JsonNode};
 

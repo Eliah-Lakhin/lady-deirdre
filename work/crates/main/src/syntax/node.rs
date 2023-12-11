@@ -40,10 +40,11 @@ extern crate lady_deirdre_derive;
 pub use lady_deirdre_derive::Node;
 
 use crate::{
+    analysis::{FeatureInitializer, FeatureInvalidator},
     arena::{Entry, Id, Identifiable},
-    compiler::CompilationUnit,
     lexis::{SiteSpan, Token, TokenRef},
     std::*,
+    sync::SyncBuildHasher,
     syntax::{
         Child,
         Children,
@@ -57,6 +58,7 @@ use crate::{
         SyntaxTree,
         NON_RULE,
     },
+    units::CompilationUnit,
 };
 
 /// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
@@ -78,7 +80,7 @@ use crate::{
 /// use lady_deirdre::{
 ///     syntax::{Node, ParseError, SyntaxTree},
 ///     lexis::{SimpleToken, TokenRef},
-///     Document,
+///     units::Document,
 /// };
 ///
 /// #[derive(Node, PartialEq, Debug)]
@@ -109,12 +111,12 @@ use crate::{
 ///
 /// An API user can implement the Node trait manually too. For example, using 3rd party parser
 /// libraries. See [`Node::new`](crate::syntax::Node::parse) function specification for details.
-pub trait Node: Sized + 'static {
+pub trait Node: Send + Sync + Sized + 'static {
     /// Describes programming language's lexical grammar.
     type Token: Token;
 
     /// Describes syntax/semantic error type of this programming language grammar.
-    type Error: From<ParseError> + Sized + 'static;
+    type Error: From<ParseError> + Send + Sync + Sized + 'static;
 
     /// Parses a branch of the syntax tree from the sequence of [Tokens](crate::lexis::Token) using
     /// specified parse `rule`, and returns an instance of the top node of the branch.
@@ -178,7 +180,9 @@ pub trait Node: Sized + 'static {
     ///         RecoveryResult,
     ///     },
     ///     lexis::{SimpleToken, TokenCursor, TokenSet, EMPTY_TOKEN_SET},
-    ///     Document,
+    ///     units::Document,
+    ///     analysis::{FeatureInitializer, FeatureInvalidator},
+    ///     sync::SyncBuildHasher,
     /// };
     ///
     /// // A syntax of embedded parentheses: `(foo (bar) baz)`.
@@ -236,6 +240,10 @@ pub trait Node: Sized + 'static {
     ///     fn children(&self) -> Children {
     ///         Children::new()
     ///     }
+    ///
+    ///     fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>) {}
+    ///
+    ///     fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>) {}
     ///
     ///     fn name(rule: NodeRule) -> Option<&'static str> {
     ///         match rule {
@@ -354,6 +362,8 @@ pub trait Node: Sized + 'static {
 
     fn rule(&self) -> NodeRule;
 
+    //todo consider providing default implementations for these functions
+
     fn node_ref(&self) -> NodeRef;
 
     fn parent_ref(&self) -> NodeRef;
@@ -361,6 +371,10 @@ pub trait Node: Sized + 'static {
     fn set_parent_ref(&mut self, parent_ref: NodeRef);
 
     fn children(&self) -> Children;
+
+    fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>);
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>);
 
     fn name(rule: NodeRule) -> Option<&'static str>;
 

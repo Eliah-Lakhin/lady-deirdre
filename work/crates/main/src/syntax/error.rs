@@ -37,11 +37,11 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    compiler::CompilationUnit,
     format::{Delimited, PrintString, Priority, SnippetFormatter},
     lexis::{Length, SiteRefSpan, SourceCode, ToSite, ToSpan, Token, TokenRule, TokenSet},
     std::*,
     syntax::{ClusterRef, Node, NodeRule, NodeSet, RecoveryResult, SyntaxTree, ROOT_RULE},
+    units::CompilationUnit,
 };
 
 /// A base syntax parse error object.
@@ -597,7 +597,7 @@ impl ParseError {
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     syntax::{
 ///         SimpleNode,
 ///         SyntaxTree,

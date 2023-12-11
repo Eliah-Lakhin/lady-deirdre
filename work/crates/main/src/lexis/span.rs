@@ -67,7 +67,7 @@ use crate::{
 /// You can think about SiteSpan as a range of the text selected inside the code editor.
 ///
 /// ```rust
-/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::SourceCode};
+/// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::SourceCode};
 ///
 /// let doc = Document::<SimpleNode>::from("foo bar baz");
 ///
@@ -84,7 +84,7 @@ pub type SiteSpan = Range<Site>;
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     syntax::SimpleNode,
 ///     lexis::{SourceCode, TokenCursor},
 /// };
@@ -117,7 +117,7 @@ impl Identifiable for SiteRefSpan {
 /// can be used to specify Spans.
 ///
 /// ```rust
-/// use lady_deirdre::{Document, syntax::SimpleNode, lexis::{SourceCode, Position}};
+/// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::{SourceCode, Position}};
 ///
 /// let doc = Document::<SimpleNode>::from("foo bar baz");
 ///
@@ -148,7 +148,7 @@ pub type PositionSpan = Range<Position>;
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     syntax::SimpleNode,
 ///     lexis::{ToSpan, ToSite, SourceCode, SiteSpan, Site},
 /// };
@@ -288,7 +288,7 @@ pub unsafe trait ToSpan {
     /// returns `"?"` string.
     ///
     /// ```rust
-    /// use lady_deirdre::{Document, syntax::SimpleNode, lexis::{ToSpan, SourceCode}};
+    /// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::{ToSpan, SourceCode}};
     ///
     /// let doc = Document::<SimpleNode>::from("foo\nbar baz");
     ///

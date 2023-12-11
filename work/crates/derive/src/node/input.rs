@@ -123,9 +123,9 @@ impl TryFrom<DeriveInput> for NodeInput {
                     _ => system_panic!("Unsupported Item format."),
                 };
 
-                return Err(Error::new(
+                return Err(error!(
                     span,
-                    "Node must be derived on the enum type with \
+                    "Node must be derived from the enum type with \
                     variants representing syntax variants.",
                 ));
             }
@@ -254,7 +254,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             None => {
                 return Err(error!(
                     ident.span(),
-                    "Token Type is not specified.\nUse #[token(<type name>)] \
+                    "Token type was not specified.\nUse #[token(<type name>)] \
                     attribute on the derived type to specify Token type.",
                 ));
             }
@@ -266,7 +266,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             None => {
                 return Err(error!(
                     ident.span(),
-                    "Error Type is not specified.\nUse #[error(<error name>)] \
+                    "Error type was not specified.\nUse #[error(<error name>)] \
                     attribute on the derived type to specify Error type.",
                 ));
             }
@@ -741,6 +741,13 @@ impl ToTokens for NodeInput {
         let mut parent_getters = Vec::with_capacity(capacity);
         let mut parent_setters = Vec::with_capacity(capacity);
         let mut children_getters = Vec::with_capacity(capacity);
+        let mut initializers = Vec::with_capacity(capacity);
+        let mut invalidators = Vec::with_capacity(capacity);
+        let mut feature_kind = Vec::with_capacity(capacity);
+        let mut feature_as_attr = Vec::with_capacity(capacity);
+        let mut get_feature = Vec::with_capacity(capacity);
+        let mut has_feature = Vec::with_capacity(capacity);
+        let mut enum_features = Vec::with_capacity(capacity);
 
         let mut by_index = self
             .variants
@@ -764,6 +771,13 @@ impl ToTokens for NodeInput {
             parent_getters.push(variant.inheritance.compile_parent_getter());
             parent_setters.push(variant.inheritance.compile_parent_setter());
             children_getters.push(variant.inheritance.compile_children_getter());
+            initializers.push(variant.inheritance.compile_initializer());
+            invalidators.push(variant.inheritance.compile_invalidator());
+            feature_kind.push(variant.inheritance.compile_feature_kind());
+            feature_as_attr.push(variant.inheritance.compile_feature_as_attr());
+            get_feature.push(variant.inheritance.compile_get_feature());
+            has_feature.push(variant.inheritance.compile_has_feature());
+            enum_features.push(variant.inheritance.compile_enum_features());
 
             if let Some(Index::Named(name, Some(index))) = &variant.index {
                 let span = name.span();
@@ -972,6 +986,32 @@ impl ToTokens for NodeInput {
                 }
 
                 #[inline(always)]
+                fn initialize<S: #core::sync::SyncBuildHasher>(
+                    &mut self,
+                    initializer: &mut #core::analysis::FeatureInitializer<Self, S>,
+                ) {
+                    match self {
+                        #( #initializers )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+                }
+
+                #[inline(always)]
+                fn invalidate<S: #core::sync::SyncBuildHasher>(
+                    &self,
+                    invalidator: &mut #core::analysis::FeatureInvalidator<Self, S>,
+                ) {
+                    match self {
+                        #( #invalidators )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+                }
+
+                #[inline(always)]
                 fn name(rule: #core::syntax::NodeRule) -> #option<&'static str> {
                     match rule {
                         #(
@@ -996,6 +1036,81 @@ impl ToTokens for NodeInput {
 
                         #[allow(unreachable_patterns)]
                         _ => #option::None,
+                    }
+                }
+            }
+
+            impl #impl_generics #core::analysis::AbstractFeature for #ident #type_generics
+            #where_clause
+            {
+                #[inline(always)]
+                fn feature_kind(&self)
+                    -> #core::analysis::AnalysisResult<#core::analysis::FeatureKind>
+                {
+                    match self {
+                        #(
+                        #feature_kind
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::analysis::AnalysisResult::Err(
+                            #core::analysis::AnalysisError::NodeWithoutSemantics,
+                        ),
+                    }
+                }
+
+                fn as_attr(&self) -> #core::analysis::AnalysisResult<&#core::analysis::AttrRef> {
+                    match self {
+                        #(
+                        #feature_as_attr
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::analysis::AnalysisResult::Err(
+                            #core::analysis::AnalysisError::NodeWithoutSemantics,
+                        ),
+                    }
+                }
+
+                fn get_feature(
+                    &self,
+                    sub_feature: &'static str,
+                ) -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature> {
+                    match self {
+                        #(
+                        #get_feature
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::analysis::AnalysisResult::Err(
+                            #core::analysis::AnalysisError::NodeWithoutSemantics,
+                        ),
+                    }
+                }
+
+                fn has_feature(&self, sub_feature: &'static str)
+                    -> #core::analysis::AnalysisResult<bool>
+                {
+                    match self {
+                        #(
+                        #has_feature
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::analysis::AnalysisResult::Ok(false),
+                    }
+                }
+
+                fn enum_features(&self)
+                    -> #core::analysis::AnalysisResult<&'static [&'static str]>
+                {
+                    match self {
+                        #(
+                        #enum_features
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::analysis::AnalysisResult::Ok(&[]),
                     }
                 }
             }

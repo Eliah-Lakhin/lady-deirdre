@@ -41,7 +41,7 @@
 use lady_deirdre::{
     lexis::{SimpleToken, SourceCode},
     syntax::{Node, NodeRef, ParseError, SyntaxTree},
-    Document,
+    units::Document,
 };
 
 #[test]

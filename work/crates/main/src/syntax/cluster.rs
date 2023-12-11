@@ -122,7 +122,7 @@ impl<N: Node + Debug> Debug for Cluster<N> {
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     syntax::{SimpleNode, SyntaxTree, NodeRef, Cluster}
 /// };
 ///

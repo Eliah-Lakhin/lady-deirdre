@@ -89,7 +89,7 @@ unsafe impl ToSite for Site {
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     lexis::{SimpleToken, SourceCode, TokenCursor, ToSite},
 ///     syntax::NoSyntax,
 /// };

@@ -125,7 +125,7 @@ impl TryFrom<DeriveInput> for TokenInput {
 
                 return Err(error!(
                     span,
-                    "Token must be derived on the enum type with \
+                    "Token must be derived from the enum type with \
                     variants representing lexical rules.",
                 ));
             }

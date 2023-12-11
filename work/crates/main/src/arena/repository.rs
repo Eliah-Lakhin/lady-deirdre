@@ -421,7 +421,7 @@ impl<T> Repository<T> {
     }
 
     #[inline(always)]
-    pub fn revision(&self) -> EntryVersion {
+    pub fn version(&self) -> EntryVersion {
         self.revision
     }
 

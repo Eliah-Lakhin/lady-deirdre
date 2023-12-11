@@ -41,7 +41,6 @@ pub use lady_deirdre_derive::Token;
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    compiler::CompilationUnit,
     lexis::{
         Chunk,
         Length,
@@ -57,6 +56,7 @@ use crate::{
     },
     std::*,
     syntax::{NodeRef, PolyRef, PolyVariant, RefKind},
+    units::CompilationUnit,
 };
 
 /// A number of Tokens.
@@ -124,7 +124,7 @@ pub type TokenCount = usize;
 /// An API user can implement the Token trait manually too. For example, using 3rd party lexical
 /// scanner libraries. See [`Token::new`](crate::lexis::Token::parse) function specification for
 /// details.
-pub trait Token: Copy + Eq + Sized + 'static {
+pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     /// Parses a single token from the source code text, and returns a Token instance that
     /// represents this token kind.
     ///
@@ -310,6 +310,8 @@ pub trait Token: Copy + Eq + Sized + 'static {
 
     fn rule(self) -> TokenRule;
 
+    //todo consider providing default implementations for these functions
+
     fn name(rule: TokenRule) -> Option<&'static str>;
 
     fn describe(rule: TokenRule, verbose: bool) -> Option<&'static str>;
@@ -328,7 +330,7 @@ pub trait Token: Copy + Eq + Sized + 'static {
 ///
 /// ```rust
 /// use lady_deirdre::{
-///     Document,
+///     units::Document,
 ///     lexis::{TokenRef, SimpleToken, SourceCode, TokenCursor},
 ///     syntax::NoSyntax,
 /// };

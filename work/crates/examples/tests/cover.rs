@@ -39,10 +39,9 @@
 #![allow(warnings)]
 
 use lady_deirdre::{
-    compiler::CompilationUnit,
     lexis::{SourceCode, TokenRef},
     syntax::{Node, NodeRef, ParseError, PolyRef, SyntaxTree},
-    Document,
+    units::{CompilationUnit, Document},
 };
 use lady_deirdre_examples::json::lexis::JsonToken;
 

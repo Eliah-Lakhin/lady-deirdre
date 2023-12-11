@@ -531,7 +531,7 @@ impl ExpressionOperand<Operator> for Operand {
                 //todo review if these keywords required to be reserved
                 let fits = match ident.to_string().as_str() {
                     "node" | "node_ref" | "parent" | "parent_ref" | "child" | "rule"
-                    | "constructor" | "default" | "session" | "skip_trivia" => false,
+                    | "constructor" | "default" | "feature" | "session" | "skip_trivia" => false,
                     _ => !name.starts_with("parse_"),
                 };
 

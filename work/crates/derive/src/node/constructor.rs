@@ -111,16 +111,22 @@ impl TryFrom<Variant> for Constructor {
                             Initializer::Default(..) | Initializer::Custom(..) => {
                                 return Err(error!(attr_span, "Duplicate Default attribute.",));
                             }
+                            Initializer::Semantics(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Default attribute conflicts with the Semantics attribute.",
+                                ));
+                            }
                             Initializer::Node(..) => {
                                 return Err(error!(
                                     attr_span,
-                                    "Default attribute conflicts with Node attribute.",
+                                    "Default attribute conflicts with the Node attribute.",
                                 ));
                             }
                             Initializer::Parent(..) => {
                                 return Err(error!(
                                     attr_span,
-                                    "Default attribute conflicts with Parent attribute.",
+                                    "Default attribute conflicts with the Parent attribute.",
                                 ));
                             }
                         }
@@ -133,13 +139,48 @@ impl TryFrom<Variant> for Constructor {
                         initializer = Initializer::Custom(attr_span, attr.parse_args::<Expr>()?);
                     }
 
+                    "semantics" => {
+                        match &initializer {
+                            Initializer::Capture => (),
+                            Initializer::Default(..) | Initializer::Custom(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Semantics attribute conflicts with the Default attribute.",
+                                ));
+                            }
+                            Initializer::Semantics(..) => {
+                                return Err(error!(attr_span, "Duplicate Semantics attribute.",));
+                            }
+                            Initializer::Node(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Semantics attribute conflicts with the Node attribute.",
+                                ));
+                            }
+                            Initializer::Parent(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Semantics attribute conflicts with the Parent attribute.",
+                                ));
+                            }
+                        }
+
+                        initializer = Initializer::Semantics(attr_span);
+                    }
+
                     "node" => {
                         match &initializer {
                             Initializer::Capture => (),
                             Initializer::Default(..) | Initializer::Custom(..) => {
                                 return Err(error!(
                                     attr_span,
-                                    "Parent attribute conflicts with Default attribute.",
+                                    "Node attribute conflicts with the Default attribute.",
+                                ));
+                            }
+                            Initializer::Semantics(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Node attribute conflicts with the Semantics attribute.",
                                 ));
                             }
                             Initializer::Node(..) => {
@@ -148,7 +189,7 @@ impl TryFrom<Variant> for Constructor {
                             Initializer::Parent(..) => {
                                 return Err(error!(
                                     attr_span,
-                                    "Node attribute conflicts with Parent attribute.",
+                                    "Node attribute conflicts with the Parent attribute.",
                                 ));
                             }
                         }
@@ -162,13 +203,19 @@ impl TryFrom<Variant> for Constructor {
                             Initializer::Default(..) | Initializer::Custom(..) => {
                                 return Err(error!(
                                     attr_span,
-                                    "Parent attribute conflicts with Default attribute.",
+                                    "Parent attribute conflicts with the Default attribute.",
+                                ));
+                            }
+                            Initializer::Semantics(..) => {
+                                return Err(error!(
+                                    attr_span,
+                                    "Parent attribute conflicts with the Semantics attribute.",
                                 ));
                             }
                             Initializer::Node(..) => {
                                 return Err(error!(
                                     attr_span,
-                                    "Parent attribute conflicts with Node attribute.",
+                                    "Parent attribute conflicts with the Node attribute.",
                                 ));
                             }
                             Initializer::Parent(..) => {
@@ -219,6 +266,14 @@ impl Constructor {
                                 return Err(error!(
                                     *span,
                                     "Default attribute is not applicable here, \
+                                    because corresponding variable is \
+                                    explicitly captured in the rule expression.",
+                                ));
+                            }
+                            Initializer::Semantics(span) => {
+                                return Err(error!(
+                                    *span,
+                                    "Semantics attribute is not applicable here, \
                                     because corresponding variable is \
                                     explicitly captured in the rule expression.",
                                 ));
@@ -296,7 +351,7 @@ impl Constructor {
 
                         Initializer::Node(value_span) => {
                             let core = value_span.face_core();
-                            let value = quote_spanned!(*value_span =>
+                            let value = quote_spanned!(*value_span=>
                                 #core::syntax::SyntaxSession::node_ref(session));
 
                             quote_spanned!(span=> #ident: #value,)
@@ -304,7 +359,7 @@ impl Constructor {
 
                         Initializer::Parent(value_span) => {
                             let core = value_span.face_core();
-                            let value = quote_spanned!(*value_span =>
+                            let value = quote_spanned!(*value_span=>
                                 #core::syntax::SyntaxSession::parent_ref(session));
 
                             quote_spanned!(span=> #ident: #value,)
@@ -314,7 +369,7 @@ impl Constructor {
                             let default = value_span.face_default();
                             let ty = &param.ty;
 
-                            let value = quote_spanned!(*value_span => <#ty as #default>::default());
+                            let value = quote_spanned!(*value_span=> <#ty as #default>::default());
 
                             quote_spanned!(span=> #ident: #value,)
                         }
@@ -336,6 +391,19 @@ impl Constructor {
                                 #fn_impl
                                 #fn_ident(session)
                             },)
+                        }
+
+                        Initializer::Semantics(value_span) => {
+                            let core = value_span.face_core();
+                            let ty = &param.ty;
+
+                            let value = quote_spanned!(*value_span=>
+                                <#ty as #core::analysis::Feature>::new_uninitialized(
+                                    #core::syntax::SyntaxSession::node_ref(session),
+                                )
+                            );
+
+                            quote_spanned!(span=> #ident: #value,)
                         }
                     }
                 });
@@ -397,5 +465,6 @@ enum Initializer {
     Node(Span),
     Parent(Span),
     Default(Span),
+    Semantics(Span),
     Custom(Span, Expr),
 }

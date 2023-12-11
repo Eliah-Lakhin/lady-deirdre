@@ -203,7 +203,7 @@ enum CalcToken {
 // a special type of grammar called "NoSyntax" that bypasses syntax parsing
 // stage.
 
-use lady_deirdre::{Document, syntax::NoSyntax};
+use lady_deirdre::{units::Document, syntax::NoSyntax};
 
 let mut doc = Document::<NoSyntax<CalcToken>>::default();
 

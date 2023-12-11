@@ -43,7 +43,7 @@ use std::fmt::{Debug, Display, Formatter};
 use lady_deirdre::{
     lexis::{LexisSession, SourceCode, Token, TokenCursor, TokenRule, TokenSet, EMPTY_TOKEN_SET},
     syntax::{NoSyntax, SimpleNode},
-    Document,
+    units::Document,
 };
 
 #[test]

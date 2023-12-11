@@ -37,12 +37,12 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    compiler::CompilationUnit,
     format::{PrintString, Priority, SnippetConfig, SnippetFormatter},
     lexis::{SiteSpan, ToSpan, Token, TokenRef},
     report::debug_unreachable,
     std::*,
     syntax::{Node, NodeRef},
+    units::CompilationUnit,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

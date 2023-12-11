@@ -36,12 +36,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    compiler::CompilationUnit,
     lexis::{Site, SiteSpan, TokenRef},
     std::*,
     syntax::{node::Node, NodeRef, PolyRef, PolyVariant, RefKind},
+    units::CompilationUnit,
 };
 
+//todo consider turning into trait
 #[derive(Clone)]
 pub struct Children {
     vector: Vec<(&'static str, Child)>,
@@ -77,12 +78,12 @@ impl Default for Children {
     }
 }
 
-impl<S: Borrow<str>> Index<S> for Children {
+impl<S: AsRef<str>> Index<S> for Children {
     type Output = Child;
 
     #[inline(always)]
     fn index(&self, index: S) -> &Self::Output {
-        self.get(index.borrow()).expect("Unknown key.")
+        self.get(index).expect("Unknown key.")
     }
 }
 
@@ -175,8 +176,8 @@ impl Children {
     }
 
     #[inline(always)]
-    pub fn get(&self, key: &str) -> Option<&Child> {
-        let index = *self.map.get(key)?;
+    pub fn get(&self, key: impl AsRef<str>) -> Option<&Child> {
+        let index = *self.map.get(key.as_ref())?;
 
         // Safety: `map` values are always valid indices into `vector`.
         let (_, value) = unsafe { self.vector.get_unchecked(index) };

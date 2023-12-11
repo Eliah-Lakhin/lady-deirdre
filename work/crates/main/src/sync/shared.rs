@@ -40,7 +40,7 @@ use crate::{report::system_panic, std::*};
 const REF_MAX: usize = usize::MAX - 1;
 
 #[repr(transparent)]
-pub struct Shared<T> {
+pub struct Shared<T: ?Sized> {
     inner: NonNull<SharedInner<T>>,
     _phantom: PhantomData<SharedInner<T>>,
 }
@@ -130,7 +130,7 @@ impl<T> Clone for Shared<T> {
     }
 }
 
-impl<T> Drop for Shared<T> {
+impl<T: ?Sized> Drop for Shared<T> {
     fn drop(&mut self) {
         let counter = {
             // Safety: Shared owns a pointer to valid data leaked from the Box.
@@ -298,7 +298,7 @@ impl<T> Shared<T> {
     }
 }
 
-struct SharedInner<T> {
+struct SharedInner<T: ?Sized> {
     counter: AtomicUsize,
     data: T,
 }

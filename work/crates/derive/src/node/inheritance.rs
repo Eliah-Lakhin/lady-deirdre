@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use proc_macro2::{Ident, TokenStream};
-use syn::{spanned::Spanned, AttrStyle, Error, LitStr, Result, Variant};
+use syn::{spanned::Spanned, AttrStyle, Error, LitStr, Result, Type, Variant};
 
 use crate::utils::{error, expect_some, Facade};
 
@@ -45,6 +45,7 @@ pub(super) struct Inheritance {
     node: Option<Ident>,
     parent: Option<Ident>,
     children: Vec<Ident>,
+    semantics: Option<(Ident, Type)>,
 }
 
 impl<'a> TryFrom<&'a Variant> for Inheritance {
@@ -54,6 +55,7 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
         let mut node = None;
         let mut parent = None;
         let mut children = Vec::with_capacity(variant.fields.len());
+        let mut semantics = None;
 
         for field in &variant.fields {
             let ident = expect_some!(&field.ident, "Unnamed field.",);
@@ -61,6 +63,7 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
             let mut is_node = false;
             let mut is_parent = false;
             let mut is_child = false;
+            let mut is_semantics = false;
 
             for attr in &field.attrs {
                 match &attr.style {
@@ -84,14 +87,21 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
                         if is_node {
                             return Err(error!(
                                 attr_span,
-                                "Parent attribute conflicts with Node attribute.",
+                                "Parent attribute conflicts with the Node attribute.",
                             ));
                         }
 
                         if is_child {
                             return Err(error!(
                                 attr_span,
-                                "Parent attribute conflicts with Child attribute.",
+                                "Parent attribute conflicts with the Child attribute.",
+                            ));
+                        }
+
+                        if is_semantics {
+                            return Err(error!(
+                                attr_span,
+                                "Parent attribute conflicts with the Semantics attribute.",
                             ));
                         }
 
@@ -108,14 +118,21 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
                         if is_parent {
                             return Err(error!(
                                 attr_span,
-                                "Node attribute conflicts with Parent attribute.",
+                                "Node attribute conflicts with the Parent attribute.",
                             ));
                         }
 
                         if is_child {
                             return Err(error!(
                                 attr_span,
-                                "Node attribute conflicts with Child attribute.",
+                                "Node attribute conflicts with the Child attribute.",
+                            ));
+                        }
+
+                        if is_semantics {
+                            return Err(error!(
+                                attr_span,
+                                "Node attribute conflicts with the Semantics attribute.",
                             ));
                         }
 
@@ -132,20 +149,65 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
                         if is_node {
                             return Err(error!(
                                 attr_span,
-                                "Child attribute conflicts with Node attribute.",
+                                "Child attribute conflicts with the Node attribute.",
                             ));
                         }
 
                         if is_parent {
                             return Err(error!(
                                 attr_span,
-                                "Child attribute conflicts with Parent attribute.",
+                                "Child attribute conflicts with the Parent attribute.",
+                            ));
+                        }
+
+                        if is_semantics {
+                            return Err(error!(
+                                attr_span,
+                                "Child attribute conflicts with the Semantics attribute.",
                             ));
                         }
 
                         is_child = true;
 
                         children.push(ident.clone());
+                    }
+
+                    "semantics" => {
+                        if semantics.is_some() {
+                            return Err(error!(
+                                attr_span,
+                                "Node variant can have at most one Semantics field.",
+                            ));
+                        }
+
+                        if is_semantics {
+                            return Err(error!(attr_span, "Duplicate Semantics attribute.",));
+                        }
+
+                        if is_child {
+                            return Err(error!(
+                                attr_span,
+                                "Semantics attribute conflicts with the Child attribute.",
+                            ));
+                        }
+
+                        if is_node {
+                            return Err(error!(
+                                attr_span,
+                                "Semantics attribute conflicts with the Node attribute.",
+                            ));
+                        }
+
+                        if is_parent {
+                            return Err(error!(
+                                attr_span,
+                                "Semantics attribute conflicts with the Parent attribute.",
+                            ));
+                        }
+
+                        is_semantics = true;
+
+                        semantics = Some((ident.clone(), field.ty.clone()));
                     }
 
                     _ => (),
@@ -158,6 +220,7 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
             node,
             parent,
             children,
+            semantics,
         })
     }
 }
@@ -225,5 +288,159 @@ impl Inheritance {
             #append
             )*
         }))
+    }
+
+    pub(super) fn compile_initializer(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::Feature>::initialize(_0, initializer);
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
+    }
+
+    pub(super) fn compile_invalidator(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::Feature>::invalidate(_0, invalidator);
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
+    }
+
+    pub(super) fn compile_feature_kind(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::AbstractFeature>::feature_kind(_0)
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
+    }
+
+    pub(super) fn compile_feature_as_attr(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::AbstractFeature>::as_attr(_0)
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
+    }
+
+    pub(super) fn compile_get_feature(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::AbstractFeature>::get_feature(_0, sub_feature)
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
+    }
+
+    pub(super) fn compile_has_feature(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::AbstractFeature>::has_feature(_0, sub_feature)
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
+    }
+
+    pub(super) fn compile_enum_features(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::AbstractFeature>::enum_features(_0)
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(
+            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
+                #body
+            }),
+        )
     }
 }
