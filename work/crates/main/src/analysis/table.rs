@@ -105,7 +105,7 @@ impl<V, S: SyncBuildHasher> UnitTable<V, S> {
     pub(super) fn contains(&self, id: Id) -> bool {
         match self {
             Self::Single(table) => {
-                let mut guard = table.read().unwrap_or_else(|poison| poison.into_inner());
+                let guard = table.read().unwrap_or_else(|poison| poison.into_inner());
 
                 let Some((managed_id, _)) = guard.deref() else {
                     return false;
@@ -121,7 +121,7 @@ impl<V, S: SyncBuildHasher> UnitTable<V, S> {
     pub(super) fn get(&self, id: Id) -> Option<UnitTableReadGuard<V, S>> {
         match self {
             Self::Single(table) => {
-                let mut guard = table.read().unwrap_or_else(|poison| poison.into_inner());
+                let guard = table.read().unwrap_or_else(|poison| poison.into_inner());
 
                 let Some((managed_id, _)) = guard.deref() else {
                     return None;
@@ -141,7 +141,7 @@ impl<V, S: SyncBuildHasher> UnitTable<V, S> {
     pub(super) fn get_mut(&self, id: Id) -> Option<UnitTableWriteGuard<V, S>> {
         match self {
             Self::Single(table) => {
-                let mut guard = table.write().unwrap_or_else(|poison| poison.into_inner());
+                let guard = table.write().unwrap_or_else(|poison| poison.into_inner());
 
                 let Some((managed_id, _)) = guard.deref() else {
                     return None;

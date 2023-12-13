@@ -36,11 +36,19 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{FeatureInitializer, FeatureInvalidator},
     lexis::Token,
     std::*,
-    sync::SyncBuildHasher,
-    syntax::{Children, Node, NodeRef, NodeRule, ParseError, SyntaxSession, NON_RULE},
+    syntax::{
+        AbstractNode,
+        Capture,
+        Key,
+        Node,
+        NodeRef,
+        NodeRule,
+        ParseError,
+        SyntaxSession,
+        NON_RULE,
+    },
 };
 
 /// A special marker that forcefully skips syntax parsing stage.
@@ -79,21 +87,20 @@ impl<T: Token> Debug for NoSyntax<T> {
     }
 }
 
-impl<T: Token> Node for NoSyntax<T> {
-    type Token = T;
-    type Error = ParseError;
-
-    #[inline(always)]
-    fn parse<'code>(
-        _session: &mut impl SyntaxSession<'code, Node = Self>,
-        _rule: NodeRule,
-    ) -> Self {
-        Self::nil()
-    }
-
+impl<T: Token> AbstractNode for NoSyntax<T> {
     #[inline(always)]
     fn rule(&self) -> NodeRule {
         NON_RULE
+    }
+
+    #[inline(always)]
+    fn name(&self) -> Option<&'static str> {
+        None
+    }
+
+    #[inline(always)]
+    fn describe(&self, _verbose: bool) -> Option<&'static str> {
+        None
     }
 
     #[inline(always)]
@@ -110,24 +117,42 @@ impl<T: Token> Node for NoSyntax<T> {
     fn set_parent_ref(&mut self, _parent_ref: NodeRef) {}
 
     #[inline(always)]
-    fn children(&self) -> Children {
-        Children::new()
-    }
-
-    #[inline(always)]
-    fn initialize<S: SyncBuildHasher>(&mut self, _initializer: &mut FeatureInitializer<Self, S>) {}
-
-    #[inline(always)]
-    fn invalidate<S: SyncBuildHasher>(&self, _invalidator: &mut FeatureInvalidator<Self, S>) {}
-
-    #[inline(always)]
-    fn name(_rule: NodeRule) -> Option<&'static str> {
+    fn capture(&self, _key: Key) -> Option<Capture> {
         None
     }
 
     #[inline(always)]
-    fn describe(_rule: NodeRule, _verbose: bool) -> Option<&'static str> {
+    fn capture_keys(&self) -> &'static [Key<'static>] {
+        &[]
+    }
+
+    #[inline(always)]
+    fn rule_name(_rule: NodeRule) -> Option<&'static str>
+    where
+        Self: Sized,
+    {
         None
+    }
+
+    #[inline(always)]
+    fn rule_description(_rule: NodeRule, _verbose: bool) -> Option<&'static str>
+    where
+        Self: Sized,
+    {
+        None
+    }
+}
+
+impl<T: Token> Node for NoSyntax<T> {
+    type Token = T;
+    type Error = ParseError;
+
+    #[inline(always)]
+    fn parse<'code>(
+        _session: &mut impl SyntaxSession<'code, Node = Self>,
+        _rule: NodeRule,
+    ) -> Self {
+        Self::nil()
     }
 }
 

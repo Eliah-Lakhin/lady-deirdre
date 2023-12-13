@@ -254,40 +254,70 @@ impl Inheritance {
         )
     }
 
-    pub(super) fn compile_children_getter(&self) -> Option<TokenStream> {
+    pub(super) fn compile_capture_getter(&self) -> Option<TokenStream> {
         let children = &self.children;
 
         if children.is_empty() {
             return None;
         }
 
-        let ident = &self.ident;
-        let span = ident.span();
-
         let mut pattern = Vec::with_capacity(children.len());
-        let mut append = Vec::with_capacity(children.len());
+        let mut body = Vec::with_capacity(children.len());
 
         for (index, child) in children.iter().enumerate() {
             let span = child.span();
             let core = span.face_core();
+            let option = span.face_option();
+            let from = span.face_from();
+
             let key = LitStr::new(child.to_string().as_str(), span);
             let value = format_ident!("_{}", index, span = span);
 
             pattern.push(quote_spanned!(span=> #child: #value));
 
-            append.push(quote_spanned!(span=>
-                #core::syntax::Children::set(&mut children, #key, #value);
+            body.push(quote_spanned!(span=>
+                #core::syntax::Key::Index(#index) | #core::syntax::Key::Name(#key) =>
+                    #option::Some(<#core::syntax::Capture as #from::<_>>::from(#value)),
             ));
         }
+
+        let ident = &self.ident;
+        let span = ident.span();
+        let option = span.face_option();
 
         Some(quote_spanned!(span=> Self::#ident {
             #( #pattern, )*
             ..
-        } => {
+        } => match key {
             #(
-            #append
+            #body
             )*
+            _ => #option::None,
         }))
+    }
+
+    pub(super) fn compile_capture_keys(&self) -> Option<TokenStream> {
+        let children = &self.children;
+
+        if children.is_empty() {
+            return None;
+        }
+
+        let mut keys = Vec::with_capacity(children.len());
+
+        for child in children.iter() {
+            let span = child.span();
+            let core = span.face_core();
+
+            let key = LitStr::new(child.to_string().as_str(), span);
+
+            keys.push(quote_spanned!(span=> #core::syntax::Key::Name(#key)));
+        }
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(quote_spanned!(span=> Self::#ident { .. } => &[#(#keys),*],))
     }
 
     pub(super) fn compile_initializer(&self) -> Option<TokenStream> {
@@ -334,7 +364,7 @@ impl Inheritance {
         )
     }
 
-    pub(super) fn compile_feature_kind(&self) -> Option<TokenStream> {
+    pub(super) fn compile_attr_ref(&self) -> Option<TokenStream> {
         let (field_ident, field_ty) = self.semantics.as_ref()?;
 
         let body = {
@@ -342,21 +372,17 @@ impl Inheritance {
             let core = span.face_core();
 
             quote_spanned!(span=>
-                <#field_ty as #core::analysis::AbstractFeature>::feature_kind(_0)
+                <#field_ty as #core::analysis::AbstractFeature>::attr_ref(_0)
             )
         };
 
         let ident = &self.ident;
         let span = ident.span();
 
-        Some(
-            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
-                #body
-            }),
-        )
+        Some(quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => #body,))
     }
 
-    pub(super) fn compile_feature_as_attr(&self) -> Option<TokenStream> {
+    pub(super) fn compile_feature_getter(&self) -> Option<TokenStream> {
         let (field_ident, field_ty) = self.semantics.as_ref()?;
 
         let body = {
@@ -364,21 +390,17 @@ impl Inheritance {
             let core = span.face_core();
 
             quote_spanned!(span=>
-                <#field_ty as #core::analysis::AbstractFeature>::as_attr(_0)
+                <#field_ty as #core::analysis::AbstractFeature>::feature(_0, key)
             )
         };
 
         let ident = &self.ident;
         let span = ident.span();
 
-        Some(
-            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
-                #body
-            }),
-        )
+        Some(quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => #body,))
     }
 
-    pub(super) fn compile_get_feature(&self) -> Option<TokenStream> {
+    pub(super) fn compile_feature_keys(&self) -> Option<TokenStream> {
         let (field_ident, field_ty) = self.semantics.as_ref()?;
 
         let body = {
@@ -386,61 +408,13 @@ impl Inheritance {
             let core = span.face_core();
 
             quote_spanned!(span=>
-                <#field_ty as #core::analysis::AbstractFeature>::get_feature(_0, sub_feature)
+                <#field_ty as #core::analysis::AbstractFeature>::feature_keys(_0)
             )
         };
 
         let ident = &self.ident;
         let span = ident.span();
 
-        Some(
-            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
-                #body
-            }),
-        )
-    }
-
-    pub(super) fn compile_has_feature(&self) -> Option<TokenStream> {
-        let (field_ident, field_ty) = self.semantics.as_ref()?;
-
-        let body = {
-            let span = field_ty.span();
-            let core = span.face_core();
-
-            quote_spanned!(span=>
-                <#field_ty as #core::analysis::AbstractFeature>::has_feature(_0, sub_feature)
-            )
-        };
-
-        let ident = &self.ident;
-        let span = ident.span();
-
-        Some(
-            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
-                #body
-            }),
-        )
-    }
-
-    pub(super) fn compile_enum_features(&self) -> Option<TokenStream> {
-        let (field_ident, field_ty) = self.semantics.as_ref()?;
-
-        let body = {
-            let span = field_ty.span();
-            let core = span.face_core();
-
-            quote_spanned!(span=>
-                <#field_ty as #core::analysis::AbstractFeature>::enum_features(_0)
-            )
-        };
-
-        let ident = &self.ident;
-        let span = ident.span();
-
-        Some(
-            quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => {
-                #body
-            }),
-        )
+        Some(quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => #body,))
     }
 }

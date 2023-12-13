@@ -64,12 +64,15 @@ const STRING_INLINE: usize = PAGE_CAP * CHUNK_SIZE;
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(debug_assertions))]
     use crate::{
-        analysis::{FeatureInitializer, FeatureInvalidator},
+        lexis::{Length, Site},
+        units::storage::{branch::Branch, item::Item, page::Page},
+    };
+    use crate::{
         lexis::{LexisSession, Token, TokenRule, TokenSet},
         std::*,
-        sync::SyncBuildHasher,
-        syntax::{Children, Node, NodeRef, NodeRule, ParseError, SyntaxSession},
+        syntax::{AbstractNode, Capture, Key, Node, NodeRef, NodeRule, ParseError, SyntaxSession},
         units::storage::{
             child::ChildIndex,
             item::{ItemRef, ItemRefVariant},
@@ -77,11 +80,6 @@ mod tests {
             references::References,
             tree::Tree,
         },
-    };
-    #[cfg(not(debug_assertions))]
-    use crate::{
-        lexis::{Length, Site},
-        units::storage::{branch::Branch, item::Item, page::Page},
     };
 
     #[test]
@@ -843,18 +841,16 @@ mod tests {
 
     struct TestNode;
 
-    impl Node for TestNode {
-        type Token = TestToken;
-        type Error = ParseError;
-
-        fn parse<'code>(
-            _session: &mut impl SyntaxSession<'code, Node = Self>,
-            _rule: NodeRule,
-        ) -> Self {
+    impl AbstractNode for TestNode {
+        fn rule(&self) -> NodeRule {
             unimplemented!()
         }
 
-        fn rule(&self) -> NodeRule {
+        fn name(&self) -> Option<&'static str> {
+            unimplemented!()
+        }
+
+        fn describe(&self, _verbose: bool) -> Option<&'static str> {
             unimplemented!()
         }
 
@@ -866,25 +862,41 @@ mod tests {
             unimplemented!()
         }
 
-        fn set_parent_ref(&mut self, _parent: NodeRef) {}
-
-        fn children(&self) -> Children {
+        fn set_parent_ref(&mut self, _parent_ref: NodeRef) {
             unimplemented!()
         }
 
-        fn initialize<S: SyncBuildHasher>(
-            &mut self,
-            _initializer: &mut FeatureInitializer<Self, S>,
-        ) {
-        }
-
-        fn invalidate<S: SyncBuildHasher>(&self, _invalidator: &mut FeatureInvalidator<Self, S>) {}
-
-        fn name(_rule: NodeRule) -> Option<&'static str> {
+        fn capture(&self, _key: Key) -> Option<Capture> {
             unimplemented!()
         }
 
-        fn describe(_rule: NodeRule, _verbose: bool) -> Option<&'static str> {
+        fn capture_keys(&self) -> &'static [Key<'static>] {
+            unimplemented!()
+        }
+
+        fn rule_name(_rule: NodeRule) -> Option<&'static str>
+        where
+            Self: Sized,
+        {
+            unimplemented!()
+        }
+
+        fn rule_description(_rule: NodeRule, _verbose: bool) -> Option<&'static str>
+        where
+            Self: Sized,
+        {
+            unimplemented!()
+        }
+    }
+
+    impl Node for TestNode {
+        type Token = TestToken;
+        type Error = ParseError;
+
+        fn parse<'code>(
+            _session: &mut impl SyntaxSession<'code, Node = Self>,
+            _rule: NodeRule,
+        ) -> Self {
             unimplemented!()
         }
     }
@@ -909,11 +921,11 @@ mod tests {
             unimplemented!()
         }
 
-        fn name(_index: TokenRule) -> Option<&'static str> {
+        fn rule_name(_index: TokenRule) -> Option<&'static str> {
             unimplemented!()
         }
 
-        fn describe(_index: TokenRule, _verbose: bool) -> Option<&'static str> {
+        fn rule_description(_index: TokenRule, _verbose: bool) -> Option<&'static str> {
             unimplemented!()
         }
 

@@ -36,19 +36,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{record::Record, table::UnitTable, Revision},
+    analysis::{record::Record, table::UnitTable, Grammar, Revision},
     arena::{Entry, Id, Repository},
     std::*,
-    sync::{SyncBuildHasher, Table},
-    syntax::Node,
+    sync::SyncBuildHasher,
 };
 
-pub(super) struct Database<N: Node, S: SyncBuildHasher> {
+pub(super) struct Database<N: Grammar, S: SyncBuildHasher> {
     pub(super) records: UnitTable<Repository<Record<N, S>>, S>,
     revision: AtomicU64,
 }
 
-impl<N: Node, S: SyncBuildHasher> Database<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> Database<N, S> {
     #[inline(always)]
     pub(super) fn new_single() -> Self {
         Self {
@@ -80,7 +79,7 @@ pub(super) trait AbstractDatabase: Send + Sync + 'static {
     fn deregister_attribute(&self, id: Id, entry: &Entry);
 }
 
-impl<N: Node, S: SyncBuildHasher> AbstractDatabase for Database<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> AbstractDatabase for Database<N, S> {
     fn deregister_attribute(&self, id: Id, entry: &Entry) {
         let Some(mut records_guard) = self.records.get_mut(id) else {
             return;

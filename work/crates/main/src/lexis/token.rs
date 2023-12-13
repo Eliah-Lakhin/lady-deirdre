@@ -264,7 +264,7 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     ///         self as u8
     ///     }
     ///
-    ///     fn name(index: TokenRule) -> Option<&'static str> {
+    ///     fn rule_name(index: TokenRule) -> Option<&'static str> {
     ///         match index {
     ///             0 => Some("Mismatch"),
     ///             1 => Some("Num"),
@@ -273,7 +273,7 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     ///         }
     ///     }
     ///
-    ///     fn describe(rule: TokenRule, _verbose: bool) -> Option<&'static str> {
+    ///     fn rule_description(rule: TokenRule, _verbose: bool) -> Option<&'static str> {
     ///         match rule {
     ///             0 => Some("<mismatch>"),
     ///             1 => Some("<num>"),
@@ -310,11 +310,19 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
 
     fn rule(self) -> TokenRule;
 
-    //todo consider providing default implementations for these functions
+    #[inline(always)]
+    fn name(self) -> Option<&'static str> {
+        Self::rule_name(self.rule())
+    }
 
-    fn name(rule: TokenRule) -> Option<&'static str>;
+    #[inline(always)]
+    fn describe(self, verbose: bool) -> Option<&'static str> {
+        Self::rule_description(self.rule(), verbose)
+    }
 
-    fn describe(rule: TokenRule, verbose: bool) -> Option<&'static str>;
+    fn rule_name(rule: TokenRule) -> Option<&'static str>;
+
+    fn rule_description(rule: TokenRule, verbose: bool) -> Option<&'static str>;
 
     fn blanks() -> &'static TokenSet;
 }
@@ -564,9 +572,7 @@ impl TokenRef {
 
     #[inline(always)]
     pub fn name<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<&'static str> {
-        self.deref(code)
-            .map(|token| T::name(token.rule()))
-            .flatten()
+        self.deref(code).map(T::name).flatten()
     }
 
     #[inline(always)]
@@ -576,7 +582,7 @@ impl TokenRef {
         verbose: bool,
     ) -> Option<&'static str> {
         self.deref(code)
-            .map(|token| T::describe(token.rule(), verbose))
+            .map(|token| token.describe(verbose))
             .flatten()
     }
 

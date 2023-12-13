@@ -108,7 +108,7 @@ fn test_document_lexis() {
             self as u8
         }
 
-        fn name(index: TokenRule) -> Option<&'static str> {
+        fn rule_name(index: TokenRule) -> Option<&'static str> {
             if index == Self::A as u8 {
                 return Some("A");
             }
@@ -133,7 +133,7 @@ fn test_document_lexis() {
         }
 
         #[inline(always)]
-        fn describe(index: TokenRule, _verbose: bool) -> Option<&'static str> {
+        fn rule_description(index: TokenRule, _verbose: bool) -> Option<&'static str> {
             if index == Self::A as u8 {
                 return Some("A");
             }

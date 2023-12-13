@@ -145,7 +145,7 @@ impl<N: Node> CompilationUnit for ImmutableUnit<N> {
 
 impl<N: Node> ImmutableUnit<N> {
     pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
-        let mut lexis = text.into();
+        let lexis = text.into();
 
         let syntax = SyntaxBuffer::new(lexis.id(), lexis.cursor(..));
 

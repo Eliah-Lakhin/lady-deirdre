@@ -50,7 +50,7 @@ pub use crate::analysis::{
     analysis::AnalysisTask,
     analyzer::{Analyzer, DocumentReadGuard, Revision},
     attribute::{Attr, AttrRef, Computable},
-    features::{AbstractFeature, Feature, FeatureKind, Semantics},
+    features::{AbstractFeature, Feature, Grammar, Semantics},
     mutation::{FeatureInitializer, FeatureInvalidator, MutationTask},
     result::{AnalysisError, AnalysisResult},
 };
@@ -71,8 +71,7 @@ mod tests {
         lexis::{SimpleToken, TokenRef},
         std::*,
         sync::SyncBuildHasher,
-        syntax::{NoSyntax, Node, NodeRef, ParseError, SimpleNode, SyntaxTree},
-        units::CompilationUnit,
+        syntax::{Key, Node, NodeRef, ParseError, SyntaxTree},
     };
 
     #[derive(Node)]
@@ -140,11 +139,7 @@ mod tests {
                     continue;
                 };
 
-                let sum = semantics
-                    .as_attr()
-                    .unwrap()
-                    .read::<NumSumAttr, _>(task)
-                    .unwrap();
+                let sum = semantics.attr_ref().read::<NumSumAttr, _>(task).unwrap();
 
                 value += sum.sum
             }
@@ -207,10 +202,9 @@ mod tests {
             let root_node = doc.root_node_ref().deref(doc.deref()).unwrap();
 
             let total_sum = root_node
-                .get_feature("total_sum")
+                .feature(Key::from("total_sum"))
                 .unwrap()
-                .as_attr()
-                .unwrap();
+                .attr_ref();
 
             let total_sum = total_sum.read::<TotalSumAttr, _>(&mut analysis).unwrap();
 

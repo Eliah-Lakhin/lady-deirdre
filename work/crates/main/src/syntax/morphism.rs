@@ -41,7 +41,7 @@ use crate::{
     lexis::{SiteSpan, ToSpan, Token, TokenRef},
     report::debug_unreachable,
     std::*,
-    syntax::{Node, NodeRef},
+    syntax::{AbstractNode, NodeRef},
     units::CompilationUnit,
 };
 
@@ -68,6 +68,20 @@ impl Identifiable for PolyVariant {
             Self::Token(child) => child.id,
             Self::Node(child) => child.id,
         }
+    }
+}
+
+impl Borrow<dyn PolyRef> for PolyVariant {
+    #[inline(always)]
+    fn borrow(&self) -> &dyn PolyRef {
+        self
+    }
+}
+
+impl AsRef<dyn PolyRef> for PolyVariant {
+    #[inline(always)]
+    fn as_ref(&self) -> &dyn PolyRef {
+        self
     }
 }
 
@@ -149,6 +163,15 @@ pub trait PolyRef: Identifiable + Debug + 'static {
     }
 }
 
+impl ToOwned for dyn PolyRef {
+    type Owned = PolyVariant;
+
+    #[inline(always)]
+    fn to_owned(&self) -> Self::Owned {
+        self.as_variant()
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RefKind {
     Token,
@@ -197,12 +220,12 @@ impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
                     None => unsafe { debug_unreachable!("Invalid chunk span.") },
                 };
 
-                let rule = chunk.token.rule();
+                let token = chunk.token;
 
                 summary.push_str("Token: ");
-                summary.push_str(<U::Token as Token>::name(rule).unwrap_or("?"));
+                summary.push_str(token.name().unwrap_or("?"));
                 summary.push_str("\nDescription: ");
-                summary.push_str(<U::Token as Token>::describe(rule, true).unwrap_or("?"));
+                summary.push_str(token.describe(true).unwrap_or("?"));
                 summary.push_str("\nChunk entry: ");
                 summary.push_str(&format!("{:?}", variant.chunk_entry));
                 summary.push_str("\nLength: ");
@@ -221,17 +244,15 @@ impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
                     Some(chunk) => chunk,
                 };
 
-                span = match node.children().span(self.unit) {
+                span = match node.span(self.unit) {
                     None => return Debug::fmt(&variant, formatter),
                     Some(span) => span,
                 };
 
-                let rule = node.rule();
-
                 summary.push_str("Node: ");
-                summary.push_str(<U::Node as Node>::name(rule).unwrap_or("?"));
+                summary.push_str(node.name().unwrap_or("?"));
                 summary.push_str("\nDescription: ");
-                summary.push_str(<U::Node as Node>::describe(rule, true).unwrap_or("?"));
+                summary.push_str(node.describe(true).unwrap_or("?"));
                 summary.push_str("\nCluster entry: ");
                 summary.push_str(&format!("{:?}", variant.cluster_entry));
                 summary.push_str("\nNode entry: ");

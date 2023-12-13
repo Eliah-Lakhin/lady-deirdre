@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{lexis::Token, std::*, syntax::Node};
+use crate::std::*;
 
 pub trait SyncBuildHasher: BuildHasher + Clone + Default + Send + Sync + 'static {}
 

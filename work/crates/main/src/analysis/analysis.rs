@@ -42,22 +42,23 @@ use crate::{
         AnalysisResult,
         Analyzer,
         AttrRef,
+        Grammar,
         Revision,
     },
     report::system_panic,
     std::*,
     sync::{Latch, SyncBuildHasher},
-    syntax::{Node, NodeRef},
+    syntax::NodeRef,
 };
 
-pub struct AnalysisTask<'a, N: Node, S: SyncBuildHasher = RandomState> {
-    pub(super) fork: Option<Fork<'a, S>>,
+pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    fork: Option<Fork<'a, S>>,
     pub(super) analyzer: &'a Analyzer<N, S>,
     pub(super) revision: Revision,
     pub(super) handle: Latch,
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
     fn drop(&mut self) {
         if self.fork.is_some() {
             return;
@@ -95,7 +96,7 @@ impl<'a, N: Node, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
     }
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     #[inline(always)]
     pub(super) fn new(analyzer: &'a Analyzer<N, S>) -> Self {
         Self {
@@ -134,7 +135,7 @@ impl<'a, N: Node, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     #[inline(always)]
     pub fn proceed(&self) -> AnalysisResult<()> {
         if self.handle.get_relaxed() {
-            return Err(AnalysisError::MissingDocument);
+            return Err(AnalysisError::Interrupted);
         }
 
         Ok(())

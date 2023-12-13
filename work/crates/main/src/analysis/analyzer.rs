@@ -40,17 +40,12 @@ use crate::{
         database::Database,
         mutation::MutationTask,
         table::{UnitTable, UnitTableReadGuard},
-        AnalysisError,
-        AnalysisResult,
         AnalysisTask,
-        AttrRef,
+        Grammar,
     },
-    arena::{Id, Identifiable},
-    lexis::TokenBuffer,
-    report::{debug_unreachable, system_panic},
+    arena::Id,
     std::*,
-    sync::{Latch, SyncBuildHasher, Table},
-    syntax::Node,
+    sync::{Latch, SyncBuildHasher},
     units::Document,
 };
 
@@ -59,7 +54,7 @@ pub(super) const DEPS_CAPACITY: usize = 30;
 
 pub type Revision = u64;
 
-pub struct Analyzer<N: Node, S: SyncBuildHasher = RandomState> {
+pub struct Analyzer<N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) documents: UnitTable<Document<N>, S>,
     pub(super) database: Arc<Database<N, S>>,
     pub(super) stage: Mutex<AnalyzerStage<S>>,
@@ -67,14 +62,14 @@ pub struct Analyzer<N: Node, S: SyncBuildHasher = RandomState> {
     pub(super) ready_for_mutation: Condvar,
 }
 
-impl<N: Node, S: SyncBuildHasher> Default for Analyzer<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> Default for Analyzer<N, S> {
     #[inline(always)]
     fn default() -> Self {
         Self::for_many_documents()
     }
 }
 
-impl<N: Node, S: SyncBuildHasher> Analyzer<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
     pub fn for_single_document() -> Self {
         Self {
             documents: UnitTable::new_single(),
@@ -217,11 +212,11 @@ impl<N: Node, S: SyncBuildHasher> Analyzer<N, S> {
 }
 
 #[repr(transparent)]
-pub struct DocumentReadGuard<'a, N: Node, S: SyncBuildHasher = RandomState> {
+pub struct DocumentReadGuard<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     guard: UnitTableReadGuard<'a, Document<N>, S>,
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Deref for DocumentReadGuard<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Deref for DocumentReadGuard<'a, N, S> {
     type Target = Document<N>;
 
     #[inline(always)]

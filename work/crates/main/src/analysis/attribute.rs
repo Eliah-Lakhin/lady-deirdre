@@ -47,14 +47,14 @@ use crate::{
         Feature,
         FeatureInitializer,
         FeatureInvalidator,
-        FeatureKind,
+        Grammar,
         MutationTask,
     },
     arena::{Entry, Id, Identifiable, Repository},
     report::debug_unreachable,
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher},
-    syntax::{Node, NodeRef, SimpleNode},
+    sync::{Shared, SyncBuildHasher},
+    syntax::{Key, NodeRef},
 };
 
 #[repr(transparent)]
@@ -143,29 +143,20 @@ impl<C: Computable> Drop for Attr<C> {
     }
 }
 
-impl<C: Computable + Eq> AbstractFeature for Attr<C> {
+impl<C: Computable> AbstractFeature for Attr<C> {
     #[inline(always)]
-    fn feature_kind(&self) -> AnalysisResult<FeatureKind> {
-        Ok(FeatureKind::Attribute)
+    fn attr_ref(&self) -> &AttrRef {
+        self.as_ref()
     }
 
     #[inline(always)]
-    fn as_attr(&self) -> AnalysisResult<&AttrRef> {
-        Ok(self.as_ref())
-    }
-
-    fn get_feature(&self, _sub_feature: &'static str) -> AnalysisResult<&dyn AbstractFeature> {
-        Err(AnalysisError::NotAComposite)
+    fn feature(&self, _key: Key) -> Option<&dyn AbstractFeature> {
+        None
     }
 
     #[inline(always)]
-    fn has_feature(&self, _sub_feature: &'static str) -> AnalysisResult<bool> {
-        Ok(false)
-    }
-
-    #[inline(always)]
-    fn enum_features(&self) -> AnalysisResult<&'static [&'static str]> {
-        Ok(&[])
+    fn feature_keys(&self) -> &'static [&'static Key] {
+        &[]
     }
 }
 
@@ -290,8 +281,8 @@ impl<C: Computable> Attr<C> {
     }
 }
 
-pub trait Computable: Any + Send + Sync + 'static {
-    type Node: Node;
+pub trait Computable: Send + Sync + 'static {
+    type Node: Grammar;
 
     fn compute<S: SyncBuildHasher>(task: &mut AnalysisTask<Self::Node, S>) -> AnalysisResult<Self>
     where
@@ -407,15 +398,17 @@ impl AttrRef {
         }
     }
 
-    pub fn invalidate<N: Node, S: SyncBuildHasher>(&self, task: &mut MutationTask<N, S>) {
+    pub fn invalidate<N: Grammar, S: SyncBuildHasher>(&self, task: &mut MutationTask<N, S>) {
         let Some(records) = task.analyzer.database.records.get(self.id) else {
             #[cfg(debug_assertions)]
             {
                 panic!("Attribute does not belong to specified Analyzer.");
             }
 
-            #[allow(unreachable_code)]
-            return;
+            #[cfg(not(debug_assertions))]
+            {
+                return;
+            }
         };
 
         let Some(record) = records.get(&self.entry) else {
@@ -427,7 +420,7 @@ impl AttrRef {
     }
 
     #[inline(always)]
-    pub fn is_valid_ref<N: Node, S: SyncBuildHasher>(&self, task: &AnalysisTask<N, S>) -> bool {
+    pub fn is_valid_ref<N: Grammar, S: SyncBuildHasher>(&self, task: &AnalysisTask<N, S>) -> bool {
         let Some(records) = task.analyzer.database.records.get(self.id) else {
             return false;
         };
@@ -435,7 +428,7 @@ impl AttrRef {
         records.contains(&self.entry)
     }
 
-    fn validate<N: Node, S: SyncBuildHasher>(
+    fn validate<N: Grammar, S: SyncBuildHasher>(
         &self,
         task: &AnalysisTask<N, S>,
     ) -> AnalysisResult<()> {
@@ -566,6 +559,7 @@ impl AttrRef {
 }
 
 // Safety: Entries order reflects guards drop semantics.
+#[allow(dead_code)]
 pub struct AttrReadGuard<'a, C: Computable, S: SyncBuildHasher = RandomState> {
     data: &'a C,
     cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,

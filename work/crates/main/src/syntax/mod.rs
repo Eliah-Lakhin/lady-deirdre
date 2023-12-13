@@ -38,7 +38,7 @@
 #![doc = include_str!("readme.md")]
 
 mod buffer;
-mod children;
+mod captures;
 mod cluster;
 mod error;
 mod morphism;
@@ -52,12 +52,12 @@ mod tree;
 
 pub use crate::syntax::{
     buffer::SyntaxBuffer,
-    children::{Child, ChildIntoIter, ChildIter, Children, ChildrenIntoIter, ChildrenIter},
+    captures::{Capture, CaptureIntoIter, CapturesIter, ChildrenIter, Key},
     cluster::{Cluster, ClusterRef},
     error::{ErrorRef, ParseError},
     morphism::{PolyRef, PolyVariant, RefKind},
     no::NoSyntax,
-    node::{Node, NodeRef},
+    node::{AbstractNode, Node, NodeRef},
     recovery::{Recovery, RecoveryResult, UNLIMITED_RECOVERY},
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,

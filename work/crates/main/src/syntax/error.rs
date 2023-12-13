@@ -40,7 +40,16 @@ use crate::{
     format::{Delimited, PrintString, Priority, SnippetFormatter},
     lexis::{Length, SiteRefSpan, SourceCode, ToSite, ToSpan, Token, TokenRule, TokenSet},
     std::*,
-    syntax::{ClusterRef, Node, NodeRule, NodeSet, RecoveryResult, SyntaxTree, ROOT_RULE},
+    syntax::{
+        AbstractNode,
+        ClusterRef,
+        Node,
+        NodeRule,
+        NodeSet,
+        RecoveryResult,
+        SyntaxTree,
+        ROOT_RULE,
+    },
     units::CompilationUnit,
 };
 
@@ -89,16 +98,16 @@ pub struct ParseError {
 
 impl ParseError {
     #[inline(always)]
-    pub fn title<N: Node>(&self) -> impl Display + '_ {
+    pub fn title<N: AbstractNode>(&self) -> impl Display + '_ {
         struct Title<'error, N> {
             error: &'error ParseError,
             _node: PhantomData<N>,
         }
 
-        impl<'error, N: Node> Display for Title<'error, N> {
+        impl<'error, N: AbstractNode> Display for Title<'error, N> {
             #[inline(always)]
             fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-                match N::describe(self.error.context, true) {
+                match N::rule_description(self.error.context, true) {
                     Some(context) => formatter.write_fmt(format_args!("{context} syntax error.")),
                     None => formatter.write_str("Syntax error."),
                 }
@@ -184,7 +193,7 @@ impl ParseError {
                     ) -> Self {
                         let set = StdSet::new_std_set_with_capacity(capacity);
 
-                        let context = N::describe(context, true)
+                        let context = N::rule_description(context, true)
                             .filter(|_| context != ROOT_RULE)
                             .map(PrintString::borrowed)
                             .unwrap_or(PrintString::empty());
@@ -201,7 +210,8 @@ impl ParseError {
                     }
 
                     fn push_token<N: Node>(&mut self, rule: TokenRule) {
-                        let description = match <N as Node>::Token::describe(rule, self.alt) {
+                        let description = match <N as Node>::Token::rule_description(rule, self.alt)
+                        {
                             Some(string) => string,
                             None => return,
                         };
@@ -213,7 +223,7 @@ impl ParseError {
                     }
 
                     fn push_node<N: Node>(&mut self, rule: NodeRule) {
-                        let description = match N::describe(rule, self.alt) {
+                        let description = match N::rule_description(rule, self.alt) {
                             Some(string) => string,
                             None => return,
                         };

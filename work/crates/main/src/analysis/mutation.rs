@@ -44,21 +44,22 @@ use crate::{
         AnalysisError,
         AnalysisResult,
         Analyzer,
+        Grammar,
     },
     arena::{Entry, Id, Identifiable, Repository},
     lexis::{ToSpan, TokenBuffer},
     report::{debug_unreachable, system_panic},
     std::*,
-    sync::{SyncBuildHasher, TableWriteGuard},
-    syntax::{Node, NodeRef, PolyRef, SyntaxTree},
+    sync::SyncBuildHasher,
+    syntax::{NodeRef, PolyRef, SyntaxTree},
     units::{Document, MutableUnit},
 };
 
-pub struct MutationTask<'a, N: Node, S: SyncBuildHasher = RandomState> {
+pub struct MutationTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) analyzer: &'a Analyzer<N, S>,
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Drop for MutationTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for MutationTask<'a, N, S> {
     fn drop(&mut self) {
         let mut stage_guard = self
             .analyzer
@@ -84,7 +85,7 @@ impl<'a, N: Node, S: SyncBuildHasher> Drop for MutationTask<'a, N, S> {
     }
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> MutationTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
     #[inline(always)]
     pub(super) fn new(analyzer: &'a Analyzer<N, S>) -> Self {
         Self { analyzer }
@@ -234,20 +235,20 @@ impl<'a, N: Node, S: SyncBuildHasher> MutationTask<'a, N, S> {
     }
 }
 
-pub struct FeatureInitializer<'a, N: Node, S: SyncBuildHasher = RandomState> {
+pub struct FeatureInitializer<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     id: Id,
     database: Weak<dyn AbstractDatabase>,
     records: &'a mut Repository<Record<N, S>>,
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Identifiable for FeatureInitializer<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for FeatureInitializer<'a, N, S> {
     #[inline(always)]
     fn id(&self) -> Id {
         self.id
     }
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> FeatureInitializer<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> FeatureInitializer<'a, N, S> {
     #[inline(always)]
     pub(super) fn register_attribute<C: Computable<Node = N> + Eq>(
         &mut self,
@@ -260,19 +261,19 @@ impl<'a, N: Node, S: SyncBuildHasher> FeatureInitializer<'a, N, S> {
     }
 }
 
-pub struct FeatureInvalidator<'a, N: Node, S: SyncBuildHasher = RandomState> {
+pub struct FeatureInvalidator<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     id: Id,
     records: &'a mut Repository<Record<N, S>>,
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Identifiable for FeatureInvalidator<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for FeatureInvalidator<'a, N, S> {
     #[inline(always)]
     fn id(&self) -> Id {
         self.id
     }
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> FeatureInvalidator<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> FeatureInvalidator<'a, N, S> {
     #[inline(always)]
     pub(super) fn invalidate_attribute(&mut self, entry: &Entry) {
         let Some(record) = self.records.get(entry) else {

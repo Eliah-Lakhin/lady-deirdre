@@ -35,8 +35,6 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{collections::HashSet, time::Instant};
-
 use proc_macro2::{Ident, TokenStream};
 use quote::ToTokens;
 use syn::{
@@ -221,7 +219,7 @@ impl TryFrom<DeriveInput> for FeatureInput {
                 let output = result.to_token_stream();
 
                 let output_string = match parse2::<File>(output.clone()) {
-                    Ok(file) => ::prettyplease::unparse(&file),
+                    Ok(file) => prettyplease::unparse(&file),
                     Err(_) => output.to_string(),
                 };
 
@@ -250,9 +248,10 @@ impl ToTokens for FeatureInput {
         let vis = &self.vis;
         let span = ident.span();
         let core = span.face_core();
+        let option = span.face_option();
 
         let mut getters = Vec::with_capacity(self.fields.len());
-        let mut features = Vec::with_capacity(self.fields.len());
+        let mut keys = Vec::with_capacity(self.fields.len());
         let mut constructors = Vec::with_capacity(self.fields.len());
         let mut initializers = Vec::with_capacity(self.fields.len());
         let mut invalidators = Vec::with_capacity(self.fields.len());
@@ -263,6 +262,7 @@ impl ToTokens for FeatureInput {
 
             let span = ty.span();
             let core = span.face_core();
+            let option = span.face_option();
 
             let invalidate = self.invalidate.contains(&index);
 
@@ -270,12 +270,15 @@ impl ToTokens for FeatureInput {
                 Some(ident) => {
                     if &field.vis == vis {
                         let span = ident.span();
+                        let core = ident.face_core();
+
                         let literal = LitStr::new(ident.to_string().as_str(), span);
 
                         getters.push(quote_spanned!(span=>
-                            #literal => #core::analysis::AnalysisResult::Ok(&self.#ident)
+                            #core::syntax::Key::Index(#index)
+                                | #core::syntax::Key::Name(#literal) => #option::Some(&self.#ident)
                         ));
-                        features.push(literal);
+                        keys.push(quote_spanned!(span=> &#core::syntax::Key::Name(#literal)));
                     }
 
                     constructors.push(quote_spanned!(span=>
@@ -301,12 +304,10 @@ impl ToTokens for FeatureInput {
 
                 None => {
                     if &field.vis == vis {
-                        let literal = LitStr::new(index.to_string().as_str(), span);
-
                         getters.push(quote_spanned!(span=>
-                            #literal => #core::analysis::AnalysisResult::Ok(&self.#index)
+                            #core::syntax::Key::Index(#index) => #option::Some(&self.#ident)
                         ));
-                        features.push(literal);
+                        keys.push(quote_spanned!(span=> &#core::syntax::Key::Index(#index)));
                     }
 
                     constructors.push(quote_spanned!(span=>
@@ -350,58 +351,32 @@ impl ToTokens for FeatureInput {
 
         let (impl_generics, type_generics, where_clause) = self.generics.split_for_impl();
 
-        let has_feature = match features.is_empty() {
-            true => None,
-            false => Some(quote_spanned!(span=> #( #features )|* => true,)),
-        };
-
         quote_spanned!(span=>
             impl #impl_generics #core::analysis::AbstractFeature for #ident #type_generics
             #where_clause
             {
                 #[inline(always)]
-                fn feature_kind(&self)
-                    -> #core::analysis::AnalysisResult<#core::analysis::FeatureKind>
+                fn attr_ref(&self) -> &#core::analysis::AttrRef {
+                    static NIL_REF: #core::analysis::AttrRef = #core::analysis::AttrRef::nil();
+
+                    &NIL_REF
+                }
+
+                fn feature(&self, key: #core::syntax::Key)
+                    -> #option<&dyn #core::analysis::AbstractFeature>
                 {
-                    #core::analysis::AnalysisResult::Ok(#core::analysis::FeatureKind::Composite)
-                }
-
-                fn as_attr(&self) -> #core::analysis::AnalysisResult<&#core::analysis::AttrRef> {
-                    #core::analysis::AnalysisResult::Err(
-                        #core::analysis::AnalysisError::NotAnAttribute,
-                    )
-                }
-
-                fn get_feature(
-                    &self,
-                    sub_feature: &'static str,
-                ) -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature> {
-                    match sub_feature {
+                    match key {
                         #(
                         #getters,
                         )*
 
-                        _ => #core::analysis::AnalysisResult::Err(
-                            #core::analysis::AnalysisError::MissingSubFeature,
-                        ),
+                        _ => #option::None,
                     }
                 }
 
-                fn has_feature(
-                    &self,
-                    sub_feature: &'static str,
-                ) -> #core::analysis::AnalysisResult<bool> {
-                    #core::analysis::AnalysisResult::Ok(match sub_feature {
-                        #has_feature
-
-                        _ => false,
-                    })
-                }
-
-                fn enum_features(&self)
-                    -> #core::analysis::AnalysisResult<&'static [&'static str]>
-                {
-                    #core::analysis::AnalysisResult::Ok(&[#( #features ),*])
+                #[inline(always)]
+                fn feature_keys(&self) -> &'static [&'static #core::syntax::Key] {
+                    &[#( #keys ),*]
                 }
             }
 
@@ -410,22 +385,22 @@ impl ToTokens for FeatureInput {
             {
                 type Node = #node;
 
-                #[inline(always)]
-                fn new_uninitialized(#[allow(unused)] node_ref: #core::syntax::NodeRef) -> Self {
+                #[allow(unused_variables)]
+                fn new_uninitialized(node_ref: #core::syntax::NodeRef) -> Self {
                     #constructor
                 }
 
-                #[inline(always)]
+                #[allow(unused_variables)]
                 fn initialize<S: #core::sync::SyncBuildHasher>(
                     &mut self,
-                    #[allow(unused)] initializer: &mut #core::analysis::FeatureInitializer<Self::Node, S>,
+                    initializer: &mut #core::analysis::FeatureInitializer<Self::Node, S>,
                 ) {
                     #(
                     #initializers
                     )*
                 }
 
-                #[inline(always)]
+                #[allow(unused_variables)]
                 fn invalidate<S: #core::sync::SyncBuildHasher>(
                     &self,
                     #[allow(unused)] invalidator: &mut #core::analysis::FeatureInvalidator<Self::Node, S>,

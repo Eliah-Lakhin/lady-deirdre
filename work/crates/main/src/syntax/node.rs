@@ -40,15 +40,15 @@ extern crate lady_deirdre_derive;
 pub use lady_deirdre_derive::Node;
 
 use crate::{
-    analysis::{FeatureInitializer, FeatureInvalidator},
     arena::{Entry, Id, Identifiable},
-    lexis::{SiteSpan, Token, TokenRef},
+    lexis::{Site, SiteSpan, Token, TokenRef},
     std::*,
-    sync::SyncBuildHasher,
     syntax::{
-        Child,
-        Children,
+        Capture,
+        CapturesIter,
+        ChildrenIter,
         ClusterRef,
+        Key,
         NodeRule,
         ParseError,
         PolyRef,
@@ -111,7 +111,7 @@ use crate::{
 ///
 /// An API user can implement the Node trait manually too. For example, using 3rd party parser
 /// libraries. See [`Node::new`](crate::syntax::Node::parse) function specification for details.
-pub trait Node: Send + Sync + Sized + 'static {
+pub trait Node: AbstractNode + Sized {
     /// Describes programming language's lexical grammar.
     type Token: Token;
 
@@ -174,7 +174,6 @@ pub trait Node: Send + Sync + Sized + 'static {
     ///         ParseError,
     ///         SyntaxTree,
     ///         NodeSet,
-    ///         Children,
     ///         ROOT_RULE,
     ///         EMPTY_NODE_SET,
     ///         RecoveryResult,
@@ -184,6 +183,7 @@ pub trait Node: Send + Sync + Sized + 'static {
     ///     analysis::{FeatureInitializer, FeatureInvalidator},
     ///     sync::SyncBuildHasher,
     /// };
+    /// use lady_deirdre::syntax::{AbstractNode, Capture, Key};
     ///
     /// // A syntax of embedded parentheses: `(foo (bar) baz)`.
     /// enum Parens {
@@ -194,6 +194,58 @@ pub trait Node: Send + Sync + Sized + 'static {
     ///  
     /// const PARENS_RULE: NodeRule = 1;
     /// const OTHER_RULE: NodeRule = 2;
+    ///
+    /// impl AbstractNode for Parens {
+    ///     fn rule(&self) -> NodeRule {
+    ///         match self {
+    ///             Self::Root {..} => ROOT_RULE,
+    ///             Self::Parens {..} => PARENS_RULE,
+    ///             Self::Other {..} => OTHER_RULE,
+    ///         }
+    ///     }
+    ///
+    ///     fn name(&self) -> Option<&'static str> {
+    ///         Self::rule_name(self.rule())
+    ///     }
+    ///
+    ///     fn describe(&self, verbose: bool) -> Option<&'static str> {
+    ///         Self::rule_description(self.rule(), verbose)
+    ///     }
+    ///
+    ///     fn node_ref(&self) -> NodeRef {
+    ///         NodeRef::nil()
+    ///     }
+    ///
+    ///     fn parent_ref(&self) -> NodeRef {
+    ///         NodeRef::nil()
+    ///     }
+    ///
+    ///     fn set_parent_ref(&mut self, parent_ref: NodeRef) {}
+    ///
+    ///     fn capture(&self, key: Key) -> Option<Capture> {
+    ///         None
+    ///     }
+    ///
+    ///     fn capture_keys(&self) -> &'static [Key<'static>] {
+    ///         &[]
+    ///     }
+    ///
+    ///     fn rule_name(rule: NodeRule) -> Option<&'static str> where Self: Sized {
+    ///         match rule {
+    ///             PARENS_RULE => Some("Parens"),
+    ///             OTHER_RULE => Some("Other"),
+    ///             _ => None,
+    ///         }
+    ///     }
+    ///
+    ///     fn rule_description(rule: NodeRule, verbose: bool) -> Option<&'static str> where Self: Sized {
+    ///         match rule {
+    ///             PARENS_RULE => Some("Parens"),
+    ///             OTHER_RULE => Some("Other"),
+    ///             _ => None,
+    ///         }
+    ///     }
+    /// }
     ///
     /// impl Node for Parens {
     ///     type Token = SimpleToken;
@@ -217,48 +269,6 @@ pub trait Node: Send + Sync + Sized + 'static {
     ///         // Otherwise the `rule` is an `OTHER_RULE`.
     ///
     ///         Self::parse_other(session)
-    ///     }
-    ///
-    ///     fn rule(&self) -> NodeRule {
-    ///         match self {
-    ///             Self::Root {..} => ROOT_RULE,
-    ///             Self::Parens {..} => PARENS_RULE,
-    ///             Self::Other {..} => OTHER_RULE,
-    ///         }
-    ///     }
-    ///
-    ///     fn node_ref(&self) -> NodeRef {
-    ///         NodeRef::nil()
-    ///     }
-    ///
-    ///     fn parent_ref(&self) -> NodeRef {
-    ///         NodeRef::nil()
-    ///     }
-    ///
-    ///     fn set_parent_ref(&mut self, _parent: NodeRef) {}
-    ///
-    ///     fn children(&self) -> Children {
-    ///         Children::new()
-    ///     }
-    ///
-    ///     fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>) {}
-    ///
-    ///     fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>) {}
-    ///
-    ///     fn name(rule: NodeRule) -> Option<&'static str> {
-    ///         match rule {
-    ///             PARENS_RULE => Some("Parens"),
-    ///             OTHER_RULE => Some("Other"),
-    ///             _ => None,
-    ///         }
-    ///     }
-    ///
-    ///     fn describe(rule: NodeRule, _verbose: bool) -> Option<&'static str> {
-    ///         match rule {
-    ///             PARENS_RULE => Some("Parens"),
-    ///             OTHER_RULE => Some("Other"),
-    ///             _ => None,
-    ///         }
     ///     }
     /// }
     ///
@@ -359,10 +369,14 @@ pub trait Node: Send + Sync + Sized + 'static {
     /// assert_eq!(doc.errors().count(), 0);
     /// ```
     fn parse<'code>(session: &mut impl SyntaxSession<'code, Node = Self>, rule: NodeRule) -> Self;
+}
 
+pub trait AbstractNode: Send + Sync + 'static {
     fn rule(&self) -> NodeRule;
 
-    //todo consider providing default implementations for these functions
+    fn name(&self) -> Option<&'static str>;
+
+    fn describe(&self, verbose: bool) -> Option<&'static str>;
 
     fn node_ref(&self) -> NodeRef;
 
@@ -370,15 +384,123 @@ pub trait Node: Send + Sync + Sized + 'static {
 
     fn set_parent_ref(&mut self, parent_ref: NodeRef);
 
-    fn children(&self) -> Children;
+    fn capture(&self, key: Key) -> Option<Capture>;
 
-    fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>);
+    #[inline(always)]
+    fn first_capture(&self) -> Option<Capture> {
+        self.capture(Key::Index(0))
+    }
 
-    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>);
+    #[inline(always)]
+    fn last_capture(&self) -> Option<Capture> {
+        self.capture(Key::Index(self.captures_len().checked_sub(1)?))
+    }
 
-    fn name(rule: NodeRule) -> Option<&'static str>;
+    fn capture_keys(&self) -> &'static [Key<'static>];
 
-    fn describe(rule: NodeRule, verbose: bool) -> Option<&'static str>;
+    #[inline(always)]
+    fn captures_len(&self) -> usize {
+        self.capture_keys().len()
+    }
+
+    #[inline(always)]
+    fn captures_iter(&self) -> CapturesIter<Self>
+    where
+        Self: Sized,
+    {
+        CapturesIter::new(self)
+    }
+
+    #[inline(always)]
+    fn children_iter(&self) -> ChildrenIter<Self>
+    where
+        Self: Sized,
+    {
+        ChildrenIter::new(self)
+    }
+
+    fn prev_child_node(&self, current: &NodeRef) -> Option<&NodeRef>
+    where
+        Self: Sized,
+    {
+        let mut nodes = self
+            .children_iter()
+            .rev()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref());
+
+        loop {
+            let probe = nodes.next()?;
+
+            if probe == current {
+                return nodes.next();
+            }
+        }
+    }
+
+    fn next_child_node(&self, current: &NodeRef) -> Option<&NodeRef>
+    where
+        Self: Sized,
+    {
+        let mut nodes = self
+            .children_iter()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref());
+
+        loop {
+            let probe = nodes.next()?;
+
+            if probe == current {
+                return nodes.next();
+            }
+        }
+    }
+
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan>
+    where
+        Self: Sized,
+    {
+        let start = self.start(unit)?;
+        let end = self.end(unit)?;
+
+        Some(start..end)
+    }
+
+    fn start(&self, unit: &impl CompilationUnit) -> Option<Site>
+    where
+        Self: Sized,
+    {
+        for child in self.captures_iter() {
+            match child.start(unit) {
+                None => continue,
+                Some(site) => return Some(site),
+            }
+        }
+
+        None
+    }
+
+    fn end(&self, unit: &impl CompilationUnit) -> Option<Site>
+    where
+        Self: Sized,
+    {
+        for child in self.captures_iter().rev() {
+            match child.end(unit) {
+                None => continue,
+                Some(site) => return Some(site),
+            }
+        }
+
+        None
+    }
+
+    fn rule_name(rule: NodeRule) -> Option<&'static str>
+    where
+        Self: Sized;
+
+    fn rule_description(rule: NodeRule, verbose: bool) -> Option<&'static str>
+    where
+        Self: Sized;
 }
 
 /// A weak reference of the [Node] and its metadata inside the syntax structure of the compilation
@@ -472,7 +594,7 @@ impl PolyRef for NodeRef {
 
     #[inline(always)]
     fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
-        self.deref(unit)?.children().span(unit)
+        self.deref(unit)?.span(unit)
     }
 }
 
@@ -507,14 +629,12 @@ impl NodeRef {
             return None;
         }
 
-        match tree.get_cluster(&self.cluster_entry) {
-            Some(cluster) => match &self.node_entry {
-                Entry::Primary => Some(&cluster.primary),
+        let cluster = tree.get_cluster(&self.cluster_entry)?;
 
-                _ => cluster.nodes.get(&self.node_entry),
-            },
+        match &self.node_entry {
+            Entry::Primary => Some(&cluster.primary),
 
-            _ => None,
+            _ => cluster.nodes.get(&self.node_entry),
         }
     }
 
@@ -537,24 +657,23 @@ impl NodeRef {
             return None;
         }
 
-        match tree.get_cluster_mut(&self.cluster_entry) {
-            None => None,
-            Some(data) => match &self.node_entry {
-                Entry::Primary => Some(&mut data.primary),
+        let cluster = tree.get_cluster_mut(&self.cluster_entry)?;
 
-                _ => data.nodes.get_mut(&self.node_entry),
-            },
+        match &self.node_entry {
+            Entry::Primary => Some(&mut cluster.primary),
+
+            _ => cluster.nodes.get_mut(&self.node_entry),
         }
     }
 
     #[inline(always)]
     pub fn rule(&self, tree: &impl SyntaxTree) -> NodeRule {
-        self.deref(tree).map(|node| node.rule()).unwrap_or(NON_RULE)
+        self.deref(tree).map(AbstractNode::rule).unwrap_or(NON_RULE)
     }
 
     #[inline(always)]
     pub fn name<N: Node>(&self, tree: &impl SyntaxTree<Node = N>) -> Option<&'static str> {
-        self.deref(tree).map(|node| N::name(node.rule())).flatten()
+        self.deref(tree).map(AbstractNode::name).flatten()
     }
 
     #[inline(always)]
@@ -564,101 +683,108 @@ impl NodeRef {
         verbose: bool,
     ) -> Option<&'static str> {
         self.deref(tree)
-            .map(|node| N::describe(node.rule(), verbose))
+            .map(|node| node.describe(verbose))
             .flatten()
     }
 
     #[inline(always)]
     pub fn parent(&self, tree: &impl SyntaxTree) -> NodeRef {
-        let node = match self.deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
         };
 
         node.parent_ref()
     }
 
-    #[inline(always)]
     pub fn first_child(&self, tree: &impl SyntaxTree) -> NodeRef {
-        let node = match self.deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
         };
 
-        match node.children().nodes().next() {
-            None => NodeRef::nil(),
-            Some(node_ref) => *node_ref,
-        }
+        node.children_iter()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref())
+            .next()
+            .copied()
+            .unwrap_or_default()
     }
 
-    pub fn get_child(&self, tree: &impl SyntaxTree, key: &'static str) -> NodeRef {
-        let node = match self.deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+    pub fn last_child(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
         };
 
-        match node.children().get(key) {
-            Some(Child::Node(child)) => *child,
-            Some(Child::NodeSeq(child)) => match child.first() {
-                Some(child) => *child,
-                None => NodeRef::nil(),
-            },
-            _ => NodeRef::nil(),
-        }
+        node.children_iter()
+            .rev()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref())
+            .next()
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn get_child<'a>(&self, tree: &impl SyntaxTree, key: impl Into<Key<'a>>) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        let Some(child) = node.capture(key.into()) else {
+            return NodeRef::nil();
+        };
+
+        let Some(first) = child.first() else {
+            return NodeRef::nil();
+        };
+
+        *first.as_node_ref()
     }
 
     pub fn get_token(&self, tree: &impl SyntaxTree, key: &'static str) -> TokenRef {
-        let node = match self.deref(tree) {
-            None => return TokenRef::nil(),
-            Some(node) => node,
+        let Some(node) = self.deref(tree) else {
+            return TokenRef::nil();
         };
 
-        match node.children().get(key) {
-            Some(Child::Token(child)) => *child,
-            Some(Child::TokenSeq(child)) => match child.first() {
-                Some(child) => *child,
-                None => TokenRef::nil(),
-            },
-            _ => TokenRef::nil(),
-        }
+        let Some(child) = node.capture(key.into()) else {
+            return TokenRef::nil();
+        };
+
+        let Some(first) = child.first() else {
+            return TokenRef::nil();
+        };
+
+        *first.as_token_ref()
     }
 
     pub fn prev_sibling(&self, tree: &impl SyntaxTree) -> NodeRef {
-        let node = match self.deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
         };
 
-        let parent = match node.parent_ref().deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+        let Some(parent) = node.parent_ref().deref(tree) else {
+            return NodeRef::nil();
         };
 
-        let siblings = parent.children();
+        let Some(sibling) = parent.prev_child_node(self) else {
+            return NodeRef::nil();
+        };
 
-        match siblings.prev_node(self) {
-            None => NodeRef::nil(),
-            Some(sibling) => *sibling,
-        }
+        *sibling
     }
 
     pub fn next_sibling(&self, tree: &impl SyntaxTree) -> NodeRef {
-        let node = match self.deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
         };
 
-        let parent = match node.parent_ref().deref(tree) {
-            None => return NodeRef::nil(),
-            Some(node) => node,
+        let Some(parent) = node.parent_ref().deref(tree) else {
+            return NodeRef::nil();
         };
 
-        let siblings = parent.children();
+        let Some(sibling) = parent.next_child_node(self) else {
+            return NodeRef::nil();
+        };
 
-        match siblings.next_node(self) {
-            None => NodeRef::nil(),
-            Some(sibling) => *sibling,
-        }
+        *sibling
     }
 
     /// Creates a weak reference of the [Cluster](crate::syntax::Cluster) of referred [Node].

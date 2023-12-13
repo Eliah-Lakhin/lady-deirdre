@@ -42,22 +42,23 @@ use crate::{
         AnalysisResult,
         AttrRef,
         Computable,
+        Grammar,
         Revision,
     },
     report::debug_unreachable,
     std::*,
     sync::{Latch, Shared, SyncBuildHasher},
-    syntax::{Node, NodeRef},
+    syntax::NodeRef,
 };
 
 const WRITERS_CAPACITY: usize = 8;
 
-pub(super) struct Record<N: Node, S: SyncBuildHasher> {
+pub(super) struct Record<N: Grammar, S: SyncBuildHasher> {
     lock: RwLock<Cell<N, S>>,
     writers: Mutex<HashSet<usize, S>>,
 }
 
-impl<N: Node, S: SyncBuildHasher> Record<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> Record<N, S> {
     #[inline(always)]
     pub(super) fn new<C: Computable<Node = N> + Eq>(node_ref: NodeRef) -> Self {
         Self {
@@ -118,13 +119,13 @@ impl<N: Node, S: SyncBuildHasher> Record<N, S> {
     }
 }
 
-pub(super) struct RecordWriteGuard<'a, N: Node, S: SyncBuildHasher> {
+pub(super) struct RecordWriteGuard<'a, N: Grammar, S: SyncBuildHasher> {
     writers: &'a Mutex<HashSet<usize, S>>,
     writer: usize,
     guard: RwLockWriteGuard<'a, Cell<N, S>>,
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Drop for RecordWriteGuard<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for RecordWriteGuard<'a, N, S> {
     fn drop(&mut self) {
         let mut writers_guard = self
             .writers
@@ -135,7 +136,7 @@ impl<'a, N: Node, S: SyncBuildHasher> Drop for RecordWriteGuard<'a, N, S> {
     }
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> Deref for RecordWriteGuard<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> Deref for RecordWriteGuard<'a, N, S> {
     type Target = Cell<N, S>;
 
     #[inline(always)]
@@ -144,21 +145,21 @@ impl<'a, N: Node, S: SyncBuildHasher> Deref for RecordWriteGuard<'a, N, S> {
     }
 }
 
-impl<'a, N: Node, S: SyncBuildHasher> DerefMut for RecordWriteGuard<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> DerefMut for RecordWriteGuard<'a, N, S> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.guard.deref_mut()
     }
 }
 
-pub(super) struct Cell<N: Node, S: SyncBuildHasher> {
+pub(super) struct Cell<N: Grammar, S: SyncBuildHasher> {
     pub(super) verified_at: Revision,
     pub(super) cache: Option<Cache<S>>,
     pub(super) node_ref: NodeRef,
     pub(super) function: &'static dyn Function<N, S>,
 }
 
-impl<N: Node, S: SyncBuildHasher> Cell<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> Cell<N, S> {
     #[inline(always)]
     fn new<C: Computable<Node = N> + Eq>(node_ref: NodeRef) -> Self {
         Self {

@@ -677,8 +677,7 @@ impl TokenInput {
         });
 
         quote_spanned!(span=>
-            #[inline(always)]
-            fn name(rule: #core::lexis::TokenRule) -> #option<&'static str> {
+            fn rule_name(rule: #core::lexis::TokenRule) -> #option<&'static str> {
                 #(#names)*
 
                 None
@@ -718,9 +717,8 @@ impl TokenInput {
         });
 
         quote_spanned!(span=>
-            #[inline(always)]
             #[allow(unused_variables)]
-            fn describe(rule: #core::lexis::TokenRule, verbose: bool) -> #option<&'static str> {
+            fn rule_description(rule: #core::lexis::TokenRule, verbose: bool) -> #option<&'static str> {
                 #(#descriptions)*
 
                 None

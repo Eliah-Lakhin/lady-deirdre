@@ -40,7 +40,7 @@
 
 use lady_deirdre::{
     lexis::{SourceCode, TokenBuffer, TokenRef},
-    syntax::{Child, Node, NodeRef, ParseError, PolyRef, SyntaxTree},
+    syntax::{AbstractNode, Capture, Key, Node, NodeRef, ParseError, PolyRef, SyntaxTree},
     units::Document,
 };
 use lady_deirdre_examples::json::{formatter::ToJsonString, lexis::JsonToken, syntax::JsonNode};
@@ -379,8 +379,8 @@ fn test_json_incremental() {
                         version, object, ..
                     } => {
                         assert_eq!(
-                            node.children(),
-                            vec![("object", Child::from(object))].into_iter().collect(),
+                            node.capture(Key::Name("object")),
+                            Some(Capture::from(object)),
                         );
                         format!("{}({})", version, traverse(document, object, node_ref))
                     }
@@ -392,16 +392,12 @@ fn test_json_incremental() {
                         end,
                         ..
                     } => {
+                        assert_eq!(node.capture(Key::Name("start")), Some(Capture::from(start)));
                         assert_eq!(
-                            node.children(),
-                            vec![
-                                ("start", Child::from(start)),
-                                ("entries", Child::from(entries)),
-                                ("end", Child::from(end)),
-                            ]
-                            .into_iter()
-                            .collect(),
+                            node.capture(Key::Name("entries")),
+                            Some(Capture::from(entries)),
                         );
+                        assert_eq!(node.capture(Key::Name("end")), Some(Capture::from(end)));
                         format!(
                             "{}({{{}}})",
                             version,
@@ -420,16 +416,9 @@ fn test_json_incremental() {
                         end,
                         ..
                     } => {
-                        assert_eq!(
-                            node.children(),
-                            vec![
-                                ("start", Child::from(start)),
-                                ("items", Child::from(items)),
-                                ("end", Child::from(end)),
-                            ]
-                            .into_iter()
-                            .collect(),
-                        );
+                        assert_eq!(node.capture(Key::Name("start")), Some(Capture::from(start)));
+                        assert_eq!(node.capture(Key::Name("items")), Some(Capture::from(items)));
+                        assert_eq!(node.capture(Key::Name("end")), Some(Capture::from(end)));
                         format!(
                             "{}([{}])",
                             version,
@@ -447,12 +436,8 @@ fn test_json_incremental() {
                         value,
                         ..
                     } => {
-                        assert_eq!(
-                            node.children(),
-                            vec![("key", Child::from(key)), ("value", Child::from(value))]
-                                .into_iter()
-                                .collect(),
-                        );
+                        assert_eq!(node.capture(Key::Name("key")), Some(Capture::from(key)));
+                        assert_eq!(node.capture(Key::Name("value")), Some(Capture::from(value)));
                         format!(
                             "{}({:#}: {})",
                             version,
@@ -463,10 +448,7 @@ fn test_json_incremental() {
 
                     DebugNode::String { version, value, .. }
                     | DebugNode::Number { version, value, .. } => {
-                        assert_eq!(
-                            node.children(),
-                            vec![("value", Child::from(value))].into_iter().collect(),
-                        );
+                        assert_eq!(node.capture(Key::Name("value")), Some(Capture::from(value)));
                         format!("{}({})", version, value.string(document).unwrap_or("?"))
                     }
 

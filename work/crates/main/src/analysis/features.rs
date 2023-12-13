@@ -40,17 +40,10 @@ extern crate lady_deirdre_derive;
 pub use lady_deirdre_derive::Feature;
 
 use crate::{
-    analysis::{
-        AnalysisError,
-        AnalysisResult,
-        AttrRef,
-        FeatureInitializer,
-        FeatureInvalidator,
-        MutationTask,
-    },
+    analysis::{AttrRef, FeatureInitializer, FeatureInvalidator},
     std::*,
     sync::SyncBuildHasher,
-    syntax::{Node, NodeRef, SimpleNode},
+    syntax::{Key, Node, NodeRef},
 };
 
 pub struct Semantics<F: Feature> {
@@ -59,28 +52,28 @@ pub struct Semantics<F: Feature> {
 
 impl<F: Feature> AbstractFeature for Semantics<F> {
     #[inline(always)]
-    fn feature_kind(&self) -> AnalysisResult<FeatureKind> {
-        self.get()?.feature_kind()
+    fn attr_ref(&self) -> &AttrRef {
+        let Some(inner) = self.get() else {
+            static NIL_REF: AttrRef = AttrRef::nil();
+
+            return &NIL_REF;
+        };
+
+        inner.attr_ref()
     }
 
     #[inline(always)]
-    fn as_attr(&self) -> AnalysisResult<&AttrRef> {
-        self.get()?.as_attr()
+    fn feature(&self, key: Key) -> Option<&dyn AbstractFeature> {
+        self.get()?.feature(key)
     }
 
     #[inline(always)]
-    fn get_feature(&self, sub_feature: &'static str) -> AnalysisResult<&dyn AbstractFeature> {
-        self.get()?.get_feature(sub_feature)
-    }
+    fn feature_keys(&self) -> &'static [&'static Key] {
+        let Some(inner) = self.get() else {
+            return &[];
+        };
 
-    #[inline(always)]
-    fn has_feature(&self, sub_feature: &'static str) -> AnalysisResult<bool> {
-        self.get()?.has_feature(sub_feature)
-    }
-
-    #[inline(always)]
-    fn enum_features(&self) -> AnalysisResult<&'static [&'static str]> {
-        self.get()?.enum_features()
+        inner.feature_keys()
     }
 }
 
@@ -121,17 +114,17 @@ impl<F: Feature> Feature for Semantics<F> {
 
 impl<F: Feature> Semantics<F> {
     #[inline(always)]
-    pub fn get(&self) -> AnalysisResult<&F> {
+    pub fn get(&self) -> Option<&F> {
         let SemanticsInner::Init(feature) = self.inner.deref() else {
-            return Err(AnalysisError::UninitSemantics);
+            return None;
         };
 
-        Ok(feature)
+        Some(feature)
     }
 }
 
 pub trait Feature: AbstractFeature {
-    type Node: Node;
+    type Node: Grammar;
 
     fn new_uninitialized(node_ref: NodeRef) -> Self
     where
@@ -145,40 +138,18 @@ pub trait Feature: AbstractFeature {
     fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self::Node, S>);
 }
 
+pub trait Grammar: Node {
+    fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>);
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>);
+}
+
 pub trait AbstractFeature {
-    fn feature_kind(&self) -> AnalysisResult<FeatureKind>;
+    fn attr_ref(&self) -> &AttrRef;
 
-    fn as_attr(&self) -> AnalysisResult<&AttrRef>;
+    fn feature(&self, key: Key) -> Option<&dyn AbstractFeature>;
 
-    fn get_feature(&self, sub_feature: &'static str) -> AnalysisResult<&dyn AbstractFeature>;
-
-    fn has_feature(&self, sub_feature: &'static str) -> AnalysisResult<bool>;
-
-    fn enum_features(&self) -> AnalysisResult<&'static [&'static str]>;
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub enum FeatureKind {
-    Attribute,
-    Composite,
-}
-
-impl FeatureKind {
-    #[inline(always)]
-    pub fn is_composite(&self) -> bool {
-        match self {
-            FeatureKind::Composite => true,
-            _ => false,
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_attribute(&self) -> bool {
-        match self {
-            FeatureKind::Attribute => true,
-            _ => false,
-        }
-    }
+    fn feature_keys(&self) -> &'static [&'static Key];
 }
 
 enum SemanticsInner<F: Feature> {

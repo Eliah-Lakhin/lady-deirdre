@@ -46,11 +46,6 @@ pub enum AnalysisError {
     ImmutableDocument,
     InvalidSpan,
     UninitAttribute,
-    UninitSemantics,
-    NotAComposite,
-    NotAnAttribute,
-    MissingSubFeature,
-    NodeWithoutSemantics,
     MissingAttribute,
     TypeMismatch,
     CycleDetected,
@@ -69,24 +64,6 @@ impl Display for AnalysisError {
 
             AnalysisError::UninitAttribute => {
                 "An attempt to access uninitialized attribute object."
-            }
-
-            AnalysisError::UninitSemantics => {
-                "An attempt to access uninitialized semantics object."
-            }
-
-            AnalysisError::NotAComposite => "An attempt to get a feature from attribute.",
-
-            AnalysisError::NotAnAttribute => {
-                "An attempt to interpret composite feature as and attribute."
-            }
-
-            AnalysisError::MissingSubFeature => {
-                "Requested sub feature does not exist in the composite feature."
-            }
-
-            AnalysisError::NodeWithoutSemantics => {
-                "Specified node variant does not have semantics."
             }
 
             AnalysisError::MissingAttribute => "Referred attribute does not exist in the analyzer.",

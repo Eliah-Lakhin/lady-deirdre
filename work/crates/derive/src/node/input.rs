@@ -565,7 +565,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             let build = start.elapsed();
 
             let output_string = match parse2::<File>(output.clone()) {
-                Ok(file) => ::prettyplease::unparse(&file),
+                Ok(file) => prettyplease::unparse(&file),
                 Err(_) => output.to_string(),
             };
 
@@ -606,7 +606,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             );
 
             let output_string = match parse2::<File>(output.clone()) {
-                Ok(file) => ::prettyplease::unparse(&file),
+                Ok(file) => prettyplease::unparse(&file),
                 Err(_) => output.to_string(),
             };
 
@@ -623,7 +623,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             let output = result.to_token_stream();
 
             let output_string = match parse2::<File>(output.clone()) {
-                Ok(file) => ::prettyplease::unparse(&file),
+                Ok(file) => prettyplease::unparse(&file),
                 Err(_) => output.to_string(),
             };
 
@@ -648,7 +648,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                         result.compile_skip_fn(&mut globals, trivia, context, true, true, false);
 
                     let output_string = match parse2::<File>(output.clone()) {
-                        Ok(file) => ::prettyplease::unparse(&file),
+                        Ok(file) => prettyplease::unparse(&file),
                         Err(_) => output.to_string(),
                     };
 
@@ -671,7 +671,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                     );
 
                     let output_string = match parse2::<File>(output.clone()) {
-                        Ok(file) => ::prettyplease::unparse(&file),
+                        Ok(file) => prettyplease::unparse(&file),
                         Err(_) => output.to_string(),
                     };
 
@@ -740,14 +740,13 @@ impl ToTokens for NodeInput {
         let mut node_getters = Vec::with_capacity(capacity);
         let mut parent_getters = Vec::with_capacity(capacity);
         let mut parent_setters = Vec::with_capacity(capacity);
-        let mut children_getters = Vec::with_capacity(capacity);
+        let mut capture_getter = Vec::with_capacity(capacity);
+        let mut capture_keys = Vec::with_capacity(capacity);
         let mut initializers = Vec::with_capacity(capacity);
         let mut invalidators = Vec::with_capacity(capacity);
-        let mut feature_kind = Vec::with_capacity(capacity);
-        let mut feature_as_attr = Vec::with_capacity(capacity);
-        let mut get_feature = Vec::with_capacity(capacity);
-        let mut has_feature = Vec::with_capacity(capacity);
-        let mut enum_features = Vec::with_capacity(capacity);
+        let mut attr_ref = Vec::with_capacity(capacity);
+        let mut feature_getter = Vec::with_capacity(capacity);
+        let mut feature_keys = Vec::with_capacity(capacity);
 
         let mut by_index = self
             .variants
@@ -770,14 +769,13 @@ impl ToTokens for NodeInput {
             node_getters.push(variant.inheritance.compile_node_getter());
             parent_getters.push(variant.inheritance.compile_parent_getter());
             parent_setters.push(variant.inheritance.compile_parent_setter());
-            children_getters.push(variant.inheritance.compile_children_getter());
+            capture_getter.push(variant.inheritance.compile_capture_getter());
+            capture_keys.push(variant.inheritance.compile_capture_keys());
             initializers.push(variant.inheritance.compile_initializer());
             invalidators.push(variant.inheritance.compile_invalidator());
-            feature_kind.push(variant.inheritance.compile_feature_kind());
-            feature_as_attr.push(variant.inheritance.compile_feature_as_attr());
-            get_feature.push(variant.inheritance.compile_get_feature());
-            has_feature.push(variant.inheritance.compile_has_feature());
-            enum_features.push(variant.inheritance.compile_enum_features());
+            attr_ref.push(variant.inheritance.compile_attr_ref());
+            feature_getter.push(variant.inheritance.compile_feature_getter());
+            feature_keys.push(variant.inheritance.compile_feature_keys());
 
             if let Some(Index::Named(name, Some(index))) = &variant.index {
                 let span = name.span();
@@ -827,7 +825,7 @@ impl ToTokens for NodeInput {
             .map(|(index, ident, _)| quote_spanned!(index.span() => Self::#ident { .. } => #index,))
             .collect::<Vec<_>>();
 
-        let (get_name, get_description): (Vec<_>, Vec<_>) = descriptions
+        let (rule_name, rule_description): (Vec<_>, Vec<_>) = descriptions
             .into_iter()
             .map(|(index, ident, description)| {
                 let name = LitStr::new(&ident.to_string(), ident.span());
@@ -899,6 +897,169 @@ impl ToTokens for NodeInput {
         };
 
         quote_spanned!(span=>
+            impl #impl_generics #core::analysis::AbstractFeature for #ident #type_generics
+            #where_clause
+            {
+                fn attr_ref(&self) -> &#core::analysis::AttrRef {
+                    match self {
+                        #( #attr_ref )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => {
+                            static NIL_REF: #core::analysis::AttrRef
+                                = #core::analysis::AttrRef::nil();
+
+                            &NIL_REF
+                        },
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn feature(&self, key: #core::syntax::Key)
+                    -> #option<&dyn #core::analysis::AbstractFeature>
+                {
+                    match self {
+                        #( #feature_getter )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #option::None,
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn feature_keys(&self) -> &'static [&'static #core::syntax::Key] {
+                    match self {
+                        #( #feature_keys )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => &[],
+                    }
+                }
+            }
+
+            impl #impl_generics #core::analysis::Grammar for #ident #type_generics
+            #where_clause
+            {
+                #[allow(unused_variables)]
+                fn initialize<S: #core::sync::SyncBuildHasher>(
+                    &mut self,
+                    #[allow(unused)] initializer: &mut #core::analysis::FeatureInitializer<Self, S>,
+                ) {
+                    match self {
+                        #( #initializers )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn invalidate<S: #core::sync::SyncBuildHasher>(
+                    &self,
+                    invalidator: &mut #core::analysis::FeatureInvalidator<Self, S>,
+                ) {
+                    match self {
+                        #( #invalidators )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+                }
+            }
+
+            impl #impl_generics #core::syntax::AbstractNode for #ident #type_generics
+            #where_clause
+            {
+                fn rule(&self) -> #core::syntax::NodeRule {
+                    match self {
+                        #(
+                        #get_rule
+                        )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::syntax::NON_RULE,
+                    }
+                }
+
+                #[inline(always)]
+                fn name(&self) -> #option<&'static str> {
+                    Self::rule_name(self.rule())
+                }
+
+                #[inline(always)]
+                fn describe(&self, verbose: bool) -> #option<&'static str> {
+                    Self::rule_description(self.rule(), verbose)
+                }
+
+                fn node_ref(&self) -> #core::syntax::NodeRef {
+                    match self {
+                        #( #node_getters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::syntax::NodeRef::nil(),
+                    }
+                }
+
+                fn parent_ref(&self) -> #core::syntax::NodeRef {
+                    match self {
+                        #( #parent_getters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #core::syntax::NodeRef::nil(),
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn set_parent_ref(&mut self, parent_ref: #core::syntax::NodeRef) {
+                    match self {
+                        #( #parent_setters )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => (),
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn capture(&self, key: #core::syntax::Key) -> #option::<#core::syntax::Capture> {
+                    match self {
+                        #( #capture_getter )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #option::None,
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn capture_keys(&self) -> &'static [#core::syntax::Key<'static>] {
+                    match self {
+                        #( #capture_keys )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => &[],
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn rule_name(rule: #core::syntax::NodeRule) -> #option<&'static str> {
+                    match rule {
+                        #( #rule_name )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => None,
+                    }
+                }
+
+                #[allow(unused_variables)]
+                fn rule_description(rule: #core::syntax::NodeRule, verbose: bool) -> #option<&'static str> {
+                    match rule {
+                        #( #rule_description )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => None,
+                    }
+                }
+            }
+
             impl #impl_generics #core::syntax::Node for #ident #type_generics
             #where_clause
             {
@@ -924,193 +1085,6 @@ impl ToTokens for NodeInput {
 
                         #[allow(unreachable_patterns)]
                         other => #unimplemented("Unsupported rule {}.", other),
-                    }
-                }
-
-                #[inline(always)]
-                fn rule(&self) -> #core::syntax::NodeRule {
-                    match self {
-                        #(
-                        #get_rule
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::syntax::NON_RULE,
-                    }
-                }
-
-                #[inline(always)]
-                fn node_ref(&self) -> #core::syntax::NodeRef {
-                    match self {
-                        #( #node_getters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::syntax::NodeRef::nil(),
-                    }
-                }
-
-                #[inline(always)]
-                fn parent_ref(&self) -> #core::syntax::NodeRef {
-                    match self {
-                        #( #parent_getters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::syntax::NodeRef::nil(),
-                    }
-                }
-
-                #[inline(always)]
-                #[allow(unused_variables)]
-                fn set_parent_ref(&mut self, parent_ref: #core::syntax::NodeRef) {
-                    match self {
-                        #( #parent_setters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-                }
-
-                #[inline(always)]
-                fn children(&self) -> #core::syntax::Children {
-                    #[allow(unused_mut)]
-                    let mut children = #core::syntax::Children::with_capacity(#capacity);
-
-                    match self {
-                        #( #children_getters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-
-                    children
-                }
-
-                #[inline(always)]
-                fn initialize<S: #core::sync::SyncBuildHasher>(
-                    &mut self,
-                    initializer: &mut #core::analysis::FeatureInitializer<Self, S>,
-                ) {
-                    match self {
-                        #( #initializers )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-                }
-
-                #[inline(always)]
-                fn invalidate<S: #core::sync::SyncBuildHasher>(
-                    &self,
-                    invalidator: &mut #core::analysis::FeatureInvalidator<Self, S>,
-                ) {
-                    match self {
-                        #( #invalidators )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-                }
-
-                #[inline(always)]
-                fn name(rule: #core::syntax::NodeRule) -> #option<&'static str> {
-                    match rule {
-                        #(
-                        #get_name
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #option::None,
-                    }
-                }
-
-                #[inline(always)]
-                #[allow(unused_variables)]
-                fn describe(
-                    rule: #core::syntax::NodeRule,
-                    verbose: bool,
-                ) -> #option<&'static str> {
-                    match rule {
-                        #(
-                        #get_description
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #option::None,
-                    }
-                }
-            }
-
-            impl #impl_generics #core::analysis::AbstractFeature for #ident #type_generics
-            #where_clause
-            {
-                #[inline(always)]
-                fn feature_kind(&self)
-                    -> #core::analysis::AnalysisResult<#core::analysis::FeatureKind>
-                {
-                    match self {
-                        #(
-                        #feature_kind
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::analysis::AnalysisResult::Err(
-                            #core::analysis::AnalysisError::NodeWithoutSemantics,
-                        ),
-                    }
-                }
-
-                fn as_attr(&self) -> #core::analysis::AnalysisResult<&#core::analysis::AttrRef> {
-                    match self {
-                        #(
-                        #feature_as_attr
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::analysis::AnalysisResult::Err(
-                            #core::analysis::AnalysisError::NodeWithoutSemantics,
-                        ),
-                    }
-                }
-
-                fn get_feature(
-                    &self,
-                    sub_feature: &'static str,
-                ) -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature> {
-                    match self {
-                        #(
-                        #get_feature
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::analysis::AnalysisResult::Err(
-                            #core::analysis::AnalysisError::NodeWithoutSemantics,
-                        ),
-                    }
-                }
-
-                fn has_feature(&self, sub_feature: &'static str)
-                    -> #core::analysis::AnalysisResult<bool>
-                {
-                    match self {
-                        #(
-                        #has_feature
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::analysis::AnalysisResult::Ok(false),
-                    }
-                }
-
-                fn enum_features(&self)
-                    -> #core::analysis::AnalysisResult<&'static [&'static str]>
-                {
-                    match self {
-                        #(
-                        #enum_features
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::analysis::AnalysisResult::Ok(&[]),
                     }
                 }
             }

@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{std::*, syntax::Node};
+use crate::{std::*, syntax::AbstractNode};
 
 /// A static identifier of arbitrary syntax grammar rule.
 ///
@@ -269,19 +269,19 @@ impl NodeSet {
     }
 
     #[inline(always)]
-    pub fn display<N: Node>(&self) -> impl Display + '_ {
+    pub fn display<N: AbstractNode>(&self) -> impl Display + '_ {
         pub struct DisplayNodeSet<'set, N> {
             set: &'set NodeSet,
             _token: PhantomData<N>,
         }
 
-        impl<'set, N: Node> Display for DisplayNodeSet<'set, N> {
+        impl<'set, N: AbstractNode> Display for DisplayNodeSet<'set, N> {
             fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
                 let mut vector = Vec::with_capacity(NodeSet::LIMIT);
 
                 for rule in self.set {
-                    if let Some(description) = N::name(rule) {
-                        vector.push(description);
+                    if let Some(name) = N::rule_name(rule) {
+                        vector.push(name);
                     }
                 }
 

@@ -39,7 +39,7 @@ use crate::{
     arena::{Entry, Identifiable, RepositoryEntriesIter, RepositoryIter},
     lexis::TokenRef,
     std::*,
-    syntax::{Cluster, ClusterRef, ErrorRef, Node, NodeRef, RefKind},
+    syntax::{AbstractNode, Cluster, ClusterRef, ErrorRef, Node, NodeRef, RefKind},
 };
 
 /// A low-level interface to access and inspect syntax structure of the compilation unit.
@@ -169,9 +169,7 @@ pub trait SyntaxTree: Identifiable {
                 None => return,
             };
 
-            let children = node.children();
-
-            for child in children.flatten() {
+            for child in node.children_iter() {
                 match child.kind() {
                     RefKind::Token => visitor.visit_token(child.as_token_ref()),
                     RefKind::Node => self.traverse_subtree(child.as_node_ref(), visitor),

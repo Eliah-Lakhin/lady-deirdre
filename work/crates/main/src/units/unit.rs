@@ -50,7 +50,7 @@ use crate::{
         TokenCursor,
     },
     std::*,
-    syntax::{Child, Cluster, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
+    syntax::{Capture, Cluster, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
     units::{Document, ImmutableUnit, MutableUnit},
 };
 
@@ -115,7 +115,7 @@ pub trait CompilationUnit:
     #[inline(always)]
     fn debug_tree(
         &self,
-        poly_ref: &impl PolyRef,
+        poly_ref: &(impl PolyRef + ?Sized),
     ) -> DebugTree<<Self as SyntaxTree>::Node, <Self as SourceCode>::Cursor<'_>, Self>
     where
         Self: Sized,
@@ -258,8 +258,7 @@ where
                     Some(chunk) => chunk,
                 };
 
-                let rule = chunk.token.rule();
-                let name = <U::Token as Token>::name(rule).unwrap_or("TokenRef");
+                let name = chunk.token.name().unwrap_or("TokenRef");
 
                 let mut debug_struct = formatter
                     .debug_struct(&format!("${name}(chunk_entry: {:?})", variant.chunk_entry));
@@ -285,8 +284,7 @@ where
                     Some(node) => node,
                 };
 
-                let rule = node.rule();
-                let name = N::name(rule).unwrap_or("NodeRef");
+                let name = node.name().unwrap_or("NodeRef");
 
                 let alternate = formatter.alternate();
 
@@ -295,38 +293,44 @@ where
                     variant.cluster_entry, variant.node_entry,
                 ));
 
-                for (key, value) in node.children().entries() {
-                    match value {
-                        Child::Token(child) => match alternate {
+                for key in node.capture_keys() {
+                    let Some(capture) = node.capture(*key) else {
+                        continue;
+                    };
+
+                    let key = key.to_string();
+
+                    match capture {
+                        Capture::SingleNode(capture) => match alternate {
                             true => debug_struct
-                                .field(key, &format_args!("{:#}", self.unit.debug_tree(child))),
+                                .field(&key, &format_args!("{:#}", self.unit.debug_tree(capture))),
                             false => debug_struct
-                                .field(key, &format_args!("{}", self.unit.debug_tree(child))),
+                                .field(&key, &format_args!("{}", self.unit.debug_tree(capture))),
                         },
 
-                        Child::TokenSeq(child) => {
-                            let child = child
-                                .iter()
+                        Capture::ManyNodes(capture) => {
+                            let poly_refs = capture
+                                .into_iter()
                                 .map(|poly_ref| self.unit.debug_tree(poly_ref))
                                 .collect::<Vec<_>>();
 
-                            debug_struct.field(key, &child)
+                            debug_struct.field(&key, &poly_refs)
                         }
 
-                        Child::Node(child) => match alternate {
+                        Capture::SingleToken(capture) => match alternate {
                             true => debug_struct
-                                .field(key, &format_args!("{:#}", self.unit.debug_tree(child))),
+                                .field(&key, &format_args!("{:#}", self.unit.debug_tree(capture))),
                             false => debug_struct
-                                .field(key, &format_args!("{}", self.unit.debug_tree(child))),
+                                .field(&key, &format_args!("{}", self.unit.debug_tree(capture))),
                         },
 
-                        Child::NodeSeq(child) => {
-                            let child = child
-                                .iter()
+                        Capture::ManyTokens(capture) => {
+                            let poly_refs = capture
+                                .into_iter()
                                 .map(|poly_ref| self.unit.debug_tree(poly_ref))
                                 .collect::<Vec<_>>();
 
-                            debug_struct.field(key, &child)
+                            debug_struct.field(&key, &poly_refs)
                         }
                     };
                 }
@@ -360,9 +364,7 @@ impl NodeCoverage {
             Some(node) => node,
         };
 
-        let children = node.children();
-
-        let node_span = match children.span(unit) {
+        let node_span = match node.span(unit) {
             None => return Self::Nil,
             Some(span) => span,
         };
@@ -371,8 +373,12 @@ impl NodeCoverage {
             return Self::Misfit(node_span.start);
         }
 
-        for child in children.nodes() {
-            match Self::cover(unit, child, span) {
+        for child in node.children_iter() {
+            if !child.kind().is_node() {
+                continue;
+            }
+
+            match Self::cover(unit, child.as_node_ref(), span) {
                 Self::Nil => continue,
                 Self::Misfit(start) => {
                     if start > span.start {

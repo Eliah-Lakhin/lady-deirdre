@@ -291,7 +291,7 @@ impl TokenSet {
                 let mut vector = Vec::with_capacity(0xFF);
 
                 for token in self.set {
-                    if let Some(name) = T::name(token) {
+                    if let Some(name) = T::rule_name(token) {
                         vector.push(name);
                     }
                 }

@@ -36,11 +36,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{AnalysisResult, AnalysisTask, Computable},
+    analysis::{AnalysisResult, AnalysisTask, Computable, Grammar},
     report::debug_unreachable,
     std::*,
     sync::SyncBuildHasher,
-    syntax::{Node, NodeRef},
 };
 
 pub(super) trait Memo: Send + Sync + 'static {
@@ -70,13 +69,13 @@ impl<T: Eq + Send + Sync + 'static> Memo for T {
     }
 }
 
-pub(super) trait Function<N: Node, S: SyncBuildHasher>: Send + Sync + 'static {
+pub(super) trait Function<N: Grammar, S: SyncBuildHasher>: Send + Sync + 'static {
     fn invoke(&self, task: &mut AnalysisTask<N, S>) -> AnalysisResult<Box<dyn Memo>>;
 }
 
 impl<N, T, S> Function<N, S> for fn(&mut AnalysisTask<N, S>) -> AnalysisResult<T>
 where
-    N: Node,
+    N: Grammar,
     T: Eq + Send + Sync + Sized + 'static,
     S: SyncBuildHasher,
 {
