@@ -208,6 +208,7 @@ pub(crate) use std::{
         RwLock,
         RwLockReadGuard,
         RwLockWriteGuard,
+        TryLockError,
         Weak,
     },
     thread::{available_parallelism, panicking, spawn},

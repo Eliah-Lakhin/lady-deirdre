@@ -47,30 +47,37 @@ pub enum AnalysisError {
     InvalidSpan,
     UninitAttribute,
     MissingAttribute,
+    UninitSemantics,
     TypeMismatch,
+    MissingScope,
+    MissingFeature,
     CycleDetected,
 }
 
 impl Display for AnalysisError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         let text = match self {
-            AnalysisError::Interrupted => "Analysis task was interrupted.",
+            Self::Interrupted => "Analysis task was interrupted.",
 
-            AnalysisError::MissingDocument => "Referred document does not exist in the analyzer.",
+            Self::MissingDocument => "Referred document does not exist in the analyzer.",
 
-            AnalysisError::ImmutableDocument => "An attempt to write into immutable document.",
+            Self::ImmutableDocument => "An attempt to write into immutable document.",
 
-            AnalysisError::InvalidSpan => "Provided span is not valid for specified document.",
+            Self::InvalidSpan => "Provided span is not valid for specified document.",
 
-            AnalysisError::UninitAttribute => {
-                "An attempt to access uninitialized attribute object."
-            }
+            Self::UninitAttribute => "An attempt to access uninitialized attribute object.",
 
-            AnalysisError::MissingAttribute => "Referred attribute does not exist in the analyzer.",
+            Self::MissingAttribute => "Referred attribute does not exist in the analyzer.",
 
-            AnalysisError::TypeMismatch => "Incorrect attribute type.",
+            Self::UninitSemantics => "An attempt to access uninitialized semantics object.",
 
-            AnalysisError::CycleDetected => "Attribute graph contains a cycle.",
+            Self::TypeMismatch => "Incorrect attribute type.",
+
+            Self::MissingScope => "One of the semantics object does not have scope attribute.",
+
+            Self::MissingFeature => "One of the semantics objects does not have scope feature.",
+
+            Self::CycleDetected => "Attribute graph contains a cycle.",
         };
 
         formatter.write_str(text)
@@ -86,5 +93,25 @@ impl AnalysisError {
             Self::Interrupted => true,
             _ => false,
         }
+    }
+
+    #[inline(always)]
+    pub fn is_abnormal(&self) -> bool {
+        match self {
+            Self::UninitAttribute
+            | Self::MissingAttribute
+            | Self::UninitSemantics
+            | Self::TypeMismatch
+            | Self::MissingScope
+            | Self::MissingFeature
+            | Self::CycleDetected => true,
+
+            _ => false,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_normal(&self) -> bool {
+        !self.is_abnormal()
     }
 }

@@ -89,7 +89,7 @@ pub struct NodeInput {
     pub(super) error: Type,
     pub(super) trivia: Option<Rule>,
     pub(super) recovery: Option<Recovery>,
-    pub(super) dump: Dump,
+    pub(crate) dump: Dump,
     pub(super) variants: VariantMap,
     pub(super) alphabet: Set<TokenLit>,
 }
@@ -254,7 +254,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             None => {
                 return Err(error!(
                     ident.span(),
-                    "Token type was not specified.\nUse #[token(<type name>)] \
+                    "Token type was not specified.\nUse #[token(<token type>)] \
                     attribute on the derived type to specify Token type.",
                 ));
             }
@@ -266,7 +266,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             None => {
                 return Err(error!(
                     ident.span(),
-                    "Error type was not specified.\nUse #[error(<error name>)] \
+                    "Error type was not specified.\nUse #[error(<error type>)] \
                     attribute on the derived type to specify Error type.",
                 ));
             }
@@ -700,7 +700,7 @@ impl ToTokens for NodeInput {
         }
 
         let output_comments = match self.dump {
-            Dump::None => false,
+            Dump::None | Dump::Decl(..) => false,
             Dump::Dry(..) => return,
             _ => true,
         };
@@ -710,6 +710,7 @@ impl ToTokens for NodeInput {
         let span = ident.span();
         let core = span.face_core();
         let option = span.face_option();
+        let result = span.face_result();
         let unimplemented = span.face_unimplemented();
 
         let (impl_generics, type_generics, where_clause) = self.generics.ty.split_for_impl();
@@ -735,6 +736,7 @@ impl ToTokens for NodeInput {
         let capacity = self.variants.len();
 
         let mut indices = Vec::with_capacity(capacity);
+        let mut is_scope = Vec::with_capacity(capacity);
         let mut functions = Vec::with_capacity(capacity);
         let mut cases = Vec::with_capacity(capacity);
         let mut node_getters = Vec::with_capacity(capacity);
@@ -747,6 +749,7 @@ impl ToTokens for NodeInput {
         let mut attr_ref = Vec::with_capacity(capacity);
         let mut feature_getter = Vec::with_capacity(capacity);
         let mut feature_keys = Vec::with_capacity(capacity);
+        let mut scope_attr_getter = Vec::with_capacity(capacity);
 
         let mut by_index = self
             .variants
@@ -776,6 +779,11 @@ impl ToTokens for NodeInput {
             attr_ref.push(variant.inheritance.compile_attr_ref());
             feature_getter.push(variant.inheritance.compile_feature_getter());
             feature_keys.push(variant.inheritance.compile_feature_keys());
+            scope_attr_getter.push(variant.inheritance.compile_scope_attr_getter());
+
+            if variant.scope {
+                is_scope.push(quote_spanned!(span=> Self::#ident {..}))
+            }
 
             if let Some(Index::Named(name, Some(index))) = &variant.index {
                 let span = name.span();
@@ -882,6 +890,16 @@ impl ToTokens for NodeInput {
             )),
         };
 
+        let is_scope = match is_scope.is_empty() {
+            true => None,
+            false => Some(quote_spanned!(span=> #( #is_scope )|* => true,)),
+        };
+
+        let has_scopes = match is_scope.is_some() {
+            true => quote_spanned!(span=> true),
+            false => quote_spanned!(span=> false),
+        };
+
         let checks = match !checks.is_empty() && cfg!(debug_assertions) {
             false => None,
 
@@ -916,13 +934,13 @@ impl ToTokens for NodeInput {
 
                 #[allow(unused_variables)]
                 fn feature(&self, key: #core::syntax::Key)
-                    -> #option<&dyn #core::analysis::AbstractFeature>
+                    -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature>
                 {
                     match self {
                         #( #feature_getter )*
 
                         #[allow(unreachable_patterns)]
-                        _ => #option::None,
+                        _ => #result::Err(#core::analysis::AnalysisError::MissingFeature),
                     }
                 }
 
@@ -964,6 +982,30 @@ impl ToTokens for NodeInput {
                         #[allow(unreachable_patterns)]
                         _ => (),
                     }
+                }
+
+                fn scope_attr(&self) -> #core::analysis::AnalysisResult<&#core::analysis::ScopeAttr<Self>> {
+                    match self {
+                        #( #scope_attr_getter )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => #result::Err(#core::analysis::AnalysisError::MissingScope),
+                    }
+                }
+
+                #[inline(always)]
+                fn is_scope(&self) -> bool {
+                    match self {
+                        #is_scope
+
+                        #[allow(unreachable_patterns)]
+                        _ => false,
+                    }
+                }
+
+                #[inline(always)]
+                fn has_scopes() -> bool {
+                    #has_scopes
                 }
             }
 

@@ -66,6 +66,7 @@ pub(super) struct NodeVariant {
     pub(super) constructor: Option<Constructor>,
     pub(super) parser: Option<Expr>,
     pub(super) secondary: Option<Span>,
+    pub(super) scope: bool,
     pub(super) description: Description,
     pub(super) dump: Dump,
 }
@@ -95,6 +96,7 @@ impl TryFrom<Variant> for NodeVariant {
         let mut constructor = None;
         let mut parser = None;
         let mut secondary = None;
+        let mut scope = None;
         let mut description = Description::Unset;
         let mut dump = Dump::None;
 
@@ -180,6 +182,14 @@ impl TryFrom<Variant> for NodeVariant {
                     }
 
                     secondary = Some(span);
+                }
+
+                "scope" => {
+                    if scope.is_some() {
+                        return Err(error!(span, "Duplicate Scope attribute.",));
+                    }
+
+                    scope = Some(span);
                 }
 
                 "describe" => {
@@ -331,6 +341,23 @@ impl TryFrom<Variant> for NodeVariant {
             }
         }
 
+        let scope = match rule.is_some() || index.is_some() {
+            false => {
+                if let Some(span) = scope {
+                    return Err(error!(
+                        span,
+                        "Scope attribute is not applicable to unparseable \
+                        variants without index.\nAnnotate this variant with \
+                        #[index(...)] or #[rule(...)] attributes.",
+                    ));
+                }
+
+                false
+            }
+
+            true => scope.is_some(),
+        };
+
         let description = match rule.is_some() || index.is_some() {
             false => {
                 if let Some(span) = description.span() {
@@ -412,6 +439,7 @@ impl TryFrom<Variant> for NodeVariant {
             constructor,
             parser,
             secondary,
+            scope,
             description,
             dump,
         })

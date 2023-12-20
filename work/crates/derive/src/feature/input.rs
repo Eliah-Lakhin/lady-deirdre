@@ -62,8 +62,9 @@ pub struct FeatureInput {
     vis: Visibility,
     fields: Fields,
     node: Type,
+    scope: Scope,
     invalidate: Set<usize>,
-    dump: Dump,
+    pub(crate) dump: Dump,
 }
 
 impl Parse for FeatureInput {
@@ -149,16 +150,18 @@ impl TryFrom<DeriveInput> for FeatureInput {
             None => {
                 return Err(error!(
                     ident.span(),
-                    "Node type was not specified.\nUse #[node(<node name>)] \
+                    "Node type was not specified.\nUse #[node(<node type>)] \
                     attribute on the derived type to specify Node type.",
                 ));
             }
         };
 
+        let mut scope = Scope::Unset;
         let mut invalidate = Set::with_capacity(fields.len());
 
         for (index, field) in fields.iter().enumerate() {
-            let mut flag = false;
+            let mut scope_flag = None;
+            let mut invalidate_flag = false;
 
             for attr in &field.attrs {
                 match attr.style {
@@ -174,12 +177,20 @@ impl TryFrom<DeriveInput> for FeatureInput {
                 let span = attr.span();
 
                 match name.to_string().as_str() {
+                    "scope" => {
+                        if scope_flag.is_some() {
+                            return Err(error!(span, "Duplicate Scope attribute.",));
+                        }
+
+                        scope_flag = Some(span);
+                    }
+
                     "invalidate" => {
-                        if flag {
+                        if invalidate_flag {
                             return Err(error!(span, "Duplicate Invalidate attribute.",));
                         }
 
-                        flag = true;
+                        invalidate_flag = true;
                     }
 
                     "dump" => {
@@ -190,8 +201,22 @@ impl TryFrom<DeriveInput> for FeatureInput {
                 }
             }
 
-            if flag {
+            if invalidate_flag {
                 let _ = invalidate.insert(index);
+            }
+
+            if let Some(span) = scope_flag {
+                if scope.specified() {
+                    return Err(error!(
+                        span,
+                        "The feature object may have at most one scope attribute.",
+                    ));
+                }
+
+                scope = match &field.ident {
+                    Some(ident) => Scope::Ident(ident.clone()),
+                    None => Scope::Index(index),
+                };
             }
         }
 
@@ -201,12 +226,13 @@ impl TryFrom<DeriveInput> for FeatureInput {
             vis,
             fields,
             node,
+            scope,
             invalidate,
             dump,
         };
 
         match dump {
-            Dump::None | Dump::Dry(_) => {}
+            Dump::None | Dump::Dry(_) | Dump::Decl(_) => {}
 
             Dump::Trivia(span) | Dump::Meta(span) => {
                 return Err(error!(
@@ -246,9 +272,10 @@ impl ToTokens for FeatureInput {
         let ident = &self.ident;
         let node = &self.node;
         let vis = &self.vis;
+
         let span = ident.span();
         let core = span.face_core();
-        let option = span.face_option();
+        let result = span.face_result();
 
         let mut getters = Vec::with_capacity(self.fields.len());
         let mut keys = Vec::with_capacity(self.fields.len());
@@ -262,7 +289,7 @@ impl ToTokens for FeatureInput {
 
             let span = ty.span();
             let core = span.face_core();
-            let option = span.face_option();
+            let result = span.face_result();
 
             let invalidate = self.invalidate.contains(&index);
 
@@ -276,7 +303,7 @@ impl ToTokens for FeatureInput {
 
                         getters.push(quote_spanned!(span=>
                             #core::syntax::Key::Index(#index)
-                                | #core::syntax::Key::Name(#literal) => #option::Some(&self.#ident)
+                                | #core::syntax::Key::Name(#literal) => #result::Ok(&self.#ident)
                         ));
                         keys.push(quote_spanned!(span=> &#core::syntax::Key::Name(#literal)));
                     }
@@ -305,7 +332,7 @@ impl ToTokens for FeatureInput {
                 None => {
                     if &field.vis == vis {
                         getters.push(quote_spanned!(span=>
-                            #core::syntax::Key::Index(#index) => #option::Some(&self.#ident)
+                            #core::syntax::Key::Index(#index) => #result::Ok(&self.#ident)
                         ));
                         keys.push(quote_spanned!(span=> &#core::syntax::Key::Index(#index)));
                     }
@@ -349,6 +376,14 @@ impl ToTokens for FeatureInput {
             Fields::Unit => quote_spanned!(span=> Self),
         };
 
+        let scope_getter = match &self.scope {
+            Scope::Unset => {
+                quote_spanned!(span=> #result::Err(#core::analysis::AnalysisError::MissingScope))
+            }
+            Scope::Ident(ident) => quote_spanned!(span=> #result::Ok(&self.#ident)),
+            Scope::Index(index) => quote_spanned!(span=> #result::Ok(&self.#index)),
+        };
+
         let (impl_generics, type_generics, where_clause) = self.generics.split_for_impl();
 
         quote_spanned!(span=>
@@ -363,14 +398,14 @@ impl ToTokens for FeatureInput {
                 }
 
                 fn feature(&self, key: #core::syntax::Key)
-                    -> #option<&dyn #core::analysis::AbstractFeature>
+                    -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature>
                 {
                     match key {
                         #(
                         #getters,
                         )*
 
-                        _ => #option::None,
+                        _ => #result::Err(#core::analysis::AnalysisError::MissingFeature),
                     }
                 }
 
@@ -385,11 +420,13 @@ impl ToTokens for FeatureInput {
             {
                 type Node = #node;
 
+                #[inline(always)]
                 #[allow(unused_variables)]
                 fn new_uninitialized(node_ref: #core::syntax::NodeRef) -> Self {
                     #constructor
                 }
 
+                #[inline(always)]
                 #[allow(unused_variables)]
                 fn initialize<S: #core::sync::SyncBuildHasher>(
                     &mut self,
@@ -400,6 +437,7 @@ impl ToTokens for FeatureInput {
                     )*
                 }
 
+                #[inline(always)]
                 #[allow(unused_variables)]
                 fn invalidate<S: #core::sync::SyncBuildHasher>(
                     &self,
@@ -409,8 +447,31 @@ impl ToTokens for FeatureInput {
                     #invalidators
                     )*
                 }
+
+                #[inline(always)]
+                fn scope_attr(&self)
+                    -> #core::analysis::AnalysisResult<&#core::analysis::ScopeAttr<Self::Node>>
+                {
+                    #scope_getter
+                }
             }
         )
         .to_tokens(tokens);
+    }
+}
+
+enum Scope {
+    Unset,
+    Ident(Ident),
+    Index(usize),
+}
+
+impl Scope {
+    #[inline(always)]
+    fn specified(&self) -> bool {
+        match self {
+            Self::Unset => false,
+            _ => true,
+        }
     }
 }

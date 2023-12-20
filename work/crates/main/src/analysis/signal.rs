@@ -35,38 +35,117 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod automata;
-mod context;
-mod description;
-mod deterministic;
-mod dump;
-mod expression;
-mod facade;
-mod map;
-mod predictable;
-mod report;
-mod set;
-mod transitions;
-
-pub(crate) use report::{error, error_message, expect_some, null, system_panic};
-
-pub use crate::utils::{
-    automata::Automata,
-    context::{AutomataContext, AutomataTerminal, State, Strategy},
-    description::Description,
-    dump::Dump,
-    expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::Facade,
-    map::Map,
-    predictable::PredictableCollection,
-    set::{Set, SetImpl},
+use crate::{
+    analysis::{
+        AbstractFeature,
+        AnalysisError,
+        AnalysisResult,
+        AttrRef,
+        Feature,
+        FeatureInitializer,
+        FeatureInvalidator,
+        Grammar,
+        ScopeAttr,
+    },
+    std::*,
+    sync::SyncBuildHasher,
+    syntax::{Key, NodeRef},
 };
 
-pub mod dump_kw {
-    syn::custom_keyword!(output);
-    syn::custom_keyword!(trivia);
-    syn::custom_keyword!(meta);
-    syn::custom_keyword!(dry);
-    syn::custom_keyword!(decl);
-    syn::custom_keyword!(dump);
+#[repr(transparent)]
+pub struct Signal<L: Lifetime> {
+    payload: L::Payload,
+    _lifetime: PhantomData<L>,
+}
+
+impl<L: Lifetime> Debug for Signal<L>
+where
+    L::Payload: Debug,
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("Signal")
+            .field("payload", &self.payload)
+            .finish()
+    }
+}
+
+impl<L: Lifetime> Drop for Signal<L> {
+    fn drop(&mut self) {
+        L::on_deregister(&self.payload);
+    }
+}
+
+impl<L: Lifetime> Signal<L> {
+    #[inline(always)]
+    pub fn trigger(payload: L::Payload) -> Self {
+        let signal = Self {
+            payload,
+            _lifetime: Default::default(),
+        };
+
+        L::on_register(&signal.payload);
+
+        signal
+    }
+}
+
+impl<L: Lifetime<Payload = NodeRef>> Feature for Signal<L> {
+    type Node = L::Node;
+
+    #[inline(always)]
+    fn new_uninitialized(node_ref: NodeRef) -> Self
+    where
+        Self: Sized,
+    {
+        Self {
+            payload: node_ref,
+            _lifetime: Default::default(),
+        }
+    }
+
+    #[inline(always)]
+    fn initialize<S: SyncBuildHasher>(
+        &mut self,
+        _initializer: &mut FeatureInitializer<Self::Node, S>,
+    ) {
+        L::on_register(&self.payload);
+    }
+
+    #[inline(always)]
+    fn invalidate<S: SyncBuildHasher>(&self, _invalidator: &mut FeatureInvalidator<Self::Node, S>) {
+    }
+
+    #[inline(always)]
+    fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self::Node>> {
+        Err(AnalysisError::MissingScope)
+    }
+}
+
+impl<L: Lifetime<Payload = NodeRef>> AbstractFeature for Signal<L> {
+    #[inline(always)]
+    fn attr_ref(&self) -> &AttrRef {
+        static NIL_REF: AttrRef = AttrRef::nil();
+
+        &NIL_REF
+    }
+
+    #[inline(always)]
+    fn feature(&self, _key: Key) -> AnalysisResult<&dyn AbstractFeature> {
+        Err(AnalysisError::MissingFeature)
+    }
+
+    #[inline(always)]
+    fn feature_keys(&self) -> &'static [&'static Key] {
+        &[]
+    }
+}
+
+pub trait Lifetime: Send + Sync + 'static {
+    type Node: Grammar;
+    type Payload: Send + Sync + 'static;
+
+    fn on_register(payload: &Self::Payload);
+
+    fn on_deregister(payload: &Self::Payload);
 }

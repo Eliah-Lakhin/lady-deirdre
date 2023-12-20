@@ -40,88 +40,18 @@ extern crate lady_deirdre_derive;
 pub use lady_deirdre_derive::Feature;
 
 use crate::{
-    analysis::{AttrRef, FeatureInitializer, FeatureInvalidator},
+    analysis::{
+        AnalysisResult,
+        AttrRef,
+        FeatureInitializer,
+        FeatureInvalidator,
+        Grammar,
+        ScopeAttr,
+    },
     std::*,
     sync::SyncBuildHasher,
-    syntax::{Key, Node, NodeRef},
+    syntax::{Key, NodeRef},
 };
-
-pub struct Semantics<F: Feature> {
-    inner: Box<SemanticsInner<F>>,
-}
-
-impl<F: Feature> AbstractFeature for Semantics<F> {
-    #[inline(always)]
-    fn attr_ref(&self) -> &AttrRef {
-        let Some(inner) = self.get() else {
-            static NIL_REF: AttrRef = AttrRef::nil();
-
-            return &NIL_REF;
-        };
-
-        inner.attr_ref()
-    }
-
-    #[inline(always)]
-    fn feature(&self, key: Key) -> Option<&dyn AbstractFeature> {
-        self.get()?.feature(key)
-    }
-
-    #[inline(always)]
-    fn feature_keys(&self) -> &'static [&'static Key] {
-        let Some(inner) = self.get() else {
-            return &[];
-        };
-
-        inner.feature_keys()
-    }
-}
-
-impl<F: Feature> Feature for Semantics<F> {
-    type Node = F::Node;
-
-    fn new_uninitialized(node_ref: NodeRef) -> Self {
-        Self {
-            inner: Box::new(SemanticsInner::Uninit(node_ref)),
-        }
-    }
-
-    fn initialize<S: SyncBuildHasher>(
-        &mut self,
-        initializer: &mut FeatureInitializer<Self::Node, S>,
-    ) {
-        let SemanticsInner::Uninit(node_ref) = self.inner.deref() else {
-            return;
-        };
-
-        let node_ref = *node_ref;
-
-        let mut feature = F::new_uninitialized(node_ref);
-
-        feature.initialize(initializer);
-
-        *self.inner = SemanticsInner::Init(feature);
-    }
-
-    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self::Node, S>) {
-        let SemanticsInner::Init(feature) = self.inner.deref() else {
-            return;
-        };
-
-        feature.invalidate(invalidator);
-    }
-}
-
-impl<F: Feature> Semantics<F> {
-    #[inline(always)]
-    pub fn get(&self) -> Option<&F> {
-        let SemanticsInner::Init(feature) = self.inner.deref() else {
-            return None;
-        };
-
-        Some(feature)
-    }
-}
 
 pub trait Feature: AbstractFeature {
     type Node: Grammar;
@@ -136,23 +66,14 @@ pub trait Feature: AbstractFeature {
     );
 
     fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self::Node, S>);
-}
 
-pub trait Grammar: Node {
-    fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>);
-
-    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>);
+    fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self::Node>>;
 }
 
 pub trait AbstractFeature {
     fn attr_ref(&self) -> &AttrRef;
 
-    fn feature(&self, key: Key) -> Option<&dyn AbstractFeature>;
+    fn feature(&self, key: Key) -> AnalysisResult<&dyn AbstractFeature>;
 
     fn feature_keys(&self) -> &'static [&'static Key];
-}
-
-enum SemanticsInner<F: Feature> {
-    Uninit(NodeRef),
-    Init(F),
 }

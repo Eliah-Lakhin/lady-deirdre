@@ -417,4 +417,22 @@ impl Inheritance {
 
         Some(quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => #body,))
     }
+
+    pub(super) fn compile_scope_attr_getter(&self) -> Option<TokenStream> {
+        let (field_ident, field_ty) = self.semantics.as_ref()?;
+
+        let body = {
+            let span = field_ty.span();
+            let core = span.face_core();
+
+            quote_spanned!(span=>
+                <#field_ty as #core::analysis::Feature>::scope_attr(_0)
+            )
+        };
+
+        let ident = &self.ident;
+        let span = ident.span();
+
+        Some(quote_spanned!(span=> Self::#ident { #field_ident: _0, .. } => #body,))
+    }
 }

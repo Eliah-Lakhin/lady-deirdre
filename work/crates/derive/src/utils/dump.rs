@@ -49,6 +49,7 @@ pub enum Dump {
     Trivia(Span),
     Meta(Span),
     Dry(Span),
+    Decl(Span),
 }
 
 impl TryFrom<Attribute> for Dump {
@@ -84,6 +85,10 @@ impl TryFrom<Attribute> for Dump {
                 return Ok(Self::Dry(input.parse::<dump_kw::dry>()?.span()));
             }
 
+            if lookahead.peek(dump_kw::decl) {
+                return Ok(Self::Decl(input.parse::<dump_kw::decl>()?.span()));
+            }
+
             return Err(lookahead.error());
         })
     }
@@ -93,11 +98,20 @@ impl Dump {
     #[inline(always)]
     pub fn span(self) -> Option<Span> {
         match self {
-            Dump::None => None,
-            Dump::Output(span) => Some(span),
-            Dump::Trivia(span) => Some(span),
-            Dump::Meta(span) => Some(span),
-            Dump::Dry(span) => Some(span),
+            Self::None => None,
+            Self::Output(span) => Some(span),
+            Self::Trivia(span) => Some(span),
+            Self::Meta(span) => Some(span),
+            Self::Dry(span) => Some(span),
+            Self::Decl(span) => Some(span),
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_declarative(&self) -> bool {
+        match self {
+            Self::Decl(..) => true,
+            _ => false,
         }
     }
 }

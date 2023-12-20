@@ -40,6 +40,8 @@ use crate::{
         database::Database,
         mutation::MutationTask,
         table::{UnitTable, UnitTableReadGuard},
+        AnalysisError,
+        AnalysisResult,
         AnalysisTask,
         Grammar,
     },
@@ -94,7 +96,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
         }
     }
 
-    pub fn analyze(&self) -> AnalysisTask<N, S> {
+    pub fn analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisTask<'a, N, S> {
         let mut stage_guard = self
             .stage
             .lock()
@@ -103,9 +105,9 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
         loop {
             match stage_guard.deref_mut() {
                 AnalyzerStage::Analysis { tasks } => {
-                    let task = AnalysisTask::new(self);
+                    let task = AnalysisTask::new(self, handle);
 
-                    tasks.insert(task.handle().clone());
+                    tasks.insert(handle.clone());
 
                     return task;
                 }
@@ -120,7 +122,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
         }
     }
 
-    pub fn try_analyze(&self) -> Option<AnalysisTask<N, S>> {
+    pub fn try_analyze<'a>(&'a self, handle: &'a Latch) -> Option<AnalysisTask<'a, N, S>> {
         let mut stage_guard = self
             .stage
             .lock()
@@ -128,7 +130,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
         match stage_guard.deref_mut() {
             AnalyzerStage::Analysis { tasks } => {
-                let task = AnalysisTask::new(self);
+                let task = AnalysisTask::new(self, handle);
 
                 tasks.insert(task.handle().clone());
 
@@ -136,6 +138,29 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
             }
 
             _ => None,
+        }
+    }
+
+    pub fn interrupt(&self) {
+        let mut stage_guard = self
+            .stage
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        match stage_guard.deref_mut() {
+            AnalyzerStage::Analysis { tasks } => {
+                if tasks.len() == 0 {
+                    return;
+                }
+
+                for task in tasks.iter() {
+                    task.set();
+                }
+
+                tasks.clear();
+            }
+
+            _ => (),
         }
     }
 
@@ -179,12 +204,19 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
     }
 
     #[inline(always)]
-    pub fn read_document(&self, id: Id) -> Option<DocumentReadGuard<N, S>> {
+    pub fn read_document(&self, id: Id) -> AnalysisResult<DocumentReadGuard<N, S>> {
         let Some(guard) = self.documents.get(id) else {
-            return None;
+            return Err(AnalysisError::MissingDocument);
         };
 
-        Some(DocumentReadGuard { guard })
+        Ok(DocumentReadGuard { guard })
+    }
+
+    #[inline(always)]
+    pub fn try_read_document(&self, id: Id) -> Option<DocumentReadGuard<N, S>> {
+        Some(DocumentReadGuard {
+            guard: self.documents.try_get(id)?,
+        })
     }
 
     #[inline(always)]
@@ -221,6 +253,13 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Deref for DocumentReadGuard<'a, N, S> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
+        self.guard.deref()
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AsRef<Document<N>> for DocumentReadGuard<'a, N, S> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Document<N> {
         self.guard.deref()
     }
 }

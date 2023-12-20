@@ -99,6 +99,13 @@ impl<K, V, S> IntoIterator for Table<K, V, S> {
     }
 }
 
+impl<K: Hash + Eq, V, S: BuildHasher + Default + Clone> Default for Table<K, V, S> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K: Hash + Eq, V, S: BuildHasher> Table<K, V, S> {
     #[inline(always)]
     pub fn new() -> Self
@@ -163,6 +170,32 @@ impl<K: Hash + Eq, V, S: BuildHasher> Table<K, V, S> {
         let shard = self.shard_of(key);
 
         let guard = shard.read().unwrap_or_else(|poison| poison.into_inner());
+
+        let value = guard.get(key)?;
+
+        // Safety:
+        //   Prolongs reference lifetime to `self` lifetime.
+        //   The value will be valid for as long as the guard is held.
+        let value = unsafe { transmute::<&V, &V>(value) };
+
+        Some(TableReadGuard {
+            value,
+            _guard: guard,
+        })
+    }
+
+    pub fn try_get<Q>(&self, key: &Q) -> Option<TableReadGuard<K, V, S>>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        let shard = self.shard_of(key);
+
+        let guard = match shard.try_read() {
+            Ok(guard) => guard,
+            Err(TryLockError::Poisoned(poison)) => poison.into_inner(),
+            Err(TryLockError::WouldBlock) => return None,
+        };
 
         let value = guard.get(key)?;
 

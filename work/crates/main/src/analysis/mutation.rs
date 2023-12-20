@@ -43,6 +43,7 @@ use crate::{
         record::Record,
         AnalysisError,
         AnalysisResult,
+        AnalysisTask,
         Analyzer,
         Grammar,
     },
@@ -127,51 +128,118 @@ impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
         id: Id,
         span: impl ToSpan,
         text: impl AsRef<str>,
-    ) -> AnalysisResult<Vec<NodeRef>> {
-        let Some(mut document) = self.analyzer.documents.get_mut(id) else {
-            return Err(AnalysisError::MissingDocument);
+    ) -> AnalysisResult<()> {
+        let mutations = {
+            let Some(mut document) = self.analyzer.documents.get_mut(id) else {
+                return Err(AnalysisError::MissingDocument);
+            };
+
+            let Document::Mutable(unit) = &mut document.deref_mut() else {
+                return Err(AnalysisError::ImmutableDocument);
+            };
+
+            let Some(span) = span.to_site_span(unit) else {
+                return Err(AnalysisError::InvalidSpan);
+            };
+
+            if unit.write(span, text).is_nil() {
+                return Ok(());
+            }
+
+            let mutations = unit.mutations().take();
+
+            let Some(mut records) = self.analyzer.database.records.get_mut(id) else {
+                // Safety:
+                //   1. Records are always in sync with documents.
+                //   2. Document is locked.
+                unsafe { debug_unreachable!("Missing database entry.") }
+            };
+
+            let mut initializer = FeatureInitializer {
+                id,
+                database: Arc::downgrade(&self.analyzer.database) as Weak<_>,
+                records: records.deref_mut(),
+            };
+
+            for node_ref in &mutations {
+                let Some(node) = node_ref.deref_mut(document.deref_mut()) else {
+                    continue;
+                };
+
+                node.initialize(&mut initializer);
+            }
+
+            let mut invalidator = FeatureInvalidator {
+                id,
+                records: records.deref_mut(),
+            };
+
+            for node_ref in &mutations {
+                let Some(node) = node_ref.deref(document.deref()) else {
+                    continue;
+                };
+
+                node.invalidate(&mut invalidator);
+            }
+
+            self.analyzer.database.commit();
+
+            mutations
         };
 
-        let Document::Mutable(unit) = &mut document.deref_mut() else {
-            return Err(AnalysisError::ImmutableDocument);
-        };
-
-        let Some(span) = span.to_site_span(unit) else {
-            return Err(AnalysisError::InvalidSpan);
-        };
-
-        if unit.write(span, text).is_nil() {
-            return Ok(Vec::new());
+        if !N::has_scopes() {
+            return Ok(());
         }
 
-        let mutations = unit.mutations().take();
+        if mutations.is_empty() {
+            return Ok(());
+        }
 
-        let Some(mut records) = self.analyzer.database.records.get_mut(id) else {
-            // Safety: records are always in sync with documents.
-            unsafe { debug_unreachable!("Missing database entry.") }
+        let Some(document) = self.analyzer.documents.get(id) else {
+            return Ok(());
         };
 
-        let mut initializer = FeatureInitializer {
-            id,
-            database: Arc::downgrade(&self.analyzer.database) as Weak<_>,
-            records: records.deref_mut(),
-        };
+        let mut fork = AnalysisTask::fork_for_mutation(self.analyzer);
+
+        let mut scope_refs = HashSet::with_capacity_and_hasher(1, S::default());
 
         for node_ref in &mutations {
-            let Some(node) = node_ref.deref_mut(document.deref_mut()) else {
+            let Some(node) = node_ref.deref(document.deref()) else {
                 continue;
             };
 
-            node.initialize(&mut initializer);
+            let scope_attr = node.scope_attr()?;
+
+            // Safety: `fork` was instantiated as a forked task.
+            unsafe { fork.reuse(node_ref) };
+
+            let scope_ref = scope_attr.read(&mut fork)?.scope_ref;
+
+            if scope_ref.is_nil() {
+                continue;
+            }
+
+            let _ = scope_refs.insert(scope_ref);
         }
+
+        if scope_refs.is_empty() {
+            return Ok(());
+        }
+
+        let Some(mut records) = self.analyzer.database.records.get_mut(id) else {
+            // Safety:
+            //   1. Records are always in sync with documents.
+            //   2. Document is locked.
+            unsafe { debug_unreachable!("Missing database entry.") }
+        };
 
         let mut invalidator = FeatureInvalidator {
             id,
             records: records.deref_mut(),
         };
 
-        for node_ref in &mutations {
-            let Some(node) = node_ref.deref(document.deref_mut()) else {
+        for node_ref in scope_refs {
+            let Some(node) = node_ref.deref(document.deref()) else {
                 continue;
             };
 
@@ -180,7 +248,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
 
         self.analyzer.database.commit();
 
-        Ok(mutations)
+        Ok(())
     }
 
     #[inline(always)]

@@ -35,38 +35,26 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod automata;
-mod context;
-mod description;
-mod deterministic;
-mod dump;
-mod expression;
-mod facade;
-mod map;
-mod predictable;
-mod report;
-mod set;
-mod transitions;
-
-pub(crate) use report::{error, error_message, expect_some, null, system_panic};
-
-pub use crate::utils::{
-    automata::Automata,
-    context::{AutomataContext, AutomataTerminal, State, Strategy},
-    description::Description,
-    dump::Dump,
-    expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::Facade,
-    map::Map,
-    predictable::PredictableCollection,
-    set::{Set, SetImpl},
+use crate::{
+    analysis::{
+        AbstractFeature,
+        AnalysisResult,
+        FeatureInitializer,
+        FeatureInvalidator,
+        ScopeAttr,
+    },
+    sync::SyncBuildHasher,
+    syntax::Node,
 };
 
-pub mod dump_kw {
-    syn::custom_keyword!(output);
-    syn::custom_keyword!(trivia);
-    syn::custom_keyword!(meta);
-    syn::custom_keyword!(dry);
-    syn::custom_keyword!(decl);
-    syn::custom_keyword!(dump);
+pub trait Grammar: Node + AbstractFeature {
+    fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>);
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>);
+
+    fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self>>;
+
+    fn is_scope(&self) -> bool;
+
+    fn has_scopes() -> bool;
 }

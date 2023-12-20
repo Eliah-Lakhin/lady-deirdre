@@ -35,38 +35,96 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod automata;
-mod context;
-mod description;
-mod deterministic;
-mod dump;
-mod expression;
-mod facade;
-mod map;
-mod predictable;
-mod report;
-mod set;
-mod transitions;
+use crate::{report::debug_unreachable, std::*, sync::Shared};
 
-pub(crate) use report::{error, error_message, expect_some, null, system_panic};
+pub struct Accumulator<T, S = RandomState> {
+    inner: Mutex<(bool, Shared<HashSet<T, S>>)>,
+}
 
-pub use crate::utils::{
-    automata::Automata,
-    context::{AutomataContext, AutomataTerminal, State, Strategy},
-    description::Description,
-    dump::Dump,
-    expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::Facade,
-    map::Map,
-    predictable::PredictableCollection,
-    set::{Set, SetImpl},
-};
+impl<T: Hash + Eq + Clone, S: BuildHasher + Clone> Accumulator<T, S> {
+    #[inline(always)]
+    pub fn new() -> Self
+    where
+        S: Default,
+    {
+        Self::with_capacity(0)
+    }
 
-pub mod dump_kw {
-    syn::custom_keyword!(output);
-    syn::custom_keyword!(trivia);
-    syn::custom_keyword!(meta);
-    syn::custom_keyword!(dry);
-    syn::custom_keyword!(decl);
-    syn::custom_keyword!(dump);
+    #[inline(always)]
+    pub fn with_capacity(capacity: usize) -> Self
+    where
+        S: Default,
+    {
+        Self::with_capacity_and_hasher(capacity, S::default())
+    }
+
+    #[inline(always)]
+    pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> Self {
+        Self {
+            inner: Mutex::new((
+                false,
+                Shared::new(HashSet::with_capacity_and_hasher(capacity, hasher)),
+            )),
+        }
+    }
+
+    pub fn insert(&self, item: &T) -> bool {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        if guard.1.as_ref().contains(item) {
+            return false;
+        }
+
+        if !guard.1.make_mut().insert(item.clone()) {
+            // Safety: Existence checked above.
+            unsafe { debug_unreachable!("Hash set inconsistency.") }
+        }
+
+        guard.0 = true;
+
+        true
+    }
+
+    pub fn remove(&self, item: &T) -> bool {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        if !guard.1.as_ref().contains(item) {
+            return false;
+        }
+
+        if !guard.1.make_mut().remove(item) {
+            // Safety: Existence checked above.
+            unsafe { debug_unreachable!("Hash set inconsistency.") }
+        }
+
+        guard.0 = true;
+
+        true
+    }
+
+    #[inline(always)]
+    pub fn snapshot(&self) -> Shared<HashSet<T, S>> {
+        let guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        guard.1.clone()
+    }
+
+    #[inline(always)]
+    pub fn commit(&self) -> bool {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        replace(&mut guard.0, false)
+    }
 }

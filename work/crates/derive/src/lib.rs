@@ -50,9 +50,12 @@ extern crate syn;
 extern crate core;
 extern crate proc_macro;
 
+use std::str::FromStr;
+
+use proc_macro2::TokenStream;
 use quote::ToTokens;
 
-use crate::{feature::FeatureInput, node::NodeInput, token::TokenInput};
+use crate::{feature::FeatureInput, node::NodeInput, token::TokenInput, utils::system_panic};
 
 mod feature;
 mod node;
@@ -65,9 +68,11 @@ mod utils;
     attributes(define, rule, priority, constructor, blank, describe, opt, dump)
 )]
 pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let token_input = parse_macro_input!(input as TokenInput);
+    let input = parse_macro_input!(input as TokenInput);
 
-    token_input.to_token_stream().into()
+    let declarative = input.dump.is_declarative();
+
+    output_stream(declarative, input.into_token_stream())
 }
 
 #[doc = include_str!("./node/readme.md")]
@@ -91,19 +96,34 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         child,
         semantics,
         describe,
+        scope,
         dump,
     )
 )]
 pub fn node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let node_input = parse_macro_input!(input as NodeInput);
+    let input = parse_macro_input!(input as NodeInput);
 
-    node_input.to_token_stream().into()
+    let declarative = input.dump.is_declarative();
+
+    output_stream(declarative, input.into_token_stream())
 }
 
 // todo link documentation
-#[proc_macro_derive(Feature, attributes(node, invalidate, dump))]
+#[proc_macro_derive(Feature, attributes(node, invalidate, scope, dump))]
 pub fn feature(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let feature_input = parse_macro_input!(input as FeatureInput);
+    let input = parse_macro_input!(input as FeatureInput);
 
-    feature_input.to_token_stream().into()
+    let declarative = input.dump.is_declarative();
+
+    output_stream(declarative, input.into_token_stream())
+}
+
+fn output_stream(declarative: bool, stream: TokenStream) -> proc_macro::TokenStream {
+    match declarative {
+        true => match TokenStream::from_str(&stream.to_string()) {
+            Ok(stream) => stream.into(),
+            Err(error) => system_panic!("Spans erase failure. {error}",),
+        },
+        false => stream.into(),
+    }
 }

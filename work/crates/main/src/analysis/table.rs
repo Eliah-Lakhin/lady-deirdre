@@ -138,6 +138,30 @@ impl<V, S: SyncBuildHasher> UnitTable<V, S> {
         }
     }
 
+    pub(super) fn try_get(&self, id: Id) -> Option<UnitTableReadGuard<V, S>> {
+        match self {
+            Self::Single(table) => {
+                let guard = match table.try_read() {
+                    Ok(guard) => guard,
+                    Err(TryLockError::Poisoned(poison)) => poison.into_inner(),
+                    Err(TryLockError::WouldBlock) => return None,
+                };
+
+                let Some((managed_id, _)) = guard.deref() else {
+                    return None;
+                };
+
+                if managed_id != &id {
+                    return None;
+                }
+
+                Some(UnitTableReadGuard::Single(guard))
+            }
+
+            Self::Multi(table) => Some(UnitTableReadGuard::Multi(table.try_get(&id)?)),
+        }
+    }
+
     pub(super) fn get_mut(&self, id: Id) -> Option<UnitTableWriteGuard<V, S>> {
         match self {
             Self::Single(table) => {

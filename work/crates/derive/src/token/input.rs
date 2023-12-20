@@ -92,7 +92,7 @@ pub struct TokenInput {
     pub(super) variants: Variants,
     pub(super) products: ProductMap,
     pub(super) alphabet: Alphabet,
-    pub(super) dump: Dump,
+    pub(crate) dump: Dump,
 }
 
 impl Parse for TokenInput {

@@ -92,6 +92,21 @@ pub trait Facade: Spanned {
     }
 
     #[inline(always)]
+    fn face_result(&self) -> TokenStream {
+        let span = self.span();
+
+        #[cfg(feature = "std")]
+        {
+            quote_spanned!(span=> ::std::result::Result)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            quote_spanned!(span=> ::core::result::Result)
+        }
+    }
+
+    #[inline(always)]
     fn face_from(&self) -> TokenStream {
         let span = self.span();
 

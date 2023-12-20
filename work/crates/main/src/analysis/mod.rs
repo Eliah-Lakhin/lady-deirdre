@@ -40,19 +40,27 @@ mod analyzer;
 mod attribute;
 mod database;
 mod features;
+mod grammar;
 mod memo;
 mod mutation;
 mod record;
 mod result;
+mod scope;
+mod semantics;
+mod signal;
 mod table;
 
 pub use crate::analysis::{
     analysis::AnalysisTask,
     analyzer::{Analyzer, DocumentReadGuard, Revision},
-    attribute::{Attr, AttrRef, Computable},
-    features::{AbstractFeature, Feature, Grammar, Semantics},
+    attribute::{Attr, AttrReadGuard, AttrRef, Computable},
+    features::{AbstractFeature, Feature},
+    grammar::Grammar,
     mutation::{FeatureInitializer, FeatureInvalidator, MutationTask},
     result::{AnalysisError, AnalysisResult},
+    scope::{Scope, ScopeAttr},
+    semantics::Semantics,
+    signal::{Lifetime, Signal},
 };
 
 #[cfg(test)]
@@ -70,7 +78,7 @@ mod tests {
         },
         lexis::{SimpleToken, TokenRef},
         std::*,
-        sync::SyncBuildHasher,
+        sync::{Latch, SyncBuildHasher},
         syntax::{Key, Node, NodeRef, ParseError, SyntaxTree},
     };
 
@@ -193,7 +201,8 @@ mod tests {
         };
 
         {
-            let mut analysis = analyzer.analyze();
+            let handle = Latch::new();
+            let mut analysis = analyzer.analyze(&handle);
 
             let doc = analysis.analyzer().read_document(id).unwrap();
 
@@ -218,7 +227,8 @@ mod tests {
         }
 
         {
-            let mut analysis = analyzer.analyze();
+            let handle = Latch::new();
+            let mut analysis = analyzer.analyze(&handle);
 
             let doc = analysis.analyzer().read_document(id).unwrap();
 

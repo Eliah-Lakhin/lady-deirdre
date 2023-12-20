@@ -35,38 +35,104 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod automata;
-mod context;
-mod description;
-mod deterministic;
-mod dump;
-mod expression;
-mod facade;
-mod map;
-mod predictable;
-mod report;
-mod set;
-mod transitions;
-
-pub(crate) use report::{error, error_message, expect_some, null, system_panic};
-
-pub use crate::utils::{
-    automata::Automata,
-    context::{AutomataContext, AutomataTerminal, State, Strategy},
-    description::Description,
-    dump::Dump,
-    expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::Facade,
-    map::Map,
-    predictable::PredictableCollection,
-    set::{Set, SetImpl},
+use crate::{
+    analysis::{
+        AbstractFeature,
+        AnalysisError,
+        AnalysisResult,
+        AttrRef,
+        Feature,
+        FeatureInitializer,
+        FeatureInvalidator,
+        ScopeAttr,
+    },
+    std::*,
+    sync::SyncBuildHasher,
+    syntax::{Key, NodeRef},
 };
 
-pub mod dump_kw {
-    syn::custom_keyword!(output);
-    syn::custom_keyword!(trivia);
-    syn::custom_keyword!(meta);
-    syn::custom_keyword!(dry);
-    syn::custom_keyword!(decl);
-    syn::custom_keyword!(dump);
+pub struct Semantics<F: Feature> {
+    inner: Box<SemanticsInner<F>>,
+}
+
+impl<F: Feature> AbstractFeature for Semantics<F> {
+    #[inline(always)]
+    fn attr_ref(&self) -> &AttrRef {
+        let Ok(inner) = self.get() else {
+            static NIL_REF: AttrRef = AttrRef::nil();
+
+            return &NIL_REF;
+        };
+
+        inner.attr_ref()
+    }
+
+    #[inline(always)]
+    fn feature(&self, key: Key) -> AnalysisResult<&dyn AbstractFeature> {
+        self.get()?.feature(key)
+    }
+
+    #[inline(always)]
+    fn feature_keys(&self) -> &'static [&'static Key] {
+        let Ok(inner) = self.get() else {
+            return &[];
+        };
+
+        inner.feature_keys()
+    }
+}
+
+impl<F: Feature> Feature for Semantics<F> {
+    type Node = F::Node;
+
+    fn new_uninitialized(node_ref: NodeRef) -> Self {
+        Self {
+            inner: Box::new(SemanticsInner::Uninit(node_ref)),
+        }
+    }
+
+    fn initialize<S: SyncBuildHasher>(
+        &mut self,
+        initializer: &mut FeatureInitializer<Self::Node, S>,
+    ) {
+        let SemanticsInner::Uninit(node_ref) = self.inner.deref() else {
+            return;
+        };
+
+        let node_ref = *node_ref;
+
+        let mut feature = F::new_uninitialized(node_ref);
+
+        feature.initialize(initializer);
+
+        *self.inner = SemanticsInner::Init(feature);
+    }
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self::Node, S>) {
+        let SemanticsInner::Init(feature) = self.inner.deref() else {
+            return;
+        };
+
+        feature.invalidate(invalidator);
+    }
+
+    fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self::Node>> {
+        self.get()?.scope_attr()
+    }
+}
+
+impl<F: Feature> Semantics<F> {
+    #[inline(always)]
+    pub fn get(&self) -> AnalysisResult<&F> {
+        let SemanticsInner::Init(feature) = self.inner.deref() else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        Ok(feature)
+    }
+}
+
+enum SemanticsInner<F: Feature> {
+    Uninit(NodeRef),
+    Init(F),
 }

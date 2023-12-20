@@ -49,6 +49,7 @@ use crate::{
         FeatureInvalidator,
         Grammar,
         MutationTask,
+        ScopeAttr,
     },
     arena::{Entry, Id, Identifiable, Repository},
     report::debug_unreachable,
@@ -150,8 +151,8 @@ impl<C: Computable> AbstractFeature for Attr<C> {
     }
 
     #[inline(always)]
-    fn feature(&self, _key: Key) -> Option<&dyn AbstractFeature> {
-        None
+    fn feature(&self, _key: Key) -> AnalysisResult<&dyn AbstractFeature> {
+        Err(AnalysisError::MissingFeature)
     }
 
     #[inline(always)]
@@ -208,6 +209,16 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 
         invalidator.invalidate_attribute(&attr_ref.entry);
     }
+
+    #[inline(always)]
+    fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self::Node>> {
+        if TypeId::of::<Self>() == TypeId::of::<ScopeAttr<Self::Node>>() {
+            // Safety: Type ids match.
+            return Ok(unsafe { transmute::<&Self, &ScopeAttr<Self::Node>>(self) });
+        }
+
+        Err(AnalysisError::MissingScope)
+    }
 }
 
 impl<C: Computable> Attr<C> {
@@ -232,7 +243,7 @@ impl<C: Computable> Attr<C> {
 
             let cell_guard = record.read();
 
-            if cell_guard.verified_at == task.revision {
+            if cell_guard.verified_at >= task.revision {
                 if let Some(cache) = &cell_guard.cache {
                     // Safety: Attributes data came from the C::compute function.
                     let data = unsafe { cache.downcast_unchecked::<C>() };
@@ -351,7 +362,7 @@ impl AttrRef {
 
             let cell_guard = record.read();
 
-            if cell_guard.verified_at == task.revision {
+            if cell_guard.verified_at >= task.revision {
                 if let Some(cache) = &cell_guard.cache {
                     let data = cache.downcast::<C>()?;
 
@@ -458,17 +469,17 @@ impl AttrRef {
 
                 cell.cache = Some(Cache {
                     dirty: false,
-                    updated_at: forked.revision,
+                    updated_at: task.revision,
                     memo,
                     deps,
                 });
 
-                cell.verified_at = forked.revision;
+                cell.verified_at = task.revision;
 
                 return Ok(());
             };
 
-            if cell.verified_at == task.revision {
+            if cell.verified_at >= task.revision {
                 return Ok(());
             }
 
@@ -505,7 +516,7 @@ impl AttrRef {
                     }
 
                     deps_verified =
-                        deps_verified && dep_record_read_guard.verified_at == task.revision;
+                        deps_verified && dep_record_read_guard.verified_at >= task.revision;
                 }
 
                 if valid {
@@ -548,10 +559,10 @@ impl AttrRef {
             cache.deps = new_deps;
 
             if !same {
-                cache.updated_at = forked.revision;
+                cache.updated_at = task.revision;
             }
 
-            cell.verified_at = forked.revision;
+            cell.verified_at = task.revision;
 
             return Ok(());
         }

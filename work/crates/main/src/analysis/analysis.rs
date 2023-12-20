@@ -45,9 +45,9 @@ use crate::{
         Grammar,
         Revision,
     },
-    report::system_panic,
+    report::{debug_unreachable, system_panic},
     std::*,
-    sync::{Latch, SyncBuildHasher},
+    sync::{Latch, Lazy, SyncBuildHasher},
     syntax::NodeRef,
 };
 
@@ -55,7 +55,7 @@ pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     fork: Option<Fork<'a, S>>,
     pub(super) analyzer: &'a Analyzer<N, S>,
     pub(super) revision: Revision,
-    pub(super) handle: Latch,
+    pub(super) handle: &'a Latch,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
@@ -74,7 +74,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
 
         match state_guard.deref_mut() {
             AnalyzerStage::Analysis { tasks } => {
-                tasks.remove(&self.handle);
+                tasks.remove(self.handle);
 
                 if tasks.is_empty() {
                     tasks.shrink_to(TASKS_CAPACITY);
@@ -98,12 +98,35 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     #[inline(always)]
-    pub(super) fn new(analyzer: &'a Analyzer<N, S>) -> Self {
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
         Self {
             fork: None,
             analyzer,
             revision: analyzer.database.revision(),
-            handle: Latch::new(),
+            handle,
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn fork_for_mutation(analyzer: &'a Analyzer<N, S>) -> AnalysisTask<N, S> {
+        static NIL_REF: NodeRef = NodeRef::nil();
+        static DUMMY_HANDLE: Lazy<Latch> = Lazy::new(|| Latch::new());
+
+        #[cfg(debug_assertions)]
+        {
+            if DUMMY_HANDLE.get_relaxed() {
+                system_panic!("Dummy mutation handle is set.");
+            }
+        }
+
+        AnalysisTask {
+            fork: Some(Fork {
+                node_ref: &NIL_REF,
+                deps: None,
+            }),
+            analyzer,
+            revision: analyzer.database.revision(),
+            handle: DUMMY_HANDLE.deref(),
         }
     }
 
@@ -113,7 +136,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     }
 
     #[inline(always)]
-    pub fn handle(&self) -> &Latch {
+    pub fn handle(&self) -> &'a Latch {
         &self.handle
     }
 
@@ -146,11 +169,14 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
         AnalysisTask {
             fork: Some(Fork {
                 node_ref,
-                deps: HashSet::with_capacity_and_hasher(DEPS_CAPACITY, S::default()),
+                deps: Some(HashSet::with_capacity_and_hasher(
+                    DEPS_CAPACITY,
+                    S::default(),
+                )),
             }),
             analyzer: self.analyzer,
             revision: self.revision,
-            handle: self.handle.clone(),
+            handle: self.handle,
         }
     }
 
@@ -160,16 +186,35 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
             return;
         };
 
-        fork.deps.insert(*attr_ref);
+        let Some(deps) = &mut fork.deps else {
+            return;
+        };
+
+        deps.insert(*attr_ref);
     }
 
     #[inline(always)]
-    pub(super) fn take_deps(&mut self) -> Option<HashSet<AttrRef, S>> {
-        Some(take(&mut self.fork)?.deps)
+    pub(super) fn take_deps(mut self) -> Option<HashSet<AttrRef, S>> {
+        let Some(fork) = &mut self.fork else {
+            return None;
+        };
+
+        take(&mut fork.deps)
+    }
+
+    // Safety: This instance is a fork.
+    #[inline(always)]
+    pub(super) unsafe fn reuse(&mut self, node_ref: &'a NodeRef) {
+        let Some(fork) = &mut self.fork else {
+            // Safety: Upheld by the caller.
+            unsafe { debug_unreachable!("Not a fork.") }
+        };
+
+        fork.node_ref = node_ref;
     }
 }
 
 struct Fork<'a, S: SyncBuildHasher> {
     node_ref: &'a NodeRef,
-    deps: HashSet<AttrRef, S>,
+    deps: Option<HashSet<AttrRef, S>>,
 }

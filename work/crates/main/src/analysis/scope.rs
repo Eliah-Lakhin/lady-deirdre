@@ -35,38 +35,85 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod automata;
-mod context;
-mod description;
-mod deterministic;
-mod dump;
-mod expression;
-mod facade;
-mod map;
-mod predictable;
-mod report;
-mod set;
-mod transitions;
-
-pub(crate) use report::{error, error_message, expect_some, null, system_panic};
-
-pub use crate::utils::{
-    automata::Automata,
-    context::{AutomataContext, AutomataTerminal, State, Strategy},
-    description::Description,
-    dump::Dump,
-    expression::{Applicability, Expression, ExpressionOperand, ExpressionOperator},
-    facade::Facade,
-    map::Map,
-    predictable::PredictableCollection,
-    set::{Set, SetImpl},
+use crate::{
+    analysis::{AnalysisResult, AnalysisTask, Attr, Computable, Grammar},
+    std::*,
+    sync::SyncBuildHasher,
+    syntax::NodeRef,
 };
 
-pub mod dump_kw {
-    syn::custom_keyword!(output);
-    syn::custom_keyword!(trivia);
-    syn::custom_keyword!(meta);
-    syn::custom_keyword!(dry);
-    syn::custom_keyword!(decl);
-    syn::custom_keyword!(dump);
+pub type ScopeAttr<N> = Attr<Scope<N>>;
+
+pub struct Scope<N: Grammar> {
+    pub scope_ref: NodeRef,
+    _grammar: PhantomData<N>,
+}
+
+impl<N: Grammar> PartialEq for Scope<N> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        self.scope_ref.eq(&other.scope_ref)
+    }
+}
+
+impl<N: Grammar> Eq for Scope<N> {}
+
+impl<N: Grammar> Debug for Scope<N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("Scope")
+            .field("scope_ref", &self.scope_ref)
+            .finish()
+    }
+}
+
+impl<N: Grammar> Clone for Scope<N> {
+    #[inline(always)]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<N: Grammar> Copy for Scope<N> {}
+
+impl<N: Grammar> Default for Scope<N> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self {
+            scope_ref: NodeRef::nil(),
+            _grammar: PhantomData,
+        }
+    }
+}
+
+impl<N: Grammar> Computable for Scope<N> {
+    type Node = N;
+
+    fn compute<S: SyncBuildHasher>(task: &mut AnalysisTask<Self::Node, S>) -> AnalysisResult<Self>
+    where
+        Self: Sized,
+    {
+        let node_ref = task.node_ref();
+        let document = task.analyzer.read_document(node_ref.id)?;
+
+        let Some(node) = node_ref.deref(document.deref()) else {
+            return Ok(Self::default());
+        };
+
+        let parent_ref = node.parent_ref();
+
+        let Some(parent) = parent_ref.deref(document.deref()) else {
+            return Ok(Self::default());
+        };
+
+        if parent.is_scope() {
+            return Ok(Self {
+                scope_ref: parent_ref,
+                _grammar: PhantomData,
+            });
+        }
+
+        Ok(*parent.scope_attr()?.read(task)?.deref())
+    }
 }
