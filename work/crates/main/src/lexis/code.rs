@@ -38,18 +38,7 @@
 use crate::{
     arena::{Entry, Identifiable},
     format::PrintString,
-    lexis::{
-        ByteIndex,
-        Chunk,
-        Length,
-        Site,
-        SiteRef,
-        SiteSpan,
-        ToSpan,
-        Token,
-        TokenCount,
-        TokenCursor,
-    },
+    lexis::{Chunk, Length, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
     std::*,
 };
 
@@ -90,6 +79,10 @@ pub trait SourceCode: Identifiable {
     ///
     /// See [TokenCursor](crate::lexis::TokenCursor) for details.
     type Cursor<'code>: TokenCursor<'code, Token = Self::Token>
+    where
+        Self: 'code;
+
+    type CharIterator<'code>: Iterator<Item = char> + FusedIterator + 'code
     where
         Self: 'code;
 
@@ -150,26 +143,7 @@ pub trait SourceCode: Identifiable {
     ///     "B.A.R",
     /// );
     /// ```
-    #[inline(always)]
-    fn chars(&self, span: impl ToSpan) -> CharIter<'_, Self::Cursor<'_>>
-    where
-        Self: Sized,
-    {
-        let span = match span.to_site_span(self) {
-            None => panic!("Specified span is invalid."),
-            Some(span) => span,
-        };
-
-        let cursor = self.cursor(span.clone());
-
-        CharIter {
-            span,
-            cursor,
-            site: 0,
-            byte: 0,
-            _code_lifetime: PhantomData::default(),
-        }
-    }
+    fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_>;
 
     /// Returns a substring of the source code text in [span](crate::lexis::ToSpan).
     ///
@@ -206,15 +180,7 @@ pub trait SourceCode: Identifiable {
             }
         }
 
-        let iterator = CharIter {
-            span,
-            cursor,
-            site: 0,
-            byte: 0,
-            _code_lifetime: PhantomData::default(),
-        };
-
-        unsafe { PrintString::new_unchecked(iterator.collect(), length) }
+        unsafe { PrintString::new_unchecked(self.chars(span).collect(), length) }
     }
 
     /// Returns `true` if the token referred by specified low-level `chunk_entry` weak reference
@@ -371,56 +337,3 @@ impl<'code, C: TokenCursor<'code>> Iterator for ChunkIter<'code, C> {
 }
 
 impl<'code, C: TokenCursor<'code>> FusedIterator for ChunkIter<'code, C> {}
-
-pub struct CharIter<'code, C: TokenCursor<'code>> {
-    span: SiteSpan,
-    cursor: C,
-    site: Site,
-    byte: ByteIndex,
-    _code_lifetime: PhantomData<&'code ()>,
-}
-
-impl<'code, C: TokenCursor<'code>> Iterator for CharIter<'code, C> {
-    type Item = char;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let site = self.cursor.site(0)?;
-
-            if self.site + site >= self.span.end {
-                return None;
-            }
-
-            let length = self.cursor.length(0)?;
-
-            if site + length < self.span.start || self.site >= length {
-                let _ = self.cursor.advance();
-                self.site = 0;
-                self.byte = 0;
-                continue;
-            }
-
-            let string = self.cursor.string(0)?;
-
-            let ch = unsafe {
-                string
-                    .get_unchecked(self.byte..)
-                    .chars()
-                    .next()
-                    .unwrap_unchecked()
-            };
-
-            self.site += 1;
-            self.byte += ch.len_utf8();
-
-            if self.site + site <= self.span.start {
-                continue;
-            }
-
-            return Some(ch);
-        }
-    }
-}
-
-impl<'code, C: TokenCursor<'code>> FusedIterator for CharIter<'code, C> {}

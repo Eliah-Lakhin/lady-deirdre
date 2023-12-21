@@ -139,6 +139,15 @@ impl<F: Lexis> SourceCode for F {
     type Cursor<'code> = <F::Lexis as SourceCode>::Cursor<'code>
         where Self: 'code;
 
+    type CharIterator<'code> = <F::Lexis as SourceCode>::CharIterator<'code>
+    where
+        Self: 'code;
+
+    #[inline(always)]
+    fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
+        self.lexis().chars(span)
+    }
+
     #[inline(always)]
     fn has_chunk(&self, chunk_entry: &Entry) -> bool {
         self.lexis().has_chunk(chunk_entry)

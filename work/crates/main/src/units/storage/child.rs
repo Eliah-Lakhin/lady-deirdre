@@ -221,6 +221,37 @@ impl<N: Node> ChildCursor<N> {
     // Safety:
     // 1. `self` is not dangling.
     // 2. `self.item` is a Page reference.
+    // 3. `'a` does not outlive corresponding Page instance.
+    // 4. There are no other mutable references to this String.
+    #[inline(always)]
+    pub(crate) unsafe fn page_string<'a>(&self) -> &'a str {
+        debug_assert!(
+            !self.is_dangling(),
+            "An attempt to access dangling ChildCursor.",
+        );
+
+        let page = unsafe { self.item.as_page_ref().as_external_ref() };
+
+        debug_assert!(
+            self.index < page.occupied,
+            "ChildCursor index out of bounds.",
+        );
+
+        let slice = match self.index == 0 {
+            true => unsafe { page.string.bytes() },
+            false => unsafe { page.string.byte_slice_from(page.occupied, self.index) },
+        };
+
+        let string = unsafe { from_utf8_unchecked(slice) };
+
+        debug_assert!(!string.is_empty(), "Empty string in Page.");
+
+        string
+    }
+
+    // Safety:
+    // 1. `self` is not dangling.
+    // 2. `self.item` is a Page reference.
     // 3. There are no other mutable references to this Token.
     #[inline(always)]
     pub(crate) unsafe fn token(&self) -> <N as Node>::Token {
@@ -538,21 +569,44 @@ impl<N: Node> ChildCursor<N> {
             return;
         }
 
-        match &page.next {
-            None => {
-                self.index = ChildIndex::MAX;
-            }
+        let Some(next_ref) = &page.next else {
+            self.index = ChildIndex::MAX;
+            return;
+        };
 
-            Some(next_ref) => {
-                debug_assert!(
-                    unsafe { next_ref.as_ref().occupied } >= Page::<N>::B,
-                    "Incorrect Page balance."
-                );
+        debug_assert!(
+            unsafe { next_ref.as_ref().occupied } >= Page::<N>::B,
+            "Incorrect Page balance."
+        );
 
-                self.item = unsafe { next_ref.into_variant() };
-                self.index = 0;
-            }
-        }
+        self.item = unsafe { next_ref.into_variant() };
+        self.index = 0;
+    }
+
+    // Safety:
+    // 1. `self` is not dangling.
+    // 2. `self.item` is a Page reference.
+    #[inline(always)]
+    pub(crate) unsafe fn next_page(&mut self) {
+        debug_assert!(
+            !self.is_dangling(),
+            "An attempt to access dangling ChildCursor.",
+        );
+
+        let page = unsafe { self.item.as_page_ref().as_ref() };
+
+        let Some(next_ref) = &page.next else {
+            self.index = ChildIndex::MAX;
+            return;
+        };
+
+        debug_assert!(
+            unsafe { next_ref.as_ref().occupied } >= Page::<N>::B,
+            "Incorrect Page balance."
+        );
+
+        self.item = unsafe { next_ref.into_variant() };
+        self.index = 0;
     }
 
     // Safety:

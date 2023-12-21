@@ -35,6 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+mod chars;
 mod cursor;
 mod lexis;
 mod syntax;
@@ -59,6 +60,7 @@ use crate::{
     syntax::{Cluster, ClusterRef, NoSyntax, Node, NodeRef, SyntaxTree, NON_RULE, ROOT_RULE},
     units::{
         mutable::{
+            chars::MutableCharIter,
             cursor::MutableCursor,
             lexis::{MutableLexisSession, SessionOutput},
             syntax::MutableSyntaxSession,
@@ -371,6 +373,17 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     type Token = N::Token;
 
     type Cursor<'code> = MutableCursor<'code, N>;
+    type CharIterator<'code> = MutableCharIter<'code, N>;
+
+    fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
+        let span = match span.to_site_span(self) {
+            None => panic!("Specified span is invalid."),
+
+            Some(span) => span,
+        };
+
+        unsafe { MutableCharIter::new(self, span) }
+    }
 
     #[inline(always)]
     fn has_chunk(&self, chunk_entry: &Entry) -> bool {

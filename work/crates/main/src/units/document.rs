@@ -120,6 +120,17 @@ impl<N: Node, S: AsRef<str>> From<S> for Document<N> {
 impl<N: Node> SourceCode for Document<N> {
     type Token = N::Token;
     type Cursor<'document> = DocumentCursor<'document, N>;
+    type CharIterator<'document> = DocumentCharIter<'document, N>
+    where
+        Self: 'document;
+
+    #[inline(always)]
+    fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
+        match self {
+            Self::Mutable(unit) => DocumentCharIter::Mutable(unit.chars(span)),
+            Self::Immutable(unit) => DocumentCharIter::Immutable(unit.chars(span)),
+        }
+    }
 
     #[inline(always)]
     fn has_chunk(&self, chunk_entry: &Entry) -> bool {
@@ -455,3 +466,22 @@ impl<'document, N: Node> TokenCursor<'document> for DocumentCursor<'document, N>
         }
     }
 }
+
+pub enum DocumentCharIter<'document, N: Node> {
+    Mutable(<MutableUnit<N> as SourceCode>::CharIterator<'document>),
+    Immutable(<ImmutableUnit<N> as SourceCode>::CharIterator<'document>),
+}
+
+impl<'document, N: Node> Iterator for DocumentCharIter<'document, N> {
+    type Item = char;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Mutable(iterator) => iterator.next(),
+            Self::Immutable(iterator) => iterator.next(),
+        }
+    }
+}
+
+impl<'document, N: Node> FusedIterator for DocumentCharIter<'document, N> {}

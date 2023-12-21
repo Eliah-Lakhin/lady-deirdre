@@ -97,6 +97,25 @@ impl PageString {
         slice
     }
 
+    // Safety:
+    //  1. `index < occupied`.
+    //  2. `occupied <= PAGE_CAP`
+    //  3. `PageString` indices are well-formed.
+    #[inline(always)]
+    pub(super) unsafe fn byte_slice_from(&self, occupied: ChildCount, index: ChildIndex) -> &[u8] {
+        debug_assert!(index < occupied, "Incorrect index.");
+        debug_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
+
+        let start_byte = *unsafe { self.indices.get_unchecked(index) };
+
+        let slice = match &self.bytes {
+            Bytes::Inline(inline) => unsafe { inline.vec.get_unchecked(start_byte..inline.len) },
+            Bytes::Heap(vec) => unsafe { vec.get_unchecked(start_byte..) },
+        };
+
+        slice
+    }
+
     #[inline(always)]
     pub(super) unsafe fn bytes(&self) -> &[u8] {
         match &self.bytes {

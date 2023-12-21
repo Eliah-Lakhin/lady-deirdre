@@ -35,33 +35,85 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("readme.md")]
-
-mod buffer;
-mod chunks;
-mod code;
-mod cursor;
-mod position;
-mod rule;
-mod session;
-mod simple;
-mod site;
-mod span;
-mod token;
-
-pub(crate) const CHUNK_SIZE: Length = 5;
-
-pub(crate) use crate::lexis::site::SiteRefInner;
-pub use crate::lexis::{
-    buffer::TokenBuffer,
-    chunks::Chunk,
-    code::{ChunkIter, SourceCode},
-    cursor::TokenCursor,
-    position::{Column, Line, Position},
-    rule::{TokenRule, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},
-    session::LexisSession,
-    simple::SimpleToken,
-    site::{ByteIndex, Length, Site, SiteRef, ToSite},
-    span::{PositionSpan, SiteRefSpan, SiteSpan, ToSpan},
-    token::{Token, TokenCount, TokenRef},
+use crate::{
+    lexis::{Length, SiteSpan},
+    report::debug_unreachable,
+    std::*,
+    syntax::Node,
+    units::{storage::ChildCursor, MutableUnit},
 };
+
+pub struct MutableCharIter<'unit, N: Node> {
+    cursor: ChildCursor<N>,
+    inner: Chars<'unit>,
+    remaining: Length,
+}
+
+impl<'unit, N: Node> Iterator for MutableCharIter<'unit, N> {
+    type Item = char;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+
+        self.remaining -= 1;
+
+        if let Some(next) = self.inner.next() {
+            return Some(next);
+        }
+
+        unsafe { self.cursor.next_page() };
+
+        if self.cursor.is_dangling() {
+            unsafe { debug_unreachable!("Remaining length exceeds unit length.") }
+        }
+
+        let string = unsafe { self.cursor.page_string() };
+
+        self.inner = string.chars();
+
+        self.inner.next()
+    }
+}
+
+impl<'unit, N: Node> FusedIterator for MutableCharIter<'unit, N> {}
+
+impl<'unit, N: Node> MutableCharIter<'unit, N> {
+    // Safety: `span` is valid for this unit.
+    #[inline(always)]
+    pub(super) unsafe fn new(unit: &'unit MutableUnit<N>, mut span: SiteSpan) -> Self {
+        let remaining = span.end - span.start;
+
+        if remaining == 0 {
+            return Self {
+                cursor: ChildCursor::dangling(),
+                inner: "".chars(),
+                remaining,
+            };
+        }
+
+        let cursor = unit.tree().lookup(&mut span.start);
+
+        if cursor.is_dangling() {
+            unsafe { debug_unreachable!("Dangling cursor.") }
+        }
+
+        let mut inner = unsafe { cursor.page_string() }.chars();
+
+        while span.start > 0 {
+            span.start -= 1;
+
+            if inner.next().is_none() {
+                unsafe { debug_unreachable!("Page string is too short.") }
+            }
+        }
+
+        Self {
+            cursor,
+            inner,
+            remaining,
+        }
+    }
+}

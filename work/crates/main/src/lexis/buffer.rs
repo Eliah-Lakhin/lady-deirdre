@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable, Sequence},
-    format::SnippetFormatter,
+    format::{PrintString, SnippetFormatter},
     lexis::{
         cursor::TokenBufferCursor,
         session::{Cursor, SequentialLexisSession},
@@ -179,6 +179,96 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
 
     type Cursor<'code> = TokenBufferCursor<'code, Self::Token>;
 
+    type CharIterator<'code> = Take<Chars<'code>>;
+
+    fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
+        let span = match span.to_site_span(self) {
+            None => panic!("Specified span is invalid."),
+            Some(span) => span,
+        };
+
+        let span_length = span.end - span.start;
+
+        if span_length == 0 {
+            return "".chars().take(0);
+        };
+
+        let rest = match self.search(span.start) {
+            Ok(byte_index) => {
+                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+
+                unsafe { self.text.get_unchecked(byte_index..) }.chars()
+            }
+
+            Err((byte_index, mut remaining)) => {
+                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+
+                let mut rest = unsafe { self.text.get_unchecked(byte_index..) }.chars();
+
+                while remaining > 0 {
+                    remaining -= 1;
+                    let _ = rest.next();
+                }
+
+                rest
+            }
+        };
+
+        rest.take(span_length)
+    }
+
+    fn substring(&self, span: impl ToSpan) -> PrintString<'_> {
+        let span = match span.to_site_span(self) {
+            None => panic!("Specified span is invalid."),
+            Some(span) => span,
+        };
+
+        let span_length = span.end - span.start;
+
+        if span_length == 0 {
+            return PrintString::empty();
+        };
+
+        let start = match self.search(span.start) {
+            Ok(byte_index) => byte_index,
+
+            Err((byte_index, remaining)) => {
+                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+
+                let rest = unsafe { self.text.get_unchecked(byte_index..) }.char_indices();
+
+                let Some((offset, _)) = rest.take(remaining + 1).last() else {
+                    unsafe { debug_unreachable!("Empty tail.") };
+                };
+
+                byte_index + offset
+            }
+        };
+
+        let end = match self.search(span.end) {
+            Ok(byte_index) => byte_index,
+
+            Err((byte_index, remaining)) => {
+                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+
+                let rest = unsafe { self.text.get_unchecked(byte_index..) }.char_indices();
+
+                let Some((offset, _)) = rest.take(remaining + 1).last() else {
+                    unsafe { debug_unreachable!("Empty tail.") };
+                };
+
+                byte_index + offset
+            }
+        };
+
+        debug_assert!(start <= end, "Invalid byte bounds.");
+        debug_assert!(end <= self.text.len(), "Invalid byte bounds.");
+
+        unsafe {
+            PrintString::new_unchecked(Cow::from(self.text.get_unchecked(start..end)), span_length)
+        }
+    }
+
     #[inline(always)]
     fn has_chunk(&self, chunk_entry: &Entry) -> bool {
         self.tokens.contains(chunk_entry)
@@ -313,8 +403,19 @@ impl<T: Token> TokenBuffer<T> {
             }
 
             false => {
-                let _ = self.spans.pop();
-                let _ = self.tokens.pop();
+                let Some(span) = self.spans.pop() else {
+                    // Safety: Underlying TokenBuffer collections represent
+                    //         a sequence of Chunks.
+                    unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
+                };
+
+                self.length -= span;
+
+                if self.tokens.pop().is_none() {
+                    // Safety: Underlying TokenBuffer collections represent
+                    //         a sequence of Chunks.
+                    unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
+                }
 
                 byte = match self.indices.pop() {
                     Some(index) => index,
@@ -371,6 +472,37 @@ impl<T: Token> TokenBuffer<T> {
         let _ = self.sites.push(from.site);
         let _ = self.spans.push(span);
         let _ = self.indices.push(from.byte);
+    }
+
+    #[inline]
+    fn search(&self, site: Site) -> Result<ByteIndex, (ByteIndex, Length)> {
+        if site >= self.length {
+            return Ok(self.text.len());
+        }
+
+        match self.sites.inner().binary_search(&site) {
+            Ok(index) => {
+                debug_assert!(index < self.indices.inner().len(), "Index out of bounds.");
+
+                let byte_index = unsafe { self.indices.inner().get_unchecked(index) };
+
+                Ok(*byte_index)
+            }
+
+            Err(mut index) => {
+                debug_assert!(index > 0, "Index out of bounds.");
+
+                index -= 1;
+
+                debug_assert!(index < self.indices.inner().len(), "Index out of bounds.");
+                debug_assert!(index < self.sites.inner().len(), "Index out of bounds.");
+
+                let byte_index = unsafe { self.indices.inner().get_unchecked(index) };
+                let nearest_site = unsafe { self.sites.inner().get_unchecked(index) };
+
+                Err((*byte_index, site - *nearest_site))
+            }
+        }
     }
 }
 
