@@ -37,11 +37,11 @@
 
 use crate::{
     lexis::ByteIndex,
+    mem::{array_shift, slice_copy_to, slice_shift},
     report::{debug_assert, debug_unreachable},
     std::*,
     units::storage::{
         child::{ChildCount, ChildIndex},
-        utils::{array_shift, slice_copy_to, slice_shift},
         PAGE_CAP,
         STRING_INLINE,
     },

@@ -47,7 +47,7 @@ use crate::{
         nesting::{BranchLayer, Height, PageLayer},
         page::{Page, PageList, PageRef},
         references::References,
-        utils::Spread,
+        spread::Spread,
     },
 };
 
@@ -357,7 +357,7 @@ impl<N: Node> Tree<N> {
     }
 
     #[inline]
-    pub(crate) fn length(&self) -> Length {
+    pub(crate) fn code_length(&self) -> Length {
         self.length
     }
 

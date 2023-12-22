@@ -37,6 +37,7 @@
 
 use crate::{
     lexis::Length,
+    mem::{array_copy_to, array_shift},
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
@@ -45,7 +46,6 @@ use crate::{
         item::{Item, ItemRef, ItemRefVariant, Split},
         nesting::{BranchLayer, Height, Layer, LayerDescriptor, PageLayer},
         references::References,
-        utils::{array_copy_to, array_shift},
         BRANCH_B,
         BRANCH_CAP,
     },

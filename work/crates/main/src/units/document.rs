@@ -39,6 +39,7 @@ use crate::{
     arena::{Entry, Id, Identifiable},
     lexis::{
         Length,
+        LineIndex,
         Site,
         SiteRef,
         SourceCode,
@@ -193,6 +194,14 @@ impl<N: Node> SourceCode for Document<N> {
         match self {
             Self::Mutable(unit) => unit.token_count(),
             Self::Immutable(unit) => unit.token_count(),
+        }
+    }
+
+    #[inline(always)]
+    fn lines(&self) -> &LineIndex {
+        match self {
+            Self::Mutable(unit) => unit.lines(),
+            Self::Immutable(unit) => unit.lines(),
         }
     }
 }

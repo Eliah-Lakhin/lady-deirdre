@@ -45,6 +45,7 @@ use crate::{
     format::SnippetFormatter,
     lexis::{
         Length,
+        LineIndex,
         Site,
         SiteRefInner,
         SiteSpan,
@@ -320,6 +321,7 @@ pub struct MutableUnit<N: Node> {
     pub(super) references: References<N>,
     updates: StdSet<NodeRef>,
     watch: bool,
+    lines: LineIndex,
 }
 
 // Safety: Tree instance stores data on the heap, and the References instance
@@ -347,7 +349,7 @@ impl<N: Node> Debug for MutableUnit<N> {
         formatter
             .debug_struct("MutableUnit")
             .field("id", &self.id)
-            .field("length", &self.tree.length())
+            .field("length", &self.length())
             .finish_non_exhaustive()
     }
 }
@@ -446,12 +448,23 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 
     #[inline(always)]
     fn length(&self) -> Length {
-        self.tree.length()
+        debug_assert_eq!(
+            self.tree.code_length(),
+            self.lines.code_length(),
+            "LineIndex and Tree resynchronization.",
+        );
+
+        self.tree.code_length()
     }
 
     #[inline(always)]
     fn token_count(&self) -> TokenCount {
         self.token_count
+    }
+
+    #[inline(always)]
+    fn lines(&self) -> &LineIndex {
+        &self.lines
     }
 }
 
@@ -582,6 +595,7 @@ impl<N: Node> Default for MutableUnit<N> {
             references,
             updates,
             watch: false,
+            lines: LineIndex::new(),
         }
     }
 }
@@ -602,8 +616,6 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
     fn into_token_buffer(self) -> TokenBuffer<N::Token> {
         let mut buffer = TokenBuffer::with_capacity(self.token_count);
 
-        buffer.set_length(self.length());
-
         let mut chunk_cursor = self.tree.first();
 
         while !chunk_cursor.is_dangling() {
@@ -618,6 +630,8 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
 
             unsafe { chunk_cursor.next() }
         }
+
+        buffer.update_line_index();
 
         let _ = self;
 
@@ -659,6 +673,7 @@ impl<N: Node> MutableUnit<N> {
         let spans = take(&mut buffer.spans).into_vec().into_iter();
         let indices = take(&mut buffer.indices).into_vec().into_iter();
         let tokens = take(&mut buffer.tokens).into_vec().into_iter();
+        let lines = take(&mut buffer.lines);
         let mut references = References::with_capacity(token_count);
 
         let mut tree = unsafe {
@@ -688,6 +703,7 @@ impl<N: Node> MutableUnit<N> {
             references,
             updates,
             watch,
+            lines,
         }
     }
 
@@ -749,7 +765,15 @@ impl<N: Node> MutableUnit<N> {
             return NodeRef::nil();
         }
 
+        unsafe { self.lines.write_unchecked(span.clone(), text) };
+
         let cover = self.update_lexis(span, text);
+
+        debug_assert_eq!(
+            self.tree.code_length(),
+            self.lines.code_length(),
+            "LineIndex and Tree resynchronization.",
+        );
 
         if TypeId::of::<N>() == TypeId::of::<NoSyntax<<N as Node>::Token>>() {
             return NodeRef::nil();
@@ -780,7 +804,7 @@ impl<N: Node> MutableUnit<N> {
     }
 
     fn cluster_cover(&self, span: &SiteSpan) -> ClusterRef {
-        let mut chunk_cursor = match span.start == 0 && span.end == self.tree.length() {
+        let mut chunk_cursor = match span.start == 0 && span.end == self.tree.code_length() {
             true => ChildCursor::dangling(),
 
             false => {
@@ -1034,7 +1058,7 @@ impl<N: Node> MutableUnit<N> {
                 )
             };
 
-            let insert_span = tail_tree.length();
+            let insert_span = tail_tree.code_length();
 
             unsafe { self.tree.join(&mut self.references, tail_tree) };
 
@@ -1112,7 +1136,7 @@ impl<N: Node> MutableUnit<N> {
                 )
             };
 
-            insert_span = replacement.length();
+            insert_span = replacement.code_length();
 
             remove_count =
                 unsafe { replace(&mut middle, replacement).free_as_subtree(&mut self.references) };
@@ -1164,7 +1188,7 @@ impl<N: Node> MutableUnit<N> {
                     }
                 },
 
-                true => match self.tree.length() == 0 {
+                true => match self.tree.code_length() == 0 {
                     true => {
                         shift = 0;
                         rule = ROOT_RULE;
@@ -1478,7 +1502,7 @@ impl<N: Node> ClusterCache<N> {
                 (site, *chunk_cursor)
             }
 
-            SiteRefInner::CodeEnd(_) => (tree.length(), ChildCursor::dangling()),
+            SiteRefInner::CodeEnd(_) => (tree.code_length(), ChildCursor::dangling()),
         }
     }
 
@@ -1493,7 +1517,7 @@ impl<N: Node> ClusterCache<N> {
                 Some(unsafe { unit.tree.site_of(chunk_cursor) })
             }
 
-            SiteRefInner::CodeEnd(_) => Some(unit.tree.length()),
+            SiteRefInner::CodeEnd(_) => Some(unit.tree.code_length()),
         }
     }
 }

@@ -41,6 +41,7 @@ mod buffer;
 mod chunks;
 mod code;
 mod cursor;
+mod lines;
 mod position;
 mod rule;
 mod session;
@@ -57,6 +58,7 @@ pub use crate::lexis::{
     chunks::Chunk,
     code::{ChunkIter, SourceCode},
     cursor::TokenCursor,
+    lines::LineIndex,
     position::{Column, Line, Position},
     rule::{TokenRule, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},
     session::LexisSession,

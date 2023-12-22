@@ -44,6 +44,7 @@ use crate::{
         ByteIndex,
         Chunk,
         Length,
+        LineIndex,
         Site,
         SourceCode,
         ToSpan,
@@ -119,12 +120,12 @@ use crate::{
 /// ```
 pub struct TokenBuffer<T: Token> {
     id: Id,
-    length: Length,
     pub(crate) tokens: Sequence<T>,
     pub(super) sites: Sequence<Site>,
     pub(crate) spans: Sequence<Length>,
     pub(crate) indices: Sequence<ByteIndex>,
     pub(crate) text: String,
+    pub(crate) lines: LineIndex,
 }
 
 impl<T: Token> Debug for TokenBuffer<T> {
@@ -133,7 +134,7 @@ impl<T: Token> Debug for TokenBuffer<T> {
         formatter
             .debug_struct("TokenBuffer")
             .field("id", &self.id)
-            .field("length", &self.length)
+            .field("length", &self.length())
             .finish_non_exhaustive()
     }
 }
@@ -316,7 +317,7 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
 
     #[inline(always)]
     fn length(&self) -> Length {
-        self.length
+        self.lines.code_length()
     }
 
     #[inline(always)]
@@ -325,20 +326,17 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
 
         inner.len()
     }
+
+    #[inline(always)]
+    fn lines(&self) -> &LineIndex {
+        &self.lines
+    }
 }
 
 impl<T: Token> Default for TokenBuffer<T> {
     #[inline]
     fn default() -> Self {
-        Self {
-            id: Id::new(),
-            length: 0,
-            tokens: Default::default(),
-            sites: Default::default(),
-            spans: Default::default(),
-            indices: Default::default(),
-            text: String::new(),
-        }
+        Self::new()
     }
 }
 
@@ -364,18 +362,33 @@ impl<T: Token> TokenBuffer<T> {
         Self::from(string)
     }
 
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self {
+            id: Id::new(),
+            tokens: Default::default(),
+            sites: Default::default(),
+            spans: Default::default(),
+            indices: Default::default(),
+            text: String::new(),
+            lines: LineIndex::new(),
+        }
+    }
+
     /// Creates a new TokenBuffer instance with pre-allocated memory for at least `capacity` token
     /// chunks to be stored in.
     #[inline(always)]
     pub fn with_capacity(capacity: TokenCount) -> Self {
+        let text_capacity = CHUNK_SIZE * capacity;
+
         Self {
             id: Id::new(),
-            length: 0,
             tokens: Sequence::with_capacity(capacity),
             sites: Sequence::with_capacity(capacity),
             spans: Sequence::with_capacity(capacity),
             indices: Sequence::with_capacity(capacity),
-            text: String::with_capacity(CHUNK_SIZE * capacity),
+            text: String::with_capacity(text_capacity),
+            lines: LineIndex::with_capacity(text_capacity),
         }
     }
 
@@ -403,13 +416,11 @@ impl<T: Token> TokenBuffer<T> {
             }
 
             false => {
-                let Some(span) = self.spans.pop() else {
+                if self.spans.pop().is_none() {
                     // Safety: Underlying TokenBuffer collections represent
                     //         a sequence of Chunks.
                     unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
-                };
-
-                self.length -= span;
+                }
 
                 if self.tokens.pop().is_none() {
                     // Safety: Underlying TokenBuffer collections represent
@@ -435,6 +446,7 @@ impl<T: Token> TokenBuffer<T> {
         };
 
         self.text.push_str(text);
+        self.lines.append(text);
 
         SequentialLexisSession::run(self, byte, site);
     }
@@ -456,8 +468,9 @@ impl<T: Token> TokenBuffer<T> {
     }
 
     #[inline(always)]
-    pub(crate) fn set_length(&mut self, length: Length) {
-        self.length = length;
+    pub(crate) fn update_line_index(&mut self) {
+        self.lines.clear();
+        self.lines.append(self.text.as_str());
     }
 
     #[inline]
@@ -465,8 +478,6 @@ impl<T: Token> TokenBuffer<T> {
         let span = to.site - from.site;
 
         debug_assert!(span > 0, "Empty span.");
-
-        self.length += span;
 
         let _ = self.tokens.push(token);
         let _ = self.sites.push(from.site);
@@ -476,7 +487,7 @@ impl<T: Token> TokenBuffer<T> {
 
     #[inline]
     fn search(&self, site: Site) -> Result<ByteIndex, (ByteIndex, Length)> {
-        if site >= self.length {
+        if site >= self.length() {
             return Ok(self.text.len());
         }
 

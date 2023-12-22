@@ -40,6 +40,7 @@ use crate::{
     lexis::{
         Chunk,
         Length,
+        LineIndex,
         Site,
         SiteSpan,
         SourceCode,
@@ -186,6 +187,11 @@ impl<F: Lexis> SourceCode for F {
     #[inline(always)]
     fn token_count(&self) -> TokenCount {
         self.lexis().token_count()
+    }
+
+    #[inline(always)]
+    fn lines(&self) -> &LineIndex {
+        self.lexis().lines()
     }
 }
 

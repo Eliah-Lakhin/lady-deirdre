@@ -42,9 +42,9 @@ mod item;
 mod nesting;
 mod page;
 mod references;
+mod spread;
 mod string;
 mod tree;
-mod utils;
 
 pub(crate) use crate::units::storage::{
     cache::ClusterCache,
@@ -52,7 +52,7 @@ pub(crate) use crate::units::storage::{
     references::References,
     tree::Tree,
 };
-use crate::{lexis::CHUNK_SIZE, units::storage::utils::capacity};
+use crate::{lexis::CHUNK_SIZE, units::storage::spread::capacity};
 
 const BRANCH_B: usize = 6;
 const BRANCH_CAP: usize = capacity(BRANCH_B);
@@ -587,7 +587,7 @@ mod tests {
                 check_tree_structure(&tree);
                 check_tree_data(&tree, 1);
 
-                let length = tree.length();
+                let length = tree.code_length();
 
                 for site in 1..length {
                     let chunk_cursor = {
@@ -604,8 +604,8 @@ mod tests {
 
                     let right = unsafe { tree.split(&mut references, chunk_cursor) };
 
-                    assert_eq!(tree.length(), site);
-                    assert_eq!(right.length(), length - site);
+                    assert_eq!(tree.code_length(), site);
+                    assert_eq!(right.code_length(), length - site);
 
                     check_tree_structure(&tree);
                     check_tree_data(&tree, 1);
@@ -618,7 +618,7 @@ mod tests {
                     check_tree_structure(&tree);
                     check_tree_data(&tree, 1);
 
-                    assert_eq!(tree.length(), length);
+                    assert_eq!(tree.code_length(), length);
                 }
 
                 let _ = unsafe { tree.free() };

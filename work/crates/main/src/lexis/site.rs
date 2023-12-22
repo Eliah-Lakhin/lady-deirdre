@@ -294,41 +294,13 @@ pub unsafe trait ToSite {
     /// Returned Some value is always within the `0..=SourceCode::length(code)` range.
     fn to_site(&self, code: &impl SourceCode) -> Option<Site>;
 
+    #[inline(always)]
     fn to_position(&self, code: &impl SourceCode) -> Option<Position> {
         let site = self.to_site(code)?;
 
-        if site == 0 {
-            return Some(Position::default());
-        }
-
-        let mut line = 1;
-        let mut column = 1;
-        let mut cursor = 0;
-        let mut chars = code.chars(..);
-
-        loop {
-            let ch = match chars.next() {
-                None => break,
-                Some(ch) => ch,
-            };
-
-            cursor += 1;
-
-            match ch {
-                '\n' => {
-                    line += 1;
-                    column = 1;
-                }
-
-                _ => {
-                    column += 1;
-                }
-            }
-
-            if cursor >= site {
-                break;
-            }
-        }
+        let line = code.lines().line_of(site);
+        let line_start = code.lines().line_start(line);
+        let column = site - line_start + 1;
 
         Some(Position { line, column })
     }

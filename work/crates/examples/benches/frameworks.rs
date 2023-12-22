@@ -45,7 +45,7 @@ use std::{
 };
 
 use criterion::black_box;
-use lady_deirdre::{compiler::MutableUnit, lexis::SiteSpan, syntax::Node};
+use lady_deirdre::{lexis::SiteSpan, syntax::Node, units::MutableUnit};
 
 use crate::BenchDataLayer;
 

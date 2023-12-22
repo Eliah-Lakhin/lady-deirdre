@@ -38,104 +38,19 @@
 use crate::{
     report::{debug_assert, debug_assert_ne},
     std::*,
-    units::storage::{
-        child::{ChildCount, ChildIndex},
-        item::Item,
-    },
 };
-
-#[derive(Debug)]
-pub(super) struct Spread {
-    pub(super) head: ChildCount,
-    pub(super) tail: ChildCount,
-    pub(super) items: ChildCount,
-    next: ChildIndex,
-}
-
-impl Spread {
-    #[inline(always)]
-    pub(super) const fn new<I: Item>(total: ChildCount) -> Spread {
-        if total <= I::CAP {
-            return Spread {
-                head: 1,
-                tail: 0,
-                items: total,
-                next: 0,
-            };
-        }
-
-        let branch_count = total / I::B;
-        let reminder = total - branch_count * I::B;
-        let reminder_spread = reminder / branch_count;
-        let items = I::B + reminder_spread;
-        let tail = reminder - reminder_spread * branch_count;
-
-        Spread {
-            head: branch_count - tail,
-            tail,
-            items,
-            next: 0,
-        }
-    }
-
-    #[inline(always)]
-    pub(super) const fn layer_size(&self) -> ChildCount {
-        self.head + self.tail
-    }
-
-    #[inline(always)]
-    pub(super) const fn total_items(&self) -> ChildCount {
-        self.head * self.items + self.tail * (self.items + 1)
-    }
-
-    #[inline(always)]
-    pub(super) fn advance(&mut self) -> ChildIndex {
-        if self.next < self.items {
-            self.next += 1;
-
-            return self.next - 1;
-        }
-
-        self.next = 1;
-
-        if self.head > 0 {
-            self.head -= 1;
-
-            if self.head == 0 {
-                if self.tail == 0 {
-                    return ChildIndex::MAX;
-                }
-
-                self.items += 1;
-            }
-        } else {
-            self.tail -= 1;
-
-            if self.tail == 0 {
-                return ChildIndex::MAX;
-            }
-        }
-
-        0
-    }
-}
-
-#[inline(always)]
-pub(super) const fn capacity(branching: ChildCount) -> ChildCount {
-    branching * 2 - 1
-}
 
 //Safety:
 // 1. `from` and `to` are two distinct arrays.
 // 2. `source..(source + count)` is within `from` bounds.
 // 3. `destination..(destination + count)` is within `to` bounds.
 #[inline(always)]
-pub(super) unsafe fn array_copy_to<const N: usize, T: Sized>(
+pub(crate) unsafe fn array_copy_to<const N: usize, T: Sized>(
     from: &[T; N],
     to: &mut [T; N],
-    source: ChildCount,
-    destination: ChildCount,
-    count: ChildCount,
+    source: usize,
+    destination: usize,
+    count: usize,
 ) {
     debug_assert_ne!(from.as_ptr(), to.as_mut_ptr(), "Array copy overlapping.");
     debug_assert!(source + count <= N, "Source range exceeds capacity.");
@@ -155,12 +70,12 @@ pub(super) unsafe fn array_copy_to<const N: usize, T: Sized>(
 // 2. `source..(source + count)` is within `from` bounds.
 // 3. `destination..(destination + count)` is within `to` bounds.
 #[inline(always)]
-pub(super) unsafe fn slice_copy_to<T: Sized>(
+pub(crate) unsafe fn slice_copy_to<T: Sized>(
     from: &[T],
     to: &mut [T],
-    source: ChildCount,
-    destination: ChildCount,
-    count: ChildCount,
+    source: usize,
+    destination: usize,
+    count: usize,
 ) {
     debug_assert_ne!(from.as_ptr(), to.as_mut_ptr(), "Slice copy overlapping.");
     debug_assert!(
@@ -183,11 +98,11 @@ pub(super) unsafe fn slice_copy_to<T: Sized>(
 // 1. `from + to <= N`.
 // 2. `count > 0`.
 #[inline(always)]
-pub(super) unsafe fn array_shift<const N: usize, T: Sized>(
+pub(crate) unsafe fn array_shift<const N: usize, T: Sized>(
     array: &mut [T; N],
-    from: ChildCount,
-    to: ChildCount,
-    count: ChildCount,
+    from: usize,
+    to: usize,
+    count: usize,
 ) {
     debug_assert!(from + count <= N, "Shift with overflow.");
     debug_assert!(to + count <= N, "Shift with overflow.");
@@ -205,15 +120,10 @@ pub(super) unsafe fn array_shift<const N: usize, T: Sized>(
 
 //Safety:
 // 1. `from + count <= slice.len()`.
-// 1. `from + to <= slice.len()`.
+// 1. `to + count <= slice.len()`.
 // 2. `count > 0`.
 #[inline(always)]
-pub(super) unsafe fn slice_shift<T: Sized>(
-    slice: &mut [T],
-    from: ChildCount,
-    to: ChildCount,
-    count: ChildCount,
-) {
+pub(crate) unsafe fn slice_shift<T: Sized>(slice: &mut [T], from: usize, to: usize, count: usize) {
     debug_assert!(from + count <= slice.len(), "Shift with overflow.");
     debug_assert!(to + count <= slice.len(), "Shift with overflow.");
     debug_assert!(count > 0, "Empty shift range.");

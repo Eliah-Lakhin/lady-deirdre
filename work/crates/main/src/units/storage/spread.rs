@@ -35,60 +35,92 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-//TODO check warnings regularly
-#![allow(warnings)]
-
-use lady_deirdre::{
-    lexis::{Position, SimpleToken, SourceCode, ToSite, TokenBuffer},
-    syntax::NoSyntax,
-    units::Document,
+use crate::{
+    report::{debug_assert, debug_assert_ne},
+    std::*,
+    units::storage::{
+        child::{ChildCount, ChildIndex},
+        item::Item,
+    },
 };
 
-#[test]
-fn test_position_to_site() {
-    tests(TokenBuffer::<SimpleToken>::from("foo \n bar \r\nbaz"));
-    tests(Document::<NoSyntax<SimpleToken>>::from(
-        "foo \n bar \r\nbaz",
-    ));
+#[derive(Debug)]
+pub(super) struct Spread {
+    pub(super) head: ChildCount,
+    pub(super) tail: ChildCount,
+    pub(super) items: ChildCount,
+    next: ChildIndex,
+}
 
-    fn tests(code: impl SourceCode) {
-        assert_eq!(5, Position::new(0, 10).to_site(&code).unwrap());
-        assert_eq!(0, Position::new(1, 1).to_site(&code).unwrap());
-        assert_eq!(1, Position::new(1, 2).to_site(&code).unwrap());
-        assert_eq!(5, Position::new(1, 10).to_site(&code).unwrap());
-        assert_eq!(5, Position::new(2, 1).to_site(&code).unwrap());
-        assert_eq!(9, Position::new(2, 5).to_site(&code).unwrap());
-        assert_eq!(12, Position::new(2, 10).to_site(&code).unwrap());
-        assert_eq!(12, Position::new(3, 0).to_site(&code).unwrap());
-        assert_eq!(12, Position::new(3, 1).to_site(&code).unwrap());
-        assert_eq!(13, Position::new(3, 2).to_site(&code).unwrap());
-        assert_eq!(15, Position::new(3, 4).to_site(&code).unwrap());
+impl Spread {
+    #[inline(always)]
+    pub(super) const fn new<I: Item>(total: ChildCount) -> Spread {
+        if total <= I::CAP {
+            return Spread {
+                head: 1,
+                tail: 0,
+                items: total,
+                next: 0,
+            };
+        }
+
+        let branch_count = total / I::B;
+        let reminder = total - branch_count * I::B;
+        let reminder_spread = reminder / branch_count;
+        let items = I::B + reminder_spread;
+        let tail = reminder - reminder_spread * branch_count;
+
+        Spread {
+            head: branch_count - tail,
+            tail,
+            items,
+            next: 0,
+        }
+    }
+
+    #[inline(always)]
+    pub(super) const fn layer_size(&self) -> ChildCount {
+        self.head + self.tail
+    }
+
+    #[inline(always)]
+    pub(super) const fn total_items(&self) -> ChildCount {
+        self.head * self.items + self.tail * (self.items + 1)
+    }
+
+    #[inline(always)]
+    pub(super) fn advance(&mut self) -> ChildIndex {
+        if self.next < self.items {
+            self.next += 1;
+
+            return self.next - 1;
+        }
+
+        self.next = 1;
+
+        if self.head > 0 {
+            self.head -= 1;
+
+            if self.head == 0 {
+                if self.tail == 0 {
+                    return ChildIndex::MAX;
+                }
+
+                self.items += 1;
+            }
+        } else {
+            self.tail -= 1;
+
+            if self.tail == 0 {
+                return ChildIndex::MAX;
+            }
+        }
+
+        0
     }
 }
 
-#[test]
-fn test_site_to_position() {
-    tests(TokenBuffer::<SimpleToken>::from("foo \n bar \r\nbaz"));
-    tests(Document::<NoSyntax<SimpleToken>>::from(
-        "foo \n bar \r\nbaz",
-    ));
-
-    fn tests(code: impl SourceCode) {
-        assert_eq!(Position::new(1, 1), 0.to_position(&code).unwrap());
-        assert_eq!(Position::new(1, 2), 1.to_position(&code).unwrap());
-        assert_eq!(Position::new(1, 4), 3.to_position(&code).unwrap());
-        assert_eq!(Position::new(1, 5), 4.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 1), 5.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 2), 6.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 3), 7.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 4), 8.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 5), 9.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 6), 10.to_position(&code).unwrap());
-        assert_eq!(Position::new(2, 7), 11.to_position(&code).unwrap());
-        assert_eq!(Position::new(3, 1), 12.to_position(&code).unwrap());
-        assert_eq!(Position::new(3, 2), 13.to_position(&code).unwrap());
-        assert_eq!(Position::new(3, 3), 14.to_position(&code).unwrap());
-        assert_eq!(Position::new(3, 4), 15.to_position(&code).unwrap());
-        assert_eq!(Position::new(3, 4), 16.to_position(&code).unwrap());
-    }
+#[inline(always)]
+pub(super) const fn capacity(branching: ChildCount) -> ChildCount {
+    branching * 2 - 1
 }

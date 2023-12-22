@@ -213,68 +213,7 @@ pub unsafe trait ToSpan {
     fn to_position_span(&self, code: &impl SourceCode) -> Option<PositionSpan> {
         let span = self.to_site_span(code)?;
 
-        let mut line = 1;
-        let mut column = 1;
-        let mut cursor = 0;
-        let mut chars = code.chars(..);
-
-        let mut start = Position::default();
-
-        loop {
-            if cursor >= span.start {
-                start.line = line;
-                start.column = column;
-                break;
-            }
-
-            let ch = match chars.next() {
-                None => break,
-                Some(ch) => ch,
-            };
-
-            cursor += 1;
-
-            match ch {
-                '\n' => {
-                    line += 1;
-                    column = 1;
-                }
-
-                _ => {
-                    column += 1;
-                }
-            }
-        }
-
-        let mut end = start;
-
-        loop {
-            if cursor >= span.end {
-                end.line = line;
-                end.column = column;
-                break;
-            }
-
-            let ch = match chars.next() {
-                None => break,
-                Some(ch) => ch,
-            };
-
-            cursor += 1;
-
-            match ch {
-                '\n' => {
-                    line += 1;
-                    column = 1;
-                }
-
-                _ => {
-                    column += 1;
-                }
-            }
-        }
-
-        Some(start..end)
+        Some(span.start.to_position(code)?..span.end.to_position(code)?)
     }
 
     /// Returns `true` if and only if the [to_span](ToSpan::to_site_span) function would return

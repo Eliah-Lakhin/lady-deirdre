@@ -86,9 +86,9 @@ pub type Column = usize;
 /// code.append("Second line\n");
 /// code.append("Third line\n");
 ///
-/// assert_eq!(code.substring(Position::new(1, 1)..=Position::new(1, 100)), "First line\n");
-/// assert_eq!(code.substring(Position::new(2, 1)..=Position::new(2, 100)), "Second line\n");
-/// assert_eq!(code.substring(Position::new(3, 1)..=Position::new(3, 100)), "Third line\n");
+/// assert_eq!(code.substring(Position::new(1, 1)..Position::new(1, 100)), "First line\n");
+/// assert_eq!(code.substring(Position::new(2, 1)..Position::new(2, 100)), "Second line\n");
+/// assert_eq!(code.substring(Position::new(3, 1)..Position::new(3, 100)), "Third line\n");
 ///
 /// assert!(Position::new(2, 8) < Position::new(3, 6));
 /// assert_eq!(code.substring(Position::new(2, 8)..Position::new(3, 6)), "line\nThird");
@@ -179,43 +179,9 @@ impl<I: Iterator<Item = char>> AddAssign<I> for Position {
 
 unsafe impl ToSite for Position {
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
-        if self.line == 0 {
-            return Some(0);
-        }
+        let span = code.lines().line_span(self.line);
 
-        let mut line = 1;
-        let mut column = 0;
-
-        for (site, character) in code.chars(..).enumerate() {
-            match character {
-                '\r' => {
-                    if line == self.line {
-                        return Some(site);
-                    }
-
-                    column = 0;
-                }
-
-                '\n' => {
-                    if line == self.line {
-                        return Some(site);
-                    }
-
-                    line += 1;
-                    column = 0;
-                }
-
-                _ => {
-                    column += 1;
-
-                    if self.line == line && self.column <= column {
-                        return Some(site);
-                    }
-                }
-            }
-        }
-
-        Some(code.length())
+        Some((self.column.checked_sub(1).unwrap_or_default() + span.start).min(span.end))
     }
 
     #[inline(always)]

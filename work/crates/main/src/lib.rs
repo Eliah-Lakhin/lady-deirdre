@@ -52,6 +52,7 @@ pub mod analysis;
 pub mod arena;
 pub mod format;
 pub mod lexis;
+mod mem;
 mod report;
 mod std;
 #[cfg(feature = "std")]

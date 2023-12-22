@@ -38,6 +38,7 @@
 use crate::{
     arena::{EntryIndex, Sequence},
     lexis::{ByteIndex, Length},
+    mem::{array_copy_to, array_shift},
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
@@ -49,7 +50,6 @@ use crate::{
         nesting::PageLayer,
         references::References,
         string::PageString,
-        utils::{array_copy_to, array_shift},
         PAGE_B,
         PAGE_CAP,
     },

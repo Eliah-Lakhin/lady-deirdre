@@ -38,7 +38,7 @@
 use crate::{
     arena::{Entry, Identifiable},
     format::PrintString,
-    lexis::{Chunk, Length, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
+    lexis::{Chunk, Length, LineIndex, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
     std::*,
 };
 
@@ -297,6 +297,8 @@ pub trait SourceCode: Identifiable {
 
     /// Returns a total number of tokens inside the source code lexical structure.
     fn token_count(&self) -> TokenCount;
+
+    fn lines(&self) -> &LineIndex;
 
     /// Returns `true` if the source code text is empty string.
     ///

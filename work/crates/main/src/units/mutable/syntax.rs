@@ -163,7 +163,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if unsafe { self.jump(distance) } {
-            self.pending.lookahead_end_site = self.tree.length();
+            self.pending.lookahead_end_site = self.tree.code_length();
             return <Self::Token as Token>::eoi();
         }
 
@@ -182,7 +182,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if unsafe { self.jump(distance) } {
-            self.pending.lookahead_end_site = self.tree.length();
+            self.pending.lookahead_end_site = self.tree.code_length();
             return None;
         }
 
@@ -201,7 +201,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if unsafe { self.jump(distance) } {
-            self.pending.lookahead_end_site = self.tree.length();
+            self.pending.lookahead_end_site = self.tree.code_length();
             return None;
         }
 
@@ -220,7 +220,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if unsafe { self.jump(distance) } {
-            self.pending.lookahead_end_site = self.tree.length();
+            self.pending.lookahead_end_site = self.tree.code_length();
             return None;
         }
 
@@ -239,7 +239,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if unsafe { self.jump(distance) } {
-            self.pending.lookahead_end_site = self.tree.length();
+            self.pending.lookahead_end_site = self.tree.code_length();
             return TokenRef::nil();
         }
 
@@ -265,7 +265,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if unsafe { self.jump(distance) } {
-            self.pending.lookahead_end_site = self.tree.length();
+            self.pending.lookahead_end_site = self.tree.code_length();
             return self.end_site_ref();
         }
 
@@ -646,7 +646,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             context
         };
 
-        let length = tree.length();
+        let length = tree.code_length();
 
         let mut session = Self {
             id,
