@@ -49,18 +49,21 @@ mod scope;
 mod semantics;
 mod signal;
 mod table;
+mod tasks;
+mod validation;
 
 pub use crate::analysis::{
     analysis::AnalysisTask,
     analyzer::{Analyzer, DocumentReadGuard, Revision},
-    attribute::{Attr, AttrReadGuard, AttrRef, Computable},
+    attribute::{Attr, AttrContext, AttrReadGuard, AttrRef, Computable, NIL_ATTR_REF},
     features::{AbstractFeature, Feature},
     grammar::Grammar,
     mutation::{FeatureInitializer, FeatureInvalidator, MutationTask},
     result::{AnalysisError, AnalysisResult},
     scope::{Scope, ScopeAttr},
     semantics::Semantics,
-    signal::{Lifetime, Signal},
+    signal::{Lifecycle, Signal},
+    tasks::{AbstractTask, TASKS_ALL, TASKS_ANALYSIS, TASKS_EXCLUSIVE, TASKS_MUTATION},
 };
 
 #[cfg(test)]
@@ -68,10 +71,11 @@ mod tests {
     use crate::{
         analysis::{
             AbstractFeature,
+            AbstractTask,
             AnalysisResult,
-            AnalysisTask,
             Analyzer,
             Attr,
+            AttrContext,
             Computable,
             Feature,
             Semantics,
@@ -129,14 +133,17 @@ mod tests {
         type Node = TestNode;
 
         fn compute<S: SyncBuildHasher>(
-            task: &mut AnalysisTask<Self::Node, S>,
+            context: &mut AttrContext<Self::Node, S>,
         ) -> AnalysisResult<Self>
         where
             Self: Sized,
         {
-            let doc = task.analyzer().read_document(task.node_ref().id).unwrap();
+            let doc = context
+                .analyzer()
+                .read_document(context.node_ref().id)
+                .unwrap();
 
-            let Some(TestNode::Root { sums, .. }) = task.node_ref().deref(doc.deref()) else {
+            let Some(TestNode::Root { sums, .. }) = context.node_ref().deref(doc.deref()) else {
                 panic!()
             };
 
@@ -147,7 +154,10 @@ mod tests {
                     continue;
                 };
 
-                let sum = semantics.attr_ref().read::<NumSumAttr, _>(task).unwrap();
+                let sum = semantics
+                    .attr_ref()
+                    .query::<NumSumAttr, _>(context)
+                    .unwrap();
 
                 value += sum.sum
             }
@@ -165,14 +175,17 @@ mod tests {
         type Node = TestNode;
 
         fn compute<S: SyncBuildHasher>(
-            task: &mut AnalysisTask<Self::Node, S>,
+            context: &mut AttrContext<Self::Node, S>,
         ) -> AnalysisResult<Self>
         where
             Self: Sized,
         {
-            let doc = task.analyzer().read_document(task.node_ref().id).unwrap();
+            let doc = context
+                .analyzer()
+                .read_document(context.node_ref().id)
+                .unwrap();
 
-            let Some(TestNode::Sum { numbers, .. }) = task.node_ref().deref(doc.deref()) else {
+            let Some(TestNode::Sum { numbers, .. }) = context.node_ref().deref(doc.deref()) else {
                 panic!()
             };
 
@@ -195,14 +208,15 @@ mod tests {
         let analyzer = Analyzer::<TestNode>::for_single_document();
 
         let id = {
-            let mutation = analyzer.mutate();
+            let handle = Latch::new();
+            let mutation = analyzer.mutate(&handle).unwrap();
 
             mutation.add_mutable_document("(1+ 2) (8 + 2)")
         };
 
         {
             let handle = Latch::new();
-            let mut analysis = analyzer.analyze(&handle);
+            let analysis = analyzer.analyze(&handle).unwrap();
 
             let doc = analysis.analyzer().read_document(id).unwrap();
 
@@ -215,20 +229,21 @@ mod tests {
                 .unwrap()
                 .attr_ref();
 
-            let total_sum = total_sum.read::<TotalSumAttr, _>(&mut analysis).unwrap();
+            let total_sum = analysis.read_attr_ref::<TotalSumAttr>(total_sum).unwrap();
 
             assert_eq!(total_sum.value, 13);
         }
 
         {
-            let mutation = analyzer.mutate();
+            let handle = Latch::new();
+            let mutation = analyzer.mutate(&handle).unwrap();
 
             let _ = mutation.write_to_document(id, 4..5, "0 + 1").unwrap();
         }
 
         {
             let handle = Latch::new();
-            let mut analysis = analyzer.analyze(&handle);
+            let analysis = analyzer.analyze(&handle).unwrap();
 
             let doc = analysis.analyzer().read_document(id).unwrap();
 
@@ -239,7 +254,7 @@ mod tests {
 
             let total_sum = &semantics.get().unwrap().total_sum;
 
-            let total_sum = total_sum.read(&mut analysis).unwrap();
+            let total_sum = analysis.read_attr(total_sum).unwrap();
 
             assert_eq!(total_sum.value, 12);
         }

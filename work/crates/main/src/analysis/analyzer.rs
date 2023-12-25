@@ -40,6 +40,7 @@ use crate::{
         database::Database,
         mutation::MutationTask,
         table::{UnitTable, UnitTableReadGuard},
+        tasks::TaskManager,
         AnalysisError,
         AnalysisResult,
         AnalysisTask,
@@ -51,17 +52,12 @@ use crate::{
     units::Document,
 };
 
-pub(super) const TASKS_CAPACITY: usize = 10;
-pub(super) const DEPS_CAPACITY: usize = 30;
-
 pub type Revision = u64;
 
 pub struct Analyzer<N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) documents: UnitTable<Document<N>, S>,
     pub(super) database: Arc<Database<N, S>>,
-    pub(super) stage: Mutex<AnalyzerStage<S>>,
-    pub(super) ready_for_analysis: Condvar,
-    pub(super) ready_for_mutation: Condvar,
+    pub(super) tasks: TaskManager<S>,
 }
 
 impl<N: Grammar, S: SyncBuildHasher> Default for Analyzer<N, S> {
@@ -76,11 +72,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
         Self {
             documents: UnitTable::new_single(),
             database: Arc::new(Database::new_single()),
-            stage: Mutex::new(AnalyzerStage::Analysis {
-                tasks: HashSet::with_capacity_and_hasher(TASKS_CAPACITY, S::default()),
-            }),
-            ready_for_analysis: Condvar::new(),
-            ready_for_mutation: Condvar::new(),
+            tasks: TaskManager::new(),
         }
     }
 
@@ -88,119 +80,54 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
         Self {
             documents: UnitTable::new_multi(1),
             database: Arc::new(Database::new_multi()),
-            stage: Mutex::new(AnalyzerStage::Analysis {
-                tasks: HashSet::with_capacity_and_hasher(TASKS_CAPACITY, S::default()),
-            }),
-            ready_for_analysis: Condvar::new(),
-            ready_for_mutation: Condvar::new(),
+            tasks: TaskManager::new(),
         }
     }
 
-    pub fn analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisTask<'a, N, S> {
-        let mut stage_guard = self
-            .stage
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+    pub fn analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<AnalysisTask<'a, N, S>> {
+        self.tasks.acquire_analysis(handle, true)?;
 
-        loop {
-            match stage_guard.deref_mut() {
-                AnalyzerStage::Analysis { tasks } => {
-                    let task = AnalysisTask::new(self, handle);
-
-                    tasks.insert(handle.clone());
-
-                    return task;
-                }
-
-                _ => (),
-            }
-
-            stage_guard = self
-                .ready_for_analysis
-                .wait(stage_guard)
-                .unwrap_or_else(|poison| poison.into_inner());
-        }
+        Ok(AnalysisTask::new_non_exclusive(self, handle))
     }
 
-    pub fn try_analyze<'a>(&'a self, handle: &'a Latch) -> Option<AnalysisTask<'a, N, S>> {
-        let mut stage_guard = self
-            .stage
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+    pub fn try_analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<AnalysisTask<'a, N, S>> {
+        self.tasks.acquire_analysis(handle, false)?;
 
-        match stage_guard.deref_mut() {
-            AnalyzerStage::Analysis { tasks } => {
-                let task = AnalysisTask::new(self, handle);
-
-                tasks.insert(task.handle().clone());
-
-                Some(task)
-            }
-
-            _ => None,
-        }
+        Ok(AnalysisTask::new_non_exclusive(self, handle))
     }
 
-    pub fn interrupt(&self) {
-        let mut stage_guard = self
-            .stage
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+    pub fn mutate<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<MutationTask<'a, N, S>> {
+        self.tasks.acquire_mutation(handle, true)?;
 
-        match stage_guard.deref_mut() {
-            AnalyzerStage::Analysis { tasks } => {
-                if tasks.len() == 0 {
-                    return;
-                }
-
-                for task in tasks.iter() {
-                    task.set();
-                }
-
-                tasks.clear();
-            }
-
-            _ => (),
-        }
+        Ok(MutationTask::new_non_exclusive(self, handle))
     }
 
-    pub fn mutate(&self) -> MutationTask<N, S> {
-        let mut stage_guard = self
-            .stage
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+    pub fn try_mutate<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<MutationTask<'a, N, S>> {
+        self.tasks.acquire_mutation(handle, false)?;
 
-        loop {
-            match stage_guard.deref_mut() {
-                AnalyzerStage::Analysis { tasks } => {
-                    let queue = tasks.len();
+        Ok(MutationTask::new_non_exclusive(self, handle))
+    }
 
-                    if queue == 0 {
-                        *stage_guard = AnalyzerStage::Mutation { queue: 1 };
-                        drop(stage_guard);
-                        return MutationTask::new(self);
-                    }
+    pub fn mutate_exclusive<'a>(
+        &'a self,
+        handle: &'a Latch,
+    ) -> AnalysisResult<MutationTask<'a, N, S>> {
+        self.tasks.acquire_exclusive(handle, true)?;
 
-                    for task in take(tasks) {
-                        task.set();
-                    }
+        Ok(MutationTask::new_exclusive(self, handle))
+    }
 
-                    *stage_guard = AnalyzerStage::Interruption { queue };
-                }
+    pub fn try_mutate_exclusive<'a>(
+        &'a self,
+        handle: &'a Latch,
+    ) -> AnalysisResult<MutationTask<'a, N, S>> {
+        self.tasks.acquire_exclusive(handle, false)?;
 
-                AnalyzerStage::Interruption { .. } => (),
+        Ok(MutationTask::new_exclusive(self, handle))
+    }
 
-                AnalyzerStage::Mutation { queue } => {
-                    *queue += 1;
-                    return MutationTask::new(self);
-                }
-            }
-
-            stage_guard = self
-                .ready_for_mutation
-                .wait(stage_guard)
-                .unwrap_or_else(|poison| poison.into_inner());
-        }
+    pub fn interrupt(&self, tasks_mask: u8) {
+        self.tasks.interrupt(tasks_mask);
     }
 
     #[inline(always)]
@@ -262,10 +189,4 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AsRef<Document<N>> for DocumentReadGuar
     fn as_ref(&self) -> &Document<N> {
         self.guard.deref()
     }
-}
-
-pub(super) enum AnalyzerStage<S> {
-    Analysis { tasks: HashSet<Latch, S> },
-    Interruption { queue: usize },
-    Mutation { queue: usize },
 }

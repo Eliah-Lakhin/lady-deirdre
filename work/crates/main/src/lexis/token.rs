@@ -55,9 +55,11 @@ use crate::{
         EOI,
     },
     std::*,
-    syntax::{NodeRef, PolyRef, PolyVariant, RefKind},
+    syntax::{NodeRef, PolyRef, PolyVariant, RefKind, NIL_NODE_REF},
     units::CompilationUnit,
 };
+
+pub static NIL_TOKEN_REF: TokenRef = TokenRef::nil();
 
 /// A number of Tokens.
 pub type TokenCount = usize;
@@ -436,9 +438,7 @@ impl PolyRef for TokenRef {
 
     #[inline(always)]
     fn as_node_ref(&self) -> &NodeRef {
-        static NIL: NodeRef = NodeRef::nil();
-
-        &NIL
+        &NIL_NODE_REF
     }
 
     #[inline(always)]

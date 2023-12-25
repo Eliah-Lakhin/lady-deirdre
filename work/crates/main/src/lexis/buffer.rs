@@ -453,13 +453,31 @@ impl<T: Token> TokenBuffer<T> {
 
     /// Reserves capacity to store at least `additional` token chunks to be inserted on top of this
     /// buffer.
-    #[inline(always)]
     pub fn reserve(&mut self, additional: TokenCount) {
         self.tokens.reserve(additional);
         self.sites.reserve(additional);
         self.spans.reserve(additional);
         self.indices.reserve(additional);
         self.text.reserve(additional * CHUNK_SIZE);
+        self.lines.reserve(additional * CHUNK_SIZE);
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.tokens.shrink_to_fit();
+        self.sites.shrink_to_fit();
+        self.spans.shrink_to_fit();
+        self.indices.shrink_to_fit();
+        self.text.shrink_to_fit();
+        self.lines.shrink_to_fit();
+    }
+
+    pub fn clear(&mut self) {
+        self.tokens.clear();
+        self.sites.clear();
+        self.spans.clear();
+        self.indices.clear();
+        self.text.clear();
+        self.lines.clear();
     }
 
     #[inline(always)]

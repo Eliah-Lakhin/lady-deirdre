@@ -38,10 +38,10 @@
 use crate::{
     arena::{Id, Identifiable},
     format::{PrintString, Priority, SnippetConfig, SnippetFormatter},
-    lexis::{SiteSpan, ToSpan, Token, TokenRef},
+    lexis::{SiteSpan, ToSpan, Token, TokenRef, NIL_TOKEN_REF},
     report::debug_unreachable,
     std::*,
-    syntax::{AbstractNode, NodeRef},
+    syntax::{AbstractNode, NodeRef, NIL_NODE_REF},
     units::CompilationUnit,
 };
 
@@ -109,20 +109,16 @@ impl PolyRef for PolyVariant {
 
     #[inline(always)]
     fn as_token_ref(&self) -> &TokenRef {
-        static NIL: TokenRef = TokenRef::nil();
-
         match self {
             Self::Token(variant) => variant,
-            Self::Node(..) => &NIL,
+            Self::Node(..) => &NIL_TOKEN_REF,
         }
     }
 
     #[inline(always)]
     fn as_node_ref(&self) -> &NodeRef {
-        static NIL: NodeRef = NodeRef::nil();
-
         match self {
-            Self::Token(..) => &NIL,
+            Self::Token(..) => &NIL_NODE_REF,
             Self::Node(variant) => variant,
         }
     }

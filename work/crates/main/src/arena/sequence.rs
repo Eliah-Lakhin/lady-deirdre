@@ -261,6 +261,11 @@ impl<T> Sequence<T> {
         }
     }
 
+    #[inline(always)]
+    pub fn shrink_to_fit(&mut self) {
+        self.entries.shrink_to_fit();
+    }
+
     /// Removes all items from this collection preserving allocated memory.
     ///
     /// All references belong to this collection are implicitly turn to invalid. However, if an API

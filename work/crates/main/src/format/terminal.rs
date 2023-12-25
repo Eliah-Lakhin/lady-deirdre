@@ -35,7 +35,11 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::std::*;
+use crate::{
+    format::PrintString,
+    lexis::{SourceCode, Token, TokenBuffer},
+    std::*,
+};
 
 macro_rules! escape {
     ($($code:expr)?) => {
@@ -258,6 +262,24 @@ pub trait TerminalString: AsRef<str> {
 
         target
     }
+
+    fn sanitize(&self) -> PrintString<'static> {
+        let mut target = String::with_capacity(self.as_ref().len());
+        let mut length = 0;
+
+        let buffer = TokenBuffer::<Escaped>::from(self);
+
+        for chunk in buffer.chunks(..) {
+            if chunk.token != Escaped::Text {
+                continue;
+            }
+
+            target.push_str(chunk.string);
+            length += chunk.length;
+        }
+
+        unsafe { PrintString::new_unchecked(Cow::from(target), length) }
+    }
 }
 
 impl<S: AsRef<str>> TerminalString for S {}
@@ -431,6 +453,15 @@ impl Color {
     fn reset_bg(target: &mut String) {
         target.push_str(escape!(49));
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Token)]
+#[repr(u8)]
+pub(super) enum Escaped {
+    EOI = 0,
+    Text = 1,
+    #[rule("\x1B[" ['\x30'..'\x4F']* ['\x20'..'\x2F']* ['\x40'..'\x7E'])]
+    CSI,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]

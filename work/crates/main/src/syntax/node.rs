@@ -41,7 +41,7 @@ pub use lady_deirdre_derive::Node;
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    lexis::{Site, SiteSpan, Token, TokenRef},
+    lexis::{Site, SiteSpan, Token, TokenRef, NIL_TOKEN_REF},
     std::*,
     syntax::{
         Capture,
@@ -60,6 +60,8 @@ use crate::{
     },
     units::CompilationUnit,
 };
+
+pub static NIL_NODE_REF: NodeRef = NodeRef::nil();
 
 /// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
 ///
@@ -582,9 +584,7 @@ impl PolyRef for NodeRef {
 
     #[inline(always)]
     fn as_token_ref(&self) -> &TokenRef {
-        static NIL: TokenRef = TokenRef::nil();
-
-        &NIL
+        &NIL_TOKEN_REF
     }
 
     #[inline(always)]

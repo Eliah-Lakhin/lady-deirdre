@@ -65,5 +65,5 @@ pub use crate::lexis::{
     simple::SimpleToken,
     site::{ByteIndex, Length, Site, SiteRef, ToSite},
     span::{PositionSpan, SiteRefSpan, SiteSpan, ToSpan},
-    token::{Token, TokenCount, TokenRef},
+    token::{Token, TokenCount, TokenRef, NIL_TOKEN_REF},
 };

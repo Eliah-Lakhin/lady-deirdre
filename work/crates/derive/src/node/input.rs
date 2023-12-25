@@ -923,12 +923,7 @@ impl ToTokens for NodeInput {
                         #( #attr_ref )*
 
                         #[allow(unreachable_patterns)]
-                        _ => {
-                            static NIL_REF: #core::analysis::AttrRef
-                                = #core::analysis::AttrRef::nil();
-
-                            &NIL_REF
-                        },
+                        _ => &#core::analysis::NIL_ATTR_REF,
                     }
                 }
 

@@ -37,70 +37,54 @@
 
 use crate::{
     analysis::{
-        analyzer::{AnalyzerStage, DEPS_CAPACITY, TASKS_CAPACITY},
-        AnalysisError,
+        tasks::Exclusivity,
+        AbstractTask,
         AnalysisResult,
         Analyzer,
+        Attr,
+        AttrContext,
+        AttrReadGuard,
         AttrRef,
+        Computable,
         Grammar,
         Revision,
     },
-    report::{debug_unreachable, system_panic},
     std::*,
-    sync::{Latch, Lazy, SyncBuildHasher},
-    syntax::NodeRef,
+    sync::{Latch, SyncBuildHasher},
 };
 
 pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
-    fork: Option<Fork<'a, S>>,
-    pub(super) analyzer: &'a Analyzer<N, S>,
-    pub(super) revision: Revision,
-    pub(super) handle: &'a Latch,
+    exclusivity: Exclusivity,
+    analyzer: &'a Analyzer<N, S>,
+    revision: Revision,
+    handle: &'a Latch,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for AnalysisTask<'a, N, S> {
+    #[inline(always)]
+    fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    fn handle(&self) -> &'a Latch {
+        self.handle
+    }
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
     fn drop(&mut self) {
-        if self.fork.is_some() {
-            return;
-        }
-
-        self.handle.set();
-
-        let mut state_guard = self
-            .analyzer
-            .stage
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-
-        match state_guard.deref_mut() {
-            AnalyzerStage::Analysis { tasks } => {
-                tasks.remove(self.handle);
-
-                if tasks.is_empty() {
-                    tasks.shrink_to(TASKS_CAPACITY);
-                }
-            }
-
-            AnalyzerStage::Interruption { queue } => {
-                *queue -= 1;
-
-                if *queue == 0 {
-                    *state_guard = AnalyzerStage::Mutation { queue: 0 };
-                    drop(state_guard);
-                    self.analyzer.ready_for_mutation.notify_all();
-                }
-            }
-
-            AnalyzerStage::Mutation { .. } => system_panic!("State mismatch."),
+        if let Exclusivity::NonExclusive = &self.exclusivity {
+            self.analyzer.tasks.release_analysis(self.handle);
         }
     }
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     #[inline(always)]
-    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+    pub(super) fn new_non_exclusive(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
         Self {
-            fork: None,
+            exclusivity: Exclusivity::NonExclusive,
             analyzer,
             revision: analyzer.database.revision(),
             handle,
@@ -108,113 +92,35 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     }
 
     #[inline(always)]
-    pub(super) fn fork_for_mutation(analyzer: &'a Analyzer<N, S>) -> AnalysisTask<N, S> {
-        static NIL_REF: NodeRef = NodeRef::nil();
-        static DUMMY_HANDLE: Lazy<Latch> = Lazy::new(|| Latch::new());
-
-        #[cfg(debug_assertions)]
-        {
-            if DUMMY_HANDLE.get_relaxed() {
-                system_panic!("Dummy mutation handle is set.");
-            }
-        }
-
-        AnalysisTask {
-            fork: Some(Fork {
-                node_ref: &NIL_REF,
-                deps: None,
-            }),
+    pub(super) fn new_exclusive(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+        Self {
+            exclusivity: Exclusivity::Exclusive,
             analyzer,
             revision: analyzer.database.revision(),
-            handle: DUMMY_HANDLE.deref(),
+            handle,
         }
     }
 
     #[inline(always)]
-    pub fn analyzer(&self) -> &'a Analyzer<N, S> {
-        self.analyzer
+    pub fn read_attr<C: Computable<Node = N>>(
+        &self,
+        attr: &Attr<C>,
+    ) -> AnalysisResult<AttrReadGuard<C, S>> {
+        let mut reader = AttrContext::for_analysis_task(self);
+        attr.query(&mut reader)
     }
 
     #[inline(always)]
-    pub fn handle(&self) -> &'a Latch {
-        &self.handle
+    pub fn read_attr_ref<C: Computable<Node = N>>(
+        &self,
+        attr: &AttrRef,
+    ) -> AnalysisResult<AttrReadGuard<C, S>> {
+        let mut reader = AttrContext::for_analysis_task(self);
+        attr.query(&mut reader)
     }
 
     #[inline(always)]
-    pub fn revision(&self) -> Revision {
+    pub(super) fn db_revision(&self) -> Revision {
         self.revision
     }
-
-    #[inline(always)]
-    pub fn node_ref(&self) -> &'a NodeRef {
-        static NIL: NodeRef = NodeRef::nil();
-
-        match &self.fork {
-            Some(fork) => fork.node_ref,
-            None => &NIL,
-        }
-    }
-
-    #[inline(always)]
-    pub fn proceed(&self) -> AnalysisResult<()> {
-        if self.handle.get_relaxed() {
-            return Err(AnalysisError::Interrupted);
-        }
-
-        Ok(())
-    }
-
-    #[inline(always)]
-    pub(super) fn fork(&self, node_ref: &'a NodeRef) -> AnalysisTask<N, S> {
-        AnalysisTask {
-            fork: Some(Fork {
-                node_ref,
-                deps: Some(HashSet::with_capacity_and_hasher(
-                    DEPS_CAPACITY,
-                    S::default(),
-                )),
-            }),
-            analyzer: self.analyzer,
-            revision: self.revision,
-            handle: self.handle,
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn track(&mut self, attr_ref: &AttrRef) {
-        let Some(fork) = &mut self.fork else {
-            return;
-        };
-
-        let Some(deps) = &mut fork.deps else {
-            return;
-        };
-
-        deps.insert(*attr_ref);
-    }
-
-    #[inline(always)]
-    pub(super) fn take_deps(mut self) -> Option<HashSet<AttrRef, S>> {
-        let Some(fork) = &mut self.fork else {
-            return None;
-        };
-
-        take(&mut fork.deps)
-    }
-
-    // Safety: This instance is a fork.
-    #[inline(always)]
-    pub(super) unsafe fn reuse(&mut self, node_ref: &'a NodeRef) {
-        let Some(fork) = &mut self.fork else {
-            // Safety: Upheld by the caller.
-            unsafe { debug_unreachable!("Not a fork.") }
-        };
-
-        fork.node_ref = node_ref;
-    }
-}
-
-struct Fork<'a, S: SyncBuildHasher> {
-    node_ref: &'a NodeRef,
-    deps: Option<HashSet<AttrRef, S>>,
 }

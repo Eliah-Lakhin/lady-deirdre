@@ -270,6 +270,14 @@ impl<'a> PrintString<'a> {
     }
 
     #[inline(always)]
+    pub fn into_owned(self) -> PrintString<'static> {
+        PrintString {
+            string: Cow::from(self.string.into_owned()),
+            length: self.length,
+        }
+    }
+
+    #[inline(always)]
     pub fn into_string(self) -> String {
         self.string.into_owned()
     }

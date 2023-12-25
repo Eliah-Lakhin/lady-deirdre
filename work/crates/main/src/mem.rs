@@ -41,7 +41,7 @@ use crate::{
 };
 
 //Safety:
-// 1. `from` and `to` are two distinct arrays.
+// 1. `from` and `to` are two distinct memory allocations.
 // 2. `source..(source + count)` is within `from` bounds.
 // 3. `destination..(destination + count)` is within `to` bounds.
 #[inline(always)]
@@ -66,7 +66,7 @@ pub(crate) unsafe fn array_copy_to<const N: usize, T: Sized>(
 }
 
 //Safety:
-// 1. `from` and `to` are two distinct arrays.
+// 1. `from` and `to` are two distinct memory allocations.
 // 2. `source..(source + count)` is within `from` bounds.
 // 3. `destination..(destination + count)` is within `to` bounds.
 #[inline(always)]
@@ -95,7 +95,7 @@ pub(crate) unsafe fn slice_copy_to<T: Sized>(
 
 //Safety:
 // 1. `from + count <= N`.
-// 1. `from + to <= N`.
+// 1. `to + count <= N`.
 // 2. `count > 0`.
 #[inline(always)]
 pub(crate) unsafe fn array_shift<const N: usize, T: Sized>(

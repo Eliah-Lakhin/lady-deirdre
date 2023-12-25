@@ -46,6 +46,7 @@ use crate::{
         FeatureInvalidator,
         Grammar,
         ScopeAttr,
+        NIL_ATTR_REF,
     },
     std::*,
     sync::SyncBuildHasher,
@@ -53,12 +54,11 @@ use crate::{
 };
 
 #[repr(transparent)]
-pub struct Signal<L: Lifetime> {
+pub struct Signal<L: Lifecycle> {
     payload: L::Payload,
-    _lifetime: PhantomData<L>,
 }
 
-impl<L: Lifetime> Debug for Signal<L>
+impl<L: Lifecycle> Debug for Signal<L>
 where
     L::Payload: Debug,
 {
@@ -70,19 +70,16 @@ where
     }
 }
 
-impl<L: Lifetime> Drop for Signal<L> {
+impl<L: Lifecycle> Drop for Signal<L> {
     fn drop(&mut self) {
         L::on_deregister(&self.payload);
     }
 }
 
-impl<L: Lifetime> Signal<L> {
+impl<L: Lifecycle> Signal<L> {
     #[inline(always)]
     pub fn trigger(payload: L::Payload) -> Self {
-        let signal = Self {
-            payload,
-            _lifetime: Default::default(),
-        };
+        let signal = Self { payload };
 
         L::on_register(&signal.payload);
 
@@ -90,7 +87,7 @@ impl<L: Lifetime> Signal<L> {
     }
 }
 
-impl<L: Lifetime<Payload = NodeRef>> Feature for Signal<L> {
+impl<L: Lifecycle<Payload = NodeRef>> Feature for Signal<L> {
     type Node = L::Node;
 
     #[inline(always)]
@@ -98,10 +95,7 @@ impl<L: Lifetime<Payload = NodeRef>> Feature for Signal<L> {
     where
         Self: Sized,
     {
-        Self {
-            payload: node_ref,
-            _lifetime: Default::default(),
-        }
+        Self { payload: node_ref }
     }
 
     #[inline(always)]
@@ -122,12 +116,10 @@ impl<L: Lifetime<Payload = NodeRef>> Feature for Signal<L> {
     }
 }
 
-impl<L: Lifetime<Payload = NodeRef>> AbstractFeature for Signal<L> {
+impl<L: Lifecycle<Payload = NodeRef>> AbstractFeature for Signal<L> {
     #[inline(always)]
     fn attr_ref(&self) -> &AttrRef {
-        static NIL_REF: AttrRef = AttrRef::nil();
-
-        &NIL_REF
+        &NIL_ATTR_REF
     }
 
     #[inline(always)]
@@ -141,7 +133,7 @@ impl<L: Lifetime<Payload = NodeRef>> AbstractFeature for Signal<L> {
     }
 }
 
-pub trait Lifetime: Send + Sync + 'static {
+pub trait Lifecycle: Send + Sync + 'static {
     type Node: Grammar;
     type Payload: Send + Sync + 'static;
 

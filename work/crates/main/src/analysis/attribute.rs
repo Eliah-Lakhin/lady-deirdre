@@ -38,25 +38,32 @@
 use crate::{
     analysis::{
         database::AbstractDatabase,
-        record::{Cache, Cell, Record},
+        record::{Cell, Record},
         table::UnitTableReadGuard,
         AbstractFeature,
+        AbstractTask,
         AnalysisError,
         AnalysisResult,
         AnalysisTask,
+        Analyzer,
         Feature,
         FeatureInitializer,
         FeatureInvalidator,
         Grammar,
         MutationTask,
+        Revision,
         ScopeAttr,
     },
     arena::{Entry, Id, Identifiable, Repository},
-    report::debug_unreachable,
+    report::{debug_unreachable, system_panic},
     std::*,
-    sync::{Shared, SyncBuildHasher},
-    syntax::{Key, NodeRef},
+    sync::{Latch, Lazy, SyncBuildHasher},
+    syntax::{Key, NodeRef, NIL_NODE_REF},
 };
+
+pub static NIL_ATTR_REF: AttrRef = AttrRef::nil();
+
+const DEPS_CAPACITY: usize = 30;
 
 #[repr(transparent)]
 pub struct Attr<C: Computable> {
@@ -120,10 +127,8 @@ impl<C: Computable> Hash for Attr<C> {
 impl<C: Computable> AsRef<AttrRef> for Attr<C> {
     #[inline(always)]
     fn as_ref(&self) -> &AttrRef {
-        static NIL_REF: AttrRef = AttrRef::nil();
-
         let AttrInner::Init { attr_ref, .. } = &self.inner else {
-            return &NIL_REF;
+            return &NIL_ATTR_REF;
         };
 
         attr_ref
@@ -222,9 +227,10 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 }
 
 impl<C: Computable> Attr<C> {
-    pub fn read<'a, S: SyncBuildHasher>(
+    #[inline(always)]
+    pub fn query<'a, S: SyncBuildHasher>(
         &self,
-        task: &mut AnalysisTask<'a, C::Node, S>,
+        reader: &mut AttrContext<'a, C::Node, S>,
     ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
         let attr_ref = self.as_ref();
 
@@ -232,72 +238,9 @@ impl<C: Computable> Attr<C> {
             return Err(AnalysisError::UninitAttribute);
         }
 
-        loop {
-            let Some(records_guard) = task.analyzer.database.records.get(attr_ref.id) else {
-                return Err(AnalysisError::MissingDocument);
-            };
-
-            let Some(record) = records_guard.get(&attr_ref.entry) else {
-                return Err(AnalysisError::MissingAttribute);
-            };
-
-            let cell_guard = record.read();
-
-            if cell_guard.verified_at >= task.revision {
-                if let Some(cache) = &cell_guard.cache {
-                    // Safety: Attributes data came from the C::compute function.
-                    let data = unsafe { cache.downcast_unchecked::<C>() };
-
-                    task.track(attr_ref);
-
-                    // Safety: Prolongs lifetime to Analyzer's lifetime.
-                    //         The reference will ve valid for as long as the parent guard is held.
-                    let data = unsafe { transmute::<&C, &'a C>(data) };
-
-                    // Safety: Prolongs lifetime to Analyzer's lifetime.
-                    //         The guard will ve valid for as long as the parent guard is held.
-                    let cell_guard = unsafe {
-                        transmute::<
-                            RwLockReadGuard<Cell<<C as Computable>::Node, S>>,
-                            RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-                        >(cell_guard)
-                    };
-
-                    // Safety: Prolongs lifetime to Analyzer's lifetime.
-                    //         The reference will ve valid for as long as the Analyzer is held.
-                    let records_guard = unsafe {
-                        transmute::<
-                            UnitTableReadGuard<Repository<Record<<C as Computable>::Node, S>>, S>,
-                            UnitTableReadGuard<
-                                'a,
-                                Repository<Record<<C as Computable>::Node, S>>,
-                                S,
-                            >,
-                        >(records_guard)
-                    };
-
-                    return Ok(AttrReadGuard {
-                        data,
-                        cell_guard,
-                        records_guard,
-                    });
-                }
-            }
-
-            drop(cell_guard);
-            drop(records_guard);
-
-            attr_ref.validate(task)?;
-        }
+        // Safety: Attributes data came from the C::compute function.
+        unsafe { attr_ref.fetch::<false, C, S>(reader) }
     }
-}
-
-pub trait Computable: Send + Sync + 'static {
-    type Node: Grammar;
-
-    fn compute<S: SyncBuildHasher>(task: &mut AnalysisTask<Self::Node, S>) -> AnalysisResult<Self>
-    where
-        Self: Sized;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -347,70 +290,17 @@ impl AttrRef {
         self.id.is_nil() || self.entry.is_nil()
     }
 
-    pub fn read<'a, C: Computable, S: SyncBuildHasher>(
+    #[inline(always)]
+    pub fn query<'a, C: Computable, S: SyncBuildHasher>(
         &self,
-        task: &mut AnalysisTask<'a, C::Node, S>,
+        reader: &mut AttrContext<'a, C::Node, S>,
     ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
-        loop {
-            let Some(records_guard) = task.analyzer.database.records.get(self.id) else {
-                return Err(AnalysisError::MissingDocument);
-            };
-
-            let Some(record) = records_guard.get(&self.entry) else {
-                return Err(AnalysisError::MissingAttribute);
-            };
-
-            let cell_guard = record.read();
-
-            if cell_guard.verified_at >= task.revision {
-                if let Some(cache) = &cell_guard.cache {
-                    let data = cache.downcast::<C>()?;
-
-                    task.track(self);
-
-                    // Safety: Prolongs lifetime to Analyzer's lifetime.
-                    //         The reference will ve valid for as long as the parent guard is held.
-                    let data = unsafe { transmute::<&C, &'a C>(data) };
-
-                    // Safety: Prolongs lifetime to Analyzer's lifetime.
-                    //         The guard will ve valid for as long as the parent guard is held.
-                    let cell_guard = unsafe {
-                        transmute::<
-                            RwLockReadGuard<Cell<<C as Computable>::Node, S>>,
-                            RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-                        >(cell_guard)
-                    };
-
-                    // Safety: Prolongs lifetime to Analyzer's lifetime.
-                    //         The reference will ve valid for as long as the Analyzer is held.
-                    let records_guard = unsafe {
-                        transmute::<
-                            UnitTableReadGuard<Repository<Record<<C as Computable>::Node, S>>, S>,
-                            UnitTableReadGuard<
-                                'a,
-                                Repository<Record<<C as Computable>::Node, S>>,
-                                S,
-                            >,
-                        >(records_guard)
-                    };
-
-                    return Ok(AttrReadGuard {
-                        data,
-                        cell_guard,
-                        records_guard,
-                    });
-                }
-            }
-
-            drop(cell_guard);
-            drop(records_guard);
-
-            self.validate(task)?;
-        }
+        // Safety: `CHECK` set to true
+        unsafe { self.fetch::<true, C, S>(reader) }
     }
 
     pub fn invalidate<N: Grammar, S: SyncBuildHasher>(&self, task: &mut MutationTask<N, S>) {
-        let Some(records) = task.analyzer.database.records.get(self.id) else {
+        let Some(records) = task.analyzer().database.records.get(self.id) else {
             #[cfg(debug_assertions)]
             {
                 panic!("Attribute does not belong to specified Analyzer.");
@@ -427,154 +317,129 @@ impl AttrRef {
         };
 
         record.invalidate();
-        task.analyzer.database.commit();
+        task.analyzer().database.commit();
     }
 
     #[inline(always)]
-    pub fn is_valid_ref<N: Grammar, S: SyncBuildHasher>(&self, task: &AnalysisTask<N, S>) -> bool {
-        let Some(records) = task.analyzer.database.records.get(self.id) else {
+    pub fn is_valid_ref<N: Grammar, S: SyncBuildHasher>(&self, task: &AttrContext<N, S>) -> bool {
+        let Some(records) = task.analyzer().database.records.get(self.id) else {
             return false;
         };
 
         records.contains(&self.entry)
     }
+}
 
-    fn validate<N: Grammar, S: SyncBuildHasher>(
-        &self,
-        task: &AnalysisTask<N, S>,
-    ) -> AnalysisResult<()> {
-        loop {
-            let Some(records) = task.analyzer.database.records.get(self.id) else {
-                return Err(AnalysisError::MissingDocument);
-            };
+pub struct AttrContext<'a, N: Grammar, S: SyncBuildHasher> {
+    analyzer: &'a Analyzer<N, S>,
+    revision: Revision,
+    handle: &'a Latch,
+    node_ref: &'a NodeRef,
+    deps: HashSet<AttrRef, S>,
+}
 
-            let Some(record) = records.get(&self.entry) else {
-                return Err(AnalysisError::MissingAttribute);
-            };
-
-            let mut record_write_guard = record.write(task.handle())?;
-            let cell = record_write_guard.deref_mut();
-
-            let Some(cache) = &mut cell.cache else {
-                let mut forked = task.fork(&cell.node_ref);
-
-                let memo = cell.function.invoke(&mut forked)?;
-
-                let deps = match forked.take_deps() {
-                    Some(deps) => Shared::new(deps),
-
-                    // Safety: Forked tasks always have dependencies set.
-                    None => unsafe { debug_unreachable!("Missing dependencies") },
-                };
-
-                cell.cache = Some(Cache {
-                    dirty: false,
-                    updated_at: task.revision,
-                    memo,
-                    deps,
-                });
-
-                cell.verified_at = task.revision;
-
-                return Ok(());
-            };
-
-            if cell.verified_at >= task.revision {
-                return Ok(());
-            }
-
-            if !cache.dirty {
-                let mut valid = true;
-                let mut deps_verified = true;
-
-                for dep in cache.deps.as_ref() {
-                    let Some(dep_records) = task.analyzer.database.records.get(dep.id) else {
-                        valid = false;
-                        break;
-                    };
-
-                    let Some(dep_record) = dep_records.get(&dep.entry) else {
-                        valid = false;
-                        break;
-                    };
-
-                    let dep_record_read_guard = dep_record.read();
-
-                    let Some(dep_cache) = &dep_record_read_guard.cache else {
-                        valid = false;
-                        break;
-                    };
-
-                    if dep_cache.dirty {
-                        valid = false;
-                        break;
-                    }
-
-                    if dep_cache.updated_at > cell.verified_at {
-                        valid = false;
-                        break;
-                    }
-
-                    deps_verified =
-                        deps_verified && dep_record_read_guard.verified_at >= task.revision;
-                }
-
-                if valid {
-                    if deps_verified {
-                        cell.verified_at = task.revision;
-                        return Ok(());
-                    }
-
-                    task.proceed()?;
-
-                    let deps = cache.deps.clone();
-
-                    drop(record_write_guard);
-
-                    //todo dependencies shuffling probably should improve parallelism between tasks
-                    for dep in deps.as_ref() {
-                        dep.validate(task)?;
-                    }
-
-                    continue;
-                }
-            }
-
-            let mut forked = task.fork(&cell.node_ref);
-
-            let new_memo = cell.function.invoke(&mut forked)?;
-
-            let new_deps = match forked.take_deps() {
-                Some(deps) => Shared::new(deps),
-
-                // Safety: Forked tasks always have dependencies set.
-                None => unsafe { debug_unreachable!("Missing dependencies") },
-            };
-
-            // Safety: New and previous values produced by the same Cell function.
-            let same = unsafe { cache.memo.memo_eq(new_memo.as_ref()) };
-
-            cache.dirty = false;
-            cache.memo = new_memo;
-            cache.deps = new_deps;
-
-            if !same {
-                cache.updated_at = task.revision;
-            }
-
-            cell.verified_at = task.revision;
-
-            return Ok(());
+impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn for_analysis_task(task: &AnalysisTask<'a, N, S>) -> Self {
+        Self {
+            analyzer: task.analyzer(),
+            revision: task.db_revision(),
+            handle: task.handle(),
+            node_ref: &NIL_NODE_REF,
+            deps: HashSet::with_capacity_and_hasher(1, S::default()),
         }
     }
+
+    #[inline(always)]
+    pub(super) fn for_mutation_task(task: &MutationTask<'a, N, S>) -> Self {
+        static DUMMY: Lazy<Latch> = Lazy::new(Latch::new);
+
+        #[cfg(debug_assertions)]
+        if DUMMY.get_relaxed() {
+            system_panic!("Dummy handle cancelled");
+        }
+
+        Self {
+            analyzer: task.analyzer(),
+            revision: task.analyzer().database.revision(),
+            handle: &DUMMY,
+            node_ref: &NIL_NODE_REF,
+            deps: HashSet::with_capacity_and_hasher(1, S::default()),
+        }
+    }
+
+    #[inline(always)]
+    pub fn node_ref(&self) -> &'a NodeRef {
+        self.node_ref
+    }
+
+    #[inline(always)]
+    pub fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    pub fn proceed(&self) -> AnalysisResult<()> {
+        if self.handle().get_relaxed() {
+            return Err(AnalysisError::Interrupted);
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(super) fn fork(&self, node_ref: &'a NodeRef) -> AttrContext<'a, N, S> {
+        AttrContext {
+            analyzer: self.analyzer,
+            revision: self.revision,
+            handle: self.handle,
+            node_ref,
+            deps: HashSet::with_capacity_and_hasher(DEPS_CAPACITY, S::default()),
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn handle(&self) -> &'a Latch {
+        self.handle
+    }
+
+    #[inline(always)]
+    pub(super) fn db_revision(&self) -> Revision {
+        self.revision
+    }
+
+    #[inline(always)]
+    pub(super) fn track(&mut self, dep: &AttrRef) {
+        let _ = self.deps.insert(*dep);
+    }
+
+    #[inline(always)]
+    pub(super) fn reset_deps(&mut self) {
+        self.deps.clear();
+    }
+
+    #[inline(always)]
+    pub(super) fn into_deps(self) -> HashSet<AttrRef, S> {
+        self.deps
+    }
+}
+
+pub trait Computable: Send + Sync + 'static {
+    type Node: Grammar;
+
+    fn compute<S: SyncBuildHasher>(
+        context: &mut AttrContext<Self::Node, S>,
+    ) -> AnalysisResult<Self>
+    where
+        Self: Sized;
 }
 
 // Safety: Entries order reflects guards drop semantics.
 #[allow(dead_code)]
 pub struct AttrReadGuard<'a, C: Computable, S: SyncBuildHasher = RandomState> {
-    data: &'a C,
-    cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-    records_guard: UnitTableReadGuard<'a, Repository<Record<C::Node, S>>, S>,
+    pub(super) data: &'a C,
+    pub(super) cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
+    pub(super) records_guard: UnitTableReadGuard<'a, Repository<Record<C::Node, S>>, S>,
 }
 
 impl<'a, C: Computable + Debug, S: SyncBuildHasher> Debug for AttrReadGuard<'a, C, S> {
@@ -597,6 +462,17 @@ impl<'a, C: Computable, S: SyncBuildHasher> Deref for AttrReadGuard<'a, C, S> {
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
         self.data
+    }
+}
+
+impl<'a, C: Computable, S: SyncBuildHasher> AttrReadGuard<'a, C, S> {
+    #[inline(always)]
+    pub fn attr_revision(&self) -> Revision {
+        let Some(cache) = &self.cell_guard.cache else {
+            unsafe { debug_unreachable!("AttrReadGuard without cache.") }
+        };
+
+        cache.updated_at
     }
 }
 

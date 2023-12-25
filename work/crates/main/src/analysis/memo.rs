@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{AnalysisResult, AnalysisTask, Computable, Grammar},
+    analysis::{AnalysisResult, AttrContext, Computable, Grammar},
     report::debug_unreachable,
     std::*,
     sync::SyncBuildHasher,
@@ -70,17 +70,17 @@ impl<T: Eq + Send + Sync + 'static> Memo for T {
 }
 
 pub(super) trait Function<N: Grammar, S: SyncBuildHasher>: Send + Sync + 'static {
-    fn invoke(&self, task: &mut AnalysisTask<N, S>) -> AnalysisResult<Box<dyn Memo>>;
+    fn invoke(&self, task: &mut AttrContext<N, S>) -> AnalysisResult<Box<dyn Memo>>;
 }
 
-impl<N, T, S> Function<N, S> for fn(&mut AnalysisTask<N, S>) -> AnalysisResult<T>
+impl<N, T, S> Function<N, S> for fn(&mut AttrContext<N, S>) -> AnalysisResult<T>
 where
     N: Grammar,
     T: Eq + Send + Sync + Sized + 'static,
     S: SyncBuildHasher,
 {
-    fn invoke(&self, task: &mut AnalysisTask<N, S>) -> AnalysisResult<Box<dyn Memo>> {
-        Ok(Box::new(self(task)?))
+    fn invoke(&self, context: &mut AttrContext<N, S>) -> AnalysisResult<Box<dyn Memo>> {
+        Ok(Box::new(self(context)?))
     }
 }
 
@@ -90,5 +90,5 @@ where
     C: Computable + Eq,
     S: SyncBuildHasher,
 {
-    &(C::compute as fn(&mut AnalysisTask<C::Node, S>) -> AnalysisResult<C>)
+    &(C::compute as fn(&mut AttrContext<C::Node, S>) -> AnalysisResult<C>)
 }

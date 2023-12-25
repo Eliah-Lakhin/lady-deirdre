@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{AnalysisResult, AnalysisTask, Attr, Computable, Grammar},
+    analysis::{AnalysisResult, Attr, AttrContext, Computable, Grammar},
     std::*,
     sync::SyncBuildHasher,
     syntax::NodeRef,
@@ -90,12 +90,12 @@ impl<N: Grammar> Default for Scope<N> {
 impl<N: Grammar> Computable for Scope<N> {
     type Node = N;
 
-    fn compute<S: SyncBuildHasher>(task: &mut AnalysisTask<Self::Node, S>) -> AnalysisResult<Self>
+    fn compute<S: SyncBuildHasher>(context: &mut AttrContext<Self::Node, S>) -> AnalysisResult<Self>
     where
         Self: Sized,
     {
-        let node_ref = task.node_ref();
-        let document = task.analyzer.read_document(node_ref.id)?;
+        let node_ref = context.node_ref();
+        let document = context.analyzer().read_document(node_ref.id)?;
 
         let Some(node) = node_ref.deref(document.deref()) else {
             return Ok(Self::default());
@@ -114,6 +114,6 @@ impl<N: Grammar> Computable for Scope<N> {
             });
         }
 
-        Ok(*parent.scope_attr()?.read(task)?.deref())
+        Ok(*parent.scope_attr()?.query(context)?.deref())
     }
 }

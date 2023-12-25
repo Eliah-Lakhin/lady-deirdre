@@ -392,9 +392,7 @@ impl ToTokens for FeatureInput {
             {
                 #[inline(always)]
                 fn attr_ref(&self) -> &#core::analysis::AttrRef {
-                    static NIL_REF: #core::analysis::AttrRef = #core::analysis::AttrRef::nil();
-
-                    &NIL_REF
+                    &#core::analysis::NIL_ATTR_REF
                 }
 
                 fn feature(&self, key: #core::syntax::Key)

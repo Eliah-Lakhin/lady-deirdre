@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    format::{PrintString, Style},
+    format::{terminal::Escaped, PrintString, Style},
     lexis::{
         Column,
         Length,
@@ -1166,15 +1166,6 @@ impl StyleString {
     }
 
     fn from_str(config: &SnippetConfig, source: impl AsRef<str>) -> Self {
-        #[derive(Clone, Copy, PartialEq, Eq, Token)]
-        #[repr(u8)]
-        enum Escaped {
-            EOI = 0,
-            Text = 1,
-            #[rule("\x1B[" ['\x30'..'\x4F']* ['\x20'..'\x2F']* ['\x40'..'\x7E'])]
-            CSI,
-        }
-
         let source = source.as_ref();
 
         let mut target = Self::new();

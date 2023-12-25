@@ -37,64 +37,76 @@
 
 use crate::{
     analysis::{
-        analyzer::{AnalyzerStage, TASKS_CAPACITY},
         attribute::Computable,
         database::AbstractDatabase,
         record::Record,
+        tasks::Exclusivity,
+        AbstractTask,
         AnalysisError,
         AnalysisResult,
         AnalysisTask,
         Analyzer,
+        AttrContext,
         Grammar,
     },
     arena::{Entry, Id, Identifiable, Repository},
     lexis::{ToSpan, TokenBuffer},
-    report::{debug_unreachable, system_panic},
+    report::debug_unreachable,
     std::*,
-    sync::SyncBuildHasher,
+    sync::{Latch, SyncBuildHasher},
     syntax::{NodeRef, PolyRef, SyntaxTree},
     units::{Document, MutableUnit},
 };
 
 pub struct MutationTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
-    pub(super) analyzer: &'a Analyzer<N, S>,
+    exclusivity: Exclusivity,
+    analyzer: &'a Analyzer<N, S>,
+    handle: &'a Latch,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for MutationTask<'a, N, S> {
+    #[inline(always)]
+    fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    fn handle(&self) -> &'a Latch {
+        self.handle
+    }
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Drop for MutationTask<'a, N, S> {
     fn drop(&mut self) {
-        let mut stage_guard = self
-            .analyzer
-            .stage
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-
-        match stage_guard.deref_mut() {
-            AnalyzerStage::Mutation { queue } => {
-                *queue -= 1;
-
-                if *queue == 0 {
-                    *stage_guard = AnalyzerStage::Analysis {
-                        tasks: HashSet::with_capacity_and_hasher(TASKS_CAPACITY, S::default()),
-                    };
-                    drop(stage_guard);
-                    self.analyzer.ready_for_analysis.notify_all();
-                }
+        match &self.exclusivity {
+            Exclusivity::NonExclusive => {
+                self.analyzer.tasks.release_mutation(self.handle);
             }
 
-            _ => system_panic!("State mismatch."),
+            Exclusivity::Exclusive => {
+                self.analyzer.tasks.release_exclusive(self.handle);
+            }
         }
     }
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
     #[inline(always)]
-    pub(super) fn new(analyzer: &'a Analyzer<N, S>) -> Self {
-        Self { analyzer }
+    pub(super) fn new_non_exclusive(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+        Self {
+            exclusivity: Exclusivity::NonExclusive,
+            analyzer,
+            handle,
+        }
     }
 
     #[inline(always)]
-    pub fn analyzer(&self) -> &'a Analyzer<N, S> {
-        self.analyzer
+    pub(super) fn new_exclusive(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+        Self {
+            exclusivity: Exclusivity::Exclusive,
+            analyzer,
+            handle,
+        }
     }
 
     pub fn add_mutable_document(&self, text: impl Into<TokenBuffer<N::Token>>) -> Id {
@@ -199,7 +211,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
             return Ok(());
         };
 
-        let mut fork = AnalysisTask::fork_for_mutation(self.analyzer);
+        let mut context = AttrContext::for_mutation_task(self);
 
         let mut scope_refs = HashSet::with_capacity_and_hasher(1, S::default());
 
@@ -210,10 +222,8 @@ impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
 
             let scope_attr = node.scope_attr()?;
 
-            // Safety: `fork` was instantiated as a forked task.
-            unsafe { fork.reuse(node_ref) };
-
-            let scope_ref = scope_attr.read(&mut fork)?.scope_ref;
+            let scope_ref = scope_attr.query(&mut context)?.scope_ref;
+            context.reset_deps();
 
             if scope_ref.is_nil() {
                 continue;
@@ -265,6 +275,15 @@ impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
         self.analyzer.database.commit();
 
         true
+    }
+
+    #[inline(always)]
+    pub fn analyze(&mut self) -> AnalysisTask<'a, N, S> {
+        let Exclusivity::Exclusive = &self.exclusivity else {
+            panic!("An attempt to fork non-exclusive mutation task for analysis.");
+        };
+
+        AnalysisTask::new_exclusive(self.analyzer, self.handle)
     }
 
     fn add_document(&self, mut document: Document<N>) {

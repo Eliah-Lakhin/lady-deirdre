@@ -41,6 +41,8 @@ use crate::{
     syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
 };
 
+pub static NIL_CLUSTER_REF: ClusterRef = ClusterRef::nil();
+
 /// An ownership object of a part of the syntax structure data.
 ///
 /// This a lower-level API that organizes syntax structure persistence. An API user usually does not

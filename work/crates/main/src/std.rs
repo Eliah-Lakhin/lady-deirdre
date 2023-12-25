@@ -206,6 +206,7 @@ pub(crate) use std::{
         Arc,
         Condvar,
         Mutex,
+        MutexGuard,
         OnceLock,
         RwLock,
         RwLockReadGuard,

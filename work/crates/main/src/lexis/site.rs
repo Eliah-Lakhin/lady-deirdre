@@ -38,7 +38,7 @@
 use crate::{
     arena::{Id, Identifiable},
     format::{Priority, SnippetFormatter},
-    lexis::{Position, SourceCode, TokenCursor, TokenRef},
+    lexis::{Position, SourceCode, TokenCursor, TokenRef, NIL_TOKEN_REF},
     report::debug_unreachable,
     std::*,
     syntax::PolyRef,
@@ -196,11 +196,9 @@ impl SiteRef {
 
     #[inline(always)]
     pub fn token_ref(&self) -> &TokenRef {
-        static NIL: TokenRef = TokenRef::nil();
-
         match &self.0 {
             SiteRefInner::ChunkStart(token_ref) => token_ref,
-            SiteRefInner::CodeEnd(_) => &NIL,
+            SiteRefInner::CodeEnd(_) => &NIL_TOKEN_REF,
         }
     }
 

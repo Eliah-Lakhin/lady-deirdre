@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    lexis::{Length, Line, Site, SiteSpan, ToSpan},
+    lexis::{Length, Line, Site, SiteSpan},
     mem::{slice_copy_to, slice_shift},
     report::{debug_assert, debug_unreachable},
     std::*,
@@ -165,6 +165,11 @@ impl LineIndex {
     }
 
     #[inline(always)]
+    pub fn shrink_to_fit(&mut self) {
+        self.index.shrink_to_fit();
+    }
+
+    #[inline(always)]
     pub fn clear(&mut self) {
         unsafe { self.index.set_len(1) }
         self.length = 0;
@@ -216,7 +221,7 @@ impl LineIndex {
     // Safety:
     //   1. `span.start() <= span.end()`
     //   2. `span.end() <= self.length()`
-    pub(crate) unsafe fn write_unchecked(&mut self, mut span: SiteSpan, text: &str) {
+    pub(crate) unsafe fn write_unchecked(&mut self, span: SiteSpan, text: &str) {
         debug_assert!(
             span.start <= span.end && span.end <= self.length,
             "Invalid span.",

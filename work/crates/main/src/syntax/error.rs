@@ -53,6 +53,8 @@ use crate::{
     units::CompilationUnit,
 };
 
+pub static NIL_ERROR_REF: ErrorRef = ErrorRef::nil();
+
 /// A base syntax parse error object.
 ///
 /// All custom syntax/semantic errors must be [From](::std::convert::From) this object.

@@ -45,6 +45,7 @@ use crate::{
         FeatureInitializer,
         FeatureInvalidator,
         ScopeAttr,
+        NIL_ATTR_REF,
     },
     std::*,
     sync::SyncBuildHasher,
@@ -59,9 +60,7 @@ impl<F: Feature> AbstractFeature for Semantics<F> {
     #[inline(always)]
     fn attr_ref(&self) -> &AttrRef {
         let Ok(inner) = self.get() else {
-            static NIL_REF: AttrRef = AttrRef::nil();
-
-            return &NIL_REF;
+            return &NIL_ATTR_REF;
         };
 
         inner.attr_ref()

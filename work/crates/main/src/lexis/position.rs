@@ -181,7 +181,15 @@ unsafe impl ToSite for Position {
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
         let span = code.lines().line_span(self.line);
 
-        Some((self.column.checked_sub(1).unwrap_or_default() + span.start).min(span.end))
+        Some(
+            (self
+                .column
+                .checked_sub(1)
+                .unwrap_or_default()
+                .checked_add(span.start)
+                .unwrap_or(span.end))
+            .min(span.end),
+        )
     }
 
     #[inline(always)]

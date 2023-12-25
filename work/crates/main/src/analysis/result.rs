@@ -45,6 +45,7 @@ pub enum AnalysisError {
     MissingDocument,
     ImmutableDocument,
     InvalidSpan,
+    DuplicateHandle,
     UninitAttribute,
     MissingAttribute,
     UninitSemantics,
@@ -58,25 +59,16 @@ impl Display for AnalysisError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         let text = match self {
             Self::Interrupted => "Analysis task was interrupted.",
-
             Self::MissingDocument => "Referred document does not exist in the analyzer.",
-
             Self::ImmutableDocument => "An attempt to write into immutable document.",
-
             Self::InvalidSpan => "Provided span is not valid for specified document.",
-
+            Self::DuplicateHandle => "Provided analysis handle already used by another task.",
             Self::UninitAttribute => "An attempt to access uninitialized attribute object.",
-
             Self::MissingAttribute => "Referred attribute does not exist in the analyzer.",
-
             Self::UninitSemantics => "An attempt to access uninitialized semantics object.",
-
             Self::TypeMismatch => "Incorrect attribute type.",
-
             Self::MissingScope => "One of the semantics object does not have scope attribute.",
-
             Self::MissingFeature => "One of the semantics objects does not have scope feature.",
-
             Self::CycleDetected => "Attribute graph contains a cycle.",
         };
 
