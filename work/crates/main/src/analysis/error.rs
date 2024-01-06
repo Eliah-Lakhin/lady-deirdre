@@ -35,92 +35,71 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    analysis::{
-        tasks::Exclusivity,
-        AbstractTask,
-        AnalysisResult,
-        Analyzer,
-        Attr,
-        AttrContext,
-        AttrReadGuard,
-        AttrRef,
-        Computable,
-        Grammar,
-        Revision,
-    },
-    std::*,
-    sync::{Latch, SyncBuildHasher},
-};
+use crate::std::*;
 
-pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
-    exclusivity: Exclusivity,
-    analyzer: &'a Analyzer<N, S>,
-    revision: Revision,
-    handle: &'a Latch,
+pub type AnalysisResult<T> = Result<T, AnalysisError>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AnalysisError {
+    Interrupted,
+    MissingDocument,
+    ImmutableDocument,
+    InvalidSpan,
+    DuplicateHandle,
+    UninitAttribute,
+    MissingAttribute,
+    UninitSemantics,
+    TypeMismatch,
+    MissingScope,
+    MissingFeature,
+    CycleDetected,
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for AnalysisTask<'a, N, S> {
-    #[inline(always)]
-    fn analyzer(&self) -> &'a Analyzer<N, S> {
-        self.analyzer
-    }
+impl Display for AnalysisError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        let text = match self {
+            Self::Interrupted => "Analysis task was interrupted.",
+            Self::MissingDocument => "Referred document does not exist in the analyzer.",
+            Self::ImmutableDocument => "An attempt to write into immutable document.",
+            Self::InvalidSpan => "Provided span is not valid for specified document.",
+            Self::DuplicateHandle => "Provided analysis handle already used by another task.",
+            Self::UninitAttribute => "An attempt to access uninitialized attribute object.",
+            Self::MissingAttribute => "Referred attribute does not exist in the analyzer.",
+            Self::UninitSemantics => "An attempt to access uninitialized semantics object.",
+            Self::TypeMismatch => "Incorrect attribute type.",
+            Self::MissingScope => "One of the semantics object does not have scope attribute.",
+            Self::MissingFeature => "One of the semantics objects does not have scope feature.",
+            Self::CycleDetected => "Attribute graph contains a cycle.",
+        };
 
-    #[inline(always)]
-    fn handle(&self) -> &'a Latch {
-        self.handle
+        formatter.write_str(text)
     }
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
-    fn drop(&mut self) {
-        if let Exclusivity::NonExclusive = &self.exclusivity {
-            self.analyzer.tasks.release_analysis(self.handle);
+impl Error for AnalysisError {}
+
+impl AnalysisError {
+    #[inline(always)]
+    pub fn is_interrupt(&self) -> bool {
+        match self {
+            Self::Interrupted => true,
+            _ => false,
         }
     }
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
+pub trait AnalysisResultEx<T> {
+    fn unwrap_abnormal(self) -> AnalysisResult<T>;
+}
+
+impl<T> AnalysisResultEx<T> for AnalysisResult<T> {
+    #[track_caller]
     #[inline(always)]
-    pub(super) fn new_non_exclusive(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
-        Self {
-            exclusivity: Exclusivity::NonExclusive,
-            analyzer,
-            revision: analyzer.database.revision(),
-            handle,
+    fn unwrap_abnormal(self) -> AnalysisResult<T> {
+        match self {
+            Ok(ok) => Ok(ok),
+            Err(error) if error.is_interrupt() => Err(error),
+            Err(error) => panic!("Analysis internal error. {error}"),
         }
-    }
-
-    #[inline(always)]
-    pub(super) fn new_exclusive(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
-        Self {
-            exclusivity: Exclusivity::Exclusive,
-            analyzer,
-            revision: analyzer.database.revision(),
-            handle,
-        }
-    }
-
-    #[inline(always)]
-    pub fn read_attr<C: Computable<Node = N>>(
-        &self,
-        attr: &Attr<C>,
-    ) -> AnalysisResult<AttrReadGuard<C, S>> {
-        let mut reader = AttrContext::for_analysis_task(self);
-        attr.query(&mut reader)
-    }
-
-    #[inline(always)]
-    pub fn read_attr_ref<C: Computable<Node = N>>(
-        &self,
-        attr: &AttrRef,
-    ) -> AnalysisResult<AttrReadGuard<C, S>> {
-        let mut reader = AttrContext::for_analysis_task(self);
-        attr.query(&mut reader)
-    }
-
-    #[inline(always)]
-    pub(super) fn db_revision(&self) -> Revision {
-        self.revision
     }
 }

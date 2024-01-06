@@ -75,6 +75,17 @@ pub trait SyntaxTree: Identifiable {
     type Node: Node;
 
     #[inline(always)]
+    fn root(&self) -> &Self::Node
+    where
+        Self: Sized,
+    {
+        match self.root_node_ref().deref(self) {
+            Some(node) => node,
+            None => panic!("Syntax tree without root."),
+        }
+    }
+
+    #[inline(always)]
     fn root_node_ref(&self) -> NodeRef {
         NodeRef {
             id: self.id(),

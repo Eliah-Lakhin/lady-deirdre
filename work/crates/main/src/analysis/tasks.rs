@@ -36,22 +36,412 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{AnalysisError, AnalysisResult, Analyzer, Grammar},
+    analysis::{
+        analyzer::DocEntry,
+        AnalysisError,
+        AnalysisResult,
+        Analyzer,
+        AttrContext,
+        DocumentReadGuard,
+        FeatureInitializer,
+        FeatureInvalidator,
+        Grammar,
+        Revision,
+    },
+    arena::{Id, Identifiable},
+    lexis::{ToSpan, TokenBuffer},
     report::{debug_unreachable, system_panic},
     std::*,
-    sync::{Latch, SyncBuildHasher},
+    sync::{Latch, Lazy, Shared, SyncBuildHasher},
+    syntax::{ErrorRef, NodeRef, PolyRef, SyntaxTree},
+    units::{Document, MutableUnit},
 };
 
-pub const TASKS_ANALYSIS: u8 = 1u8 << 0;
-pub const TASKS_EXCLUSIVE: u8 = 1u8 << 1;
-pub const TASKS_MUTATION: u8 = 1u8 << 2;
-pub const TASKS_ALL: u8 = TASKS_ANALYSIS | TASKS_EXCLUSIVE | TASKS_MUTATION;
+pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    analyzer: &'a Analyzer<N, S>,
+    revision: Revision,
+    handle: &'a Latch,
+}
 
-const TASKS_CAPACITY: usize = 10;
+impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<'a, N, S> for AnalysisTask<'a, N, S> {}
 
-pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher> {
-    fn analyzer(&self) -> &'a Analyzer<N, S>;
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for AnalysisTask<'a, N, S> {
+    #[inline(always)]
+    fn handle(&self) -> &'a Latch {
+        self.handle
+    }
+}
 
+impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<'a, N, S> for AnalysisTask<'a, N, S> {
+    #[inline(always)]
+    fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    fn revision(&self) -> Revision {
+        self.revision
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
+    fn drop(&mut self) {
+        self.analyzer.tasks.release_analysis(self.handle);
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+        Self {
+            analyzer,
+            revision: analyzer.database.revision(),
+            handle,
+        }
+    }
+}
+
+pub struct MutationTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    analyzer: &'a Analyzer<N, S>,
+    handle: &'a Latch,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<'a, N, S> for MutationTask<'a, N, S> {}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for MutationTask<'a, N, S> {
+    #[inline(always)]
+    fn handle(&self) -> &'a Latch {
+        self.handle
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<'a, N, S> for MutationTask<'a, N, S> {
+    #[inline(always)]
+    fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    fn revision(&self) -> Revision {
+        self.analyzer.database.revision()
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for MutationTask<'a, N, S> {
+    fn drop(&mut self) {
+        self.analyzer.tasks.release_mutation(self.handle);
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+        Self { analyzer, handle }
+    }
+}
+
+pub struct ExclusiveTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    analyzer: &'a Analyzer<N, S>,
+    handle: &'a Latch,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<'a, N, S> for ExclusiveTask<'a, N, S> {}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<'a, N, S> for ExclusiveTask<'a, N, S> {}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for ExclusiveTask<'a, N, S> {
+    #[inline(always)]
+    fn handle(&self) -> &'a Latch {
+        self.handle
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<'a, N, S> for ExclusiveTask<'a, N, S> {
+    #[inline(always)]
+    fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    fn revision(&self) -> Revision {
+        self.analyzer.database.revision()
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for ExclusiveTask<'a, N, S> {
+    fn drop(&mut self) {
+        self.analyzer.tasks.release_exclusive(self.handle);
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> ExclusiveTask<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+        Self { analyzer, handle }
+    }
+}
+
+pub trait MutationAccess<'a, N: Grammar, S: SyncBuildHasher>: AbstractTask<'a, N, S> {
+    fn add_mutable_doc(&mut self, text: impl Into<TokenBuffer<N::Token>>) -> Id {
+        let document = {
+            let mut unit = MutableUnit::new(text, false);
+
+            unit.watch(true);
+
+            Document::from(unit)
+        };
+
+        let id = document.id();
+
+        self.analyzer().register_doc(document);
+
+        id
+    }
+
+    #[inline(always)]
+    fn add_immutable_doc(&mut self, text: impl Into<TokenBuffer<N::Token>>) -> Id {
+        let document = Document::new_immutable(text);
+        let id = document.id();
+
+        self.analyzer().register_doc(document);
+
+        id
+    }
+
+    fn write_to_doc(
+        &mut self,
+        id: Id,
+        span: impl ToSpan,
+        text: impl AsRef<str>,
+    ) -> AnalysisResult<()> {
+        let mutations = {
+            let Some(mut guard) = self.analyzer().docs.get_mut(id) else {
+                return Err(AnalysisError::MissingDocument);
+            };
+
+            let DocEntry {
+                document,
+                scope_accumulator,
+                error_accumulator,
+            } = guard.deref_mut();
+
+            let Document::Mutable(unit) = document else {
+                return Err(AnalysisError::ImmutableDocument);
+            };
+
+            let Some(span) = span.to_site_span(unit) else {
+                return Err(AnalysisError::InvalidSpan);
+            };
+
+            if unit.write(span, text).is_nil() {
+                return Ok(());
+            }
+
+            let report = match unit.report() {
+                Some(report) => report,
+
+                // Safety: Mutable documents initialized with watch mode.
+                None => unsafe { debug_unreachable!("Document watch mode off.") },
+            };
+
+            let Some(mut records) = self.analyzer().database.records.get_mut(id) else {
+                // Safety:
+                //   1. Records are always in sync with documents.
+                //   2. Document is locked.
+                unsafe { debug_unreachable!("Missing database entry.") }
+            };
+
+            let mut initializer = FeatureInitializer {
+                id,
+                database: Arc::downgrade(&self.analyzer().database) as Weak<_>,
+                records: records.deref_mut(),
+            };
+
+            let mut trigger_root = false;
+
+            for node_ref in &report.node_refs {
+                let Some(node) = node_ref.deref_mut(document) else {
+                    if scope_accumulator.as_ref().contains(node_ref) {
+                        let _ = scope_accumulator.make_mut().remove(node_ref);
+                        trigger_root = true;
+                    }
+
+                    continue;
+                };
+
+                match (
+                    node.is_scope(),
+                    scope_accumulator.as_ref().contains(node_ref),
+                ) {
+                    (true, false) => {
+                        let _ = scope_accumulator.make_mut().insert(*node_ref);
+                        trigger_root = true;
+                    }
+
+                    (false, true) => {
+                        let _ = scope_accumulator.make_mut().remove(node_ref);
+                        trigger_root = true;
+                    }
+
+                    _ => (),
+                }
+
+                if node.is_scope() {
+                    if !scope_accumulator.as_ref().contains(node_ref) {
+                        let _ = scope_accumulator.make_mut().insert(*node_ref);
+                        trigger_root = true;
+                    }
+                }
+
+                node.initialize(&mut initializer);
+            }
+
+            for error_ref in error_accumulator.clone().as_ref() {
+                if !error_ref.is_valid_ref(document) {
+                    let _ = error_accumulator.make_mut().remove(&error_ref);
+                    trigger_root = true;
+                }
+            }
+
+            for error_ref in report.error_refs {
+                match error_ref.is_valid_ref(document) {
+                    true => {
+                        if !error_accumulator.as_ref().contains(&error_ref) {
+                            let _ = error_accumulator.make_mut().insert(error_ref);
+                            trigger_root = true;
+                        }
+                    }
+
+                    false => {
+                        if error_accumulator.as_ref().contains(&error_ref) {
+                            let _ = error_accumulator.make_mut().remove(&error_ref);
+                            trigger_root = true;
+                        }
+                    }
+                }
+            }
+
+            let mut invalidator = FeatureInvalidator {
+                id,
+                records: records.deref_mut(),
+            };
+
+            if trigger_root {
+                //todo this action will invalidate entire root node semantics.
+                //     consider introducing additional feature markers for global triggers only.
+                document.root().invalidate(&mut invalidator);
+            }
+
+            for node_ref in &report.node_refs {
+                let Some(node) = node_ref.deref(document) else {
+                    continue;
+                };
+
+                node.invalidate(&mut invalidator);
+            }
+
+            self.analyzer().database.commit();
+
+            report.node_refs
+        };
+
+        if !N::has_scopes() {
+            return Ok(());
+        }
+
+        if mutations.is_empty() {
+            return Ok(());
+        }
+
+        let Some(guard) = self.analyzer().docs.get(id) else {
+            return Ok(());
+        };
+
+        let DocEntry { document, .. } = guard.deref();
+
+        if mutations.is_empty() {
+            return Ok(());
+        }
+
+        let mut context = AttrContext::new(self.analyzer(), self.revision(), {
+            static DUMMY: Lazy<Latch> = Lazy::new(Latch::new);
+
+            #[cfg(debug_assertions)]
+            if DUMMY.get_relaxed() {
+                system_panic!("Dummy handle cancelled");
+            }
+
+            &DUMMY
+        });
+
+        let mut scope_refs = HashSet::with_capacity_and_hasher(1, S::default());
+
+        for node_ref in &mutations {
+            let Some(node) = node_ref.deref(document) else {
+                continue;
+            };
+
+            let scope_attr = node.scope_attr()?;
+
+            let scope_ref = scope_attr.read(&mut context)?.scope_ref;
+            context.reset_deps();
+
+            if scope_ref.is_nil() {
+                continue;
+            }
+
+            let _ = scope_refs.insert(scope_ref);
+        }
+
+        if scope_refs.is_empty() {
+            return Ok(());
+        }
+
+        let Some(mut records) = self.analyzer().database.records.get_mut(id) else {
+            // Safety:
+            //   1. Records are always in sync with documents.
+            //   2. Document is locked.
+            unsafe { debug_unreachable!("Missing database entry.") }
+        };
+
+        let mut invalidator = FeatureInvalidator {
+            id,
+            records: records.deref_mut(),
+        };
+
+        for node_ref in scope_refs {
+            let Some(node) = node_ref.deref(document) else {
+                continue;
+            };
+
+            node.invalidate(&mut invalidator);
+        }
+
+        self.analyzer().database.commit();
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn remove_doc(&mut self, id: Id) -> bool {
+        if !self.analyzer().docs.remove(id) {
+            return false;
+        }
+
+        if !self.analyzer().database.records.remove(id) {
+            // Safety: records are always in sync with documents.
+            unsafe { debug_unreachable!("Missing database entry.") }
+        }
+
+        self.analyzer().database.commit();
+
+        true
+    }
+}
+
+pub trait SemanticAccess<'a, N: Grammar, S: SyncBuildHasher>: AbstractTask<'a, N, S> {}
+
+pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher>: TaskSealed<'a, N, S> {
     fn handle(&self) -> &'a Latch;
 
     #[inline(always)]
@@ -62,439 +452,71 @@ pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher> {
 
         Ok(())
     }
-}
 
-pub(super) enum Exclusivity {
-    NonExclusive,
-    Exclusive,
-}
-
-pub(super) struct TaskManager<S> {
-    state: Mutex<State<S>>,
-    notifiers: Notifiers,
-}
-
-impl<S: SyncBuildHasher> TaskManager<S> {
     #[inline(always)]
-    pub(super) fn new() -> Self {
-        Self {
-            state: Mutex::new(State {
-                stage: Stage::Mutation {
-                    mutation_tasks: new_tasks_set(),
-                },
-                pending: Pending {
-                    analysis: 0,
-                    mutations: 0,
-                    exclusive: 0,
-                },
-            }),
-            notifiers: Notifiers {
-                ready_for_analysis: Condvar::new(),
-                ready_for_mutation: Condvar::new(),
-                ready_for_exclusive: Condvar::new(),
-            },
-        }
+    fn read_doc<'b>(&'b self, id: Id) -> AnalysisResult<DocumentReadGuard<'b, N, S>>
+    where
+        'a: 'b,
+    {
+        let Some(guard) = self.analyzer().docs.get(id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        Ok(DocumentReadGuard::from(guard))
     }
 
     #[inline(always)]
-    pub(super) fn interrupt(&self, tasks_mask: u8) {
-        self.lock_state().interrupt(tasks_mask);
+    fn try_read_doc<'b>(&'b self, id: Id) -> Option<DocumentReadGuard<N, S>>
+    where
+        'a: 'b,
+    {
+        Some(DocumentReadGuard::from(self.analyzer().docs.try_get(id)?))
     }
 
     #[inline(always)]
-    pub(super) fn acquire_analysis(&self, handle: &Latch, lock: bool) -> AnalysisResult<()> {
-        let mut state_guard = self.lock_state();
+    fn snapshot_scopes(&self, id: Id) -> AnalysisResult<Shared<HashSet<NodeRef, S>>> {
+        let Some(guard) = self.analyzer().docs.get(id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
 
-        state_guard.pending.analysis += 1;
-
-        loop {
-            self.transit(&mut state_guard);
-
-            let state = state_guard.deref_mut();
-
-            let Stage::Analysis { analysis_tasks } = &mut state.stage else {
-                if !lock {
-                    state.pending.analysis -= 1;
-
-                    return Err(AnalysisError::Interrupted);
-                }
-
-                state_guard = self
-                    .notifiers
-                    .ready_for_analysis
-                    .wait(state_guard)
-                    .unwrap_or_else(|poison| poison.into_inner());
-
-                continue;
-            };
-
-            state.pending.analysis -= 1;
-
-            if !analysis_tasks.insert(handle.clone()) {
-                return Err(AnalysisError::DuplicateHandle);
-            }
-
-            return Ok(());
-        }
+        Ok(guard.scope_accumulator.clone())
     }
 
     #[inline(always)]
-    pub(super) fn acquire_exclusive(&self, handle: &Latch, lock: bool) -> AnalysisResult<()> {
-        let mut state_guard = self.lock_state();
+    fn snapshot_errors(&self, id: Id) -> AnalysisResult<Shared<HashSet<ErrorRef, S>>> {
+        let Some(guard) = self.analyzer().docs.get(id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
 
-        state_guard.pending.exclusive += 1;
-
-        loop {
-            self.transit(&mut state_guard);
-
-            let state = state_guard.deref_mut();
-
-            let Stage::Exclusive { exclusive_task } = &mut state.stage else {
-                if !lock {
-                    state.pending.exclusive -= 1;
-
-                    return Err(AnalysisError::Interrupted);
-                }
-
-                state_guard = self
-                    .notifiers
-                    .ready_for_analysis
-                    .wait(state_guard)
-                    .unwrap_or_else(|poison| poison.into_inner());
-
-                continue;
-            };
-
-            state.pending.exclusive -= 1;
-
-            return match exclusive_task {
-                Some(current) if current == handle => Err(AnalysisError::DuplicateHandle),
-
-                None => {
-                    *exclusive_task = Some(handle.clone());
-
-                    Ok(())
-                }
-
-                _ => continue,
-            };
-        }
+        Ok(guard.error_accumulator.clone())
     }
 
     #[inline(always)]
-    pub(super) fn acquire_mutation(&self, handle: &Latch, lock: bool) -> AnalysisResult<()> {
-        let mut state_guard = self.lock_state();
-
-        state_guard.pending.mutations += 1;
-
-        loop {
-            self.transit(&mut state_guard);
-
-            let state = state_guard.deref_mut();
-
-            let Stage::Mutation { mutation_tasks } = &mut state.stage else {
-                if !lock {
-                    state.pending.mutations -= 1;
-
-                    return Err(AnalysisError::Interrupted);
-                }
-
-                state_guard = self
-                    .notifiers
-                    .ready_for_analysis
-                    .wait(state_guard)
-                    .unwrap_or_else(|poison| poison.into_inner());
-
-                continue;
-            };
-
-            state.pending.mutations -= 1;
-
-            if !mutation_tasks.insert(handle.clone()) {
-                return Err(AnalysisError::DuplicateHandle);
-            }
-
-            return Ok(());
-        }
+    fn contains_doc(&self, id: Id) -> bool {
+        self.analyzer().docs.contains(id)
     }
 
     #[inline(always)]
-    pub(super) fn release_analysis(&self, handle: &Latch) {
-        let mut state_guard = self.lock_state();
+    fn is_doc_mutable(&self, id: Id) -> bool {
+        let Some(guard) = self.analyzer().docs.get(id) else {
+            return false;
+        };
 
-        match &mut state_guard.stage {
-            Stage::Analysis { analysis_tasks } => {
-                if !analysis_tasks.remove(handle) {
-                    system_panic!("Missing handle.");
-                }
-
-                if analysis_tasks.is_empty() {
-                    analysis_tasks.shrink_to(TASKS_CAPACITY);
-                }
-            }
-
-            Stage::Interruption { pending } => {
-                *pending = match pending.checked_sub(1) {
-                    Some(counter) => counter,
-                    None => {
-                        system_panic!("Interruption counter mismatch.");
-
-                        // Safety: system_panic interrupts thread.
-                        unsafe { debug_unreachable!("Life after panic.") }
-                    }
-                };
-
-                if *pending > 0 {
-                    return;
-                }
-            }
-
-            _ => system_panic!("Stage mismatch."),
-        }
-
-        self.transit(&mut state_guard);
+        guard.document.is_mutable()
     }
 
     #[inline(always)]
-    pub(super) fn release_exclusive(&self, handle: &Latch) {
-        let mut state_guard = self.lock_state();
+    fn is_doc_immutable(&self, id: Id) -> bool {
+        let Some(guard) = self.analyzer().docs.get(id) else {
+            return false;
+        };
 
-        match &mut state_guard.stage {
-            Stage::Exclusive { exclusive_task } => {
-                let exclusive_task = take(exclusive_task);
-
-                if exclusive_task.as_ref() != Some(handle) {
-                    system_panic!("Missing handle.");
-                }
-            }
-
-            Stage::Interruption { pending } => {
-                *pending = match pending.checked_sub(1) {
-                    Some(counter) => counter,
-                    None => {
-                        system_panic!("Interruption counter mismatch.");
-
-                        // Safety: system_panic interrupts thread.
-                        unsafe { debug_unreachable!("Life after panic.") }
-                    }
-                };
-
-                if *pending > 0 {
-                    return;
-                }
-            }
-
-            _ => system_panic!("Stage mismatch."),
-        }
-
-        self.transit(&mut state_guard);
-    }
-
-    #[inline(always)]
-    pub(super) fn release_mutation(&self, handle: &Latch) {
-        let mut state_guard = self.lock_state();
-
-        match &mut state_guard.stage {
-            Stage::Mutation { mutation_tasks } => {
-                if !mutation_tasks.remove(handle) {
-                    system_panic!("Missing handle.");
-                }
-
-                if mutation_tasks.is_empty() {
-                    mutation_tasks.shrink_to(TASKS_CAPACITY);
-                }
-            }
-
-            Stage::Interruption { pending } => {
-                *pending = match pending.checked_sub(1) {
-                    Some(counter) => counter,
-                    None => {
-                        system_panic!("Interruption counter mismatch.");
-
-                        // Safety: system_panic interrupts thread.
-                        unsafe { debug_unreachable!("Life after panic.") }
-                    }
-                };
-
-                if *pending > 0 {
-                    return;
-                }
-            }
-
-            _ => system_panic!("Stage mismatch."),
-        }
-
-        self.transit(&mut state_guard);
-    }
-
-    #[inline(always)]
-    fn transit(&self, state_guard: &mut MutexGuard<State<S>>) {
-        state_guard.interrupt(0);
-        state_guard.transit(&self.notifiers);
-    }
-
-    #[inline(always)]
-    fn lock_state(&self) -> MutexGuard<State<S>> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
+        guard.document.is_mutable()
     }
 }
 
-struct State<S> {
-    stage: Stage<S>,
-    pending: Pending,
-}
+pub trait TaskSealed<'a, N: Grammar, S: SyncBuildHasher> {
+    fn analyzer(&self) -> &'a Analyzer<N, S>;
 
-impl<S: SyncBuildHasher> State<S> {
-    #[inline(always)]
-    fn interrupt(&mut self, force_mask: u8) {
-        match &mut self.stage {
-            Stage::Analysis { analysis_tasks } => {
-                if force_mask & TASKS_ANALYSIS == 0 {
-                    if analysis_tasks.is_empty() {
-                        return;
-                    }
-
-                    if self.pending.mutations == 0 && self.pending.exclusive == 0 {
-                        return;
-                    }
-                }
-
-                let analysis_tasks = take(analysis_tasks);
-
-                self.stage = Stage::Interruption {
-                    pending: analysis_tasks.len(),
-                };
-
-                for handle in analysis_tasks {
-                    handle.set();
-                }
-            }
-
-            Stage::Exclusive { exclusive_task } => {
-                if force_mask & TASKS_EXCLUSIVE == 0 {
-                    if exclusive_task.is_none() {
-                        return;
-                    }
-
-                    if self.pending.mutations == 0 {
-                        return;
-                    }
-                }
-
-                let Some(handle) = take(exclusive_task) else {
-                    self.stage = Stage::Interruption { pending: 0 };
-                    return;
-                };
-
-                self.stage = Stage::Interruption { pending: 1 };
-
-                handle.set();
-            }
-
-            Stage::Mutation { mutation_tasks } => {
-                if force_mask & TASKS_MUTATION == 0 {
-                    return;
-                }
-
-                let mutation_tasks = take(mutation_tasks);
-
-                self.stage = Stage::Interruption {
-                    pending: mutation_tasks.len(),
-                };
-
-                for handle in mutation_tasks {
-                    handle.set();
-                }
-            }
-
-            Stage::Interruption { .. } => {}
-        }
-    }
-
-    #[inline(always)]
-    fn transit(&mut self, notifiers: &Notifiers) {
-        if self.stage.is_locked() {
-            return;
-        }
-
-        if self.pending.mutations > 0 {
-            if let Stage::Mutation { .. } = &self.stage {
-                return;
-            }
-
-            self.stage = Stage::Mutation {
-                mutation_tasks: new_tasks_set(),
-            };
-
-            notifiers.ready_for_mutation.notify_all();
-
-            return;
-        }
-
-        if self.pending.exclusive > 0 {
-            if let Stage::Exclusive { .. } = &self.stage {
-                return;
-            }
-
-            self.stage = Stage::Exclusive {
-                exclusive_task: None,
-            };
-
-            notifiers.ready_for_exclusive.notify_one();
-
-            return;
-        }
-
-        if self.pending.analysis > 0 {
-            if let Stage::Analysis { .. } = &self.stage {
-                return;
-            }
-
-            self.stage = Stage::Analysis {
-                analysis_tasks: new_tasks_set(),
-            };
-
-            notifiers.ready_for_analysis.notify_all();
-
-            return;
-        }
-    }
-}
-
-enum Stage<S> {
-    Analysis { analysis_tasks: HashSet<Latch, S> },
-    Exclusive { exclusive_task: Option<Latch> },
-    Mutation { mutation_tasks: HashSet<Latch, S> },
-    Interruption { pending: usize },
-}
-
-impl<S: SyncBuildHasher> Stage<S> {
-    #[inline(always)]
-    fn is_locked(&self) -> bool {
-        match self {
-            Stage::Analysis { analysis_tasks } => !analysis_tasks.is_empty(),
-            Stage::Exclusive { exclusive_task } => exclusive_task.is_some(),
-            Stage::Mutation { mutation_tasks } => !mutation_tasks.is_empty(),
-            Stage::Interruption { pending } => *pending > 0,
-        }
-    }
-}
-
-struct Notifiers {
-    ready_for_analysis: Condvar,
-    ready_for_exclusive: Condvar,
-    ready_for_mutation: Condvar,
-}
-
-struct Pending {
-    analysis: usize,
-    exclusive: usize,
-    mutations: usize,
-}
-
-#[inline(always)]
-fn new_tasks_set<S: SyncBuildHasher>() -> HashSet<Latch, S> {
-    HashSet::with_capacity_and_hasher(TASKS_CAPACITY, S::default())
+    fn revision(&self) -> Revision;
 }

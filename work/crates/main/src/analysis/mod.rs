@@ -35,35 +35,41 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod analysis;
 mod analyzer;
 mod attribute;
+mod compute;
 mod database;
+mod error;
 mod features;
 mod grammar;
+mod manager;
 mod memo;
-mod mutation;
 mod record;
-mod result;
 mod scope;
 mod semantics;
 mod signal;
 mod table;
 mod tasks;
-mod validation;
 
 pub use crate::analysis::{
-    analysis::AnalysisTask,
     analyzer::{Analyzer, DocumentReadGuard, Revision},
-    attribute::{Attr, AttrContext, AttrReadGuard, AttrRef, Computable, NIL_ATTR_REF},
-    features::{AbstractFeature, Feature},
+    attribute::{Attr, AttrRef, NIL_ATTR_REF},
+    compute::{AttrContext, AttrReadGuard, Computable},
+    error::{AnalysisError, AnalysisResult, AnalysisResultEx},
+    features::{AbstractFeature, Feature, FeatureInitializer, FeatureInvalidator},
     grammar::Grammar,
-    mutation::{FeatureInitializer, FeatureInvalidator, MutationTask},
-    result::{AnalysisError, AnalysisResult},
+    manager::{TASKS_ALL, TASKS_ANALYSIS, TASKS_EXCLUSIVE, TASKS_MUTATION},
     scope::{Scope, ScopeAttr},
     semantics::Semantics,
     signal::{Lifecycle, Signal},
-    tasks::{AbstractTask, TASKS_ALL, TASKS_ANALYSIS, TASKS_EXCLUSIVE, TASKS_MUTATION},
+    tasks::{
+        AbstractTask,
+        AnalysisTask,
+        ExclusiveTask,
+        MutationAccess,
+        MutationTask,
+        SemanticAccess,
+    },
 };
 
 #[cfg(test)]
@@ -78,6 +84,7 @@ mod tests {
             AttrContext,
             Computable,
             Feature,
+            MutationAccess,
             Semantics,
         },
         lexis::{SimpleToken, TokenRef},
@@ -124,7 +131,7 @@ mod tests {
         total_sum: Attr<TotalSumAttr>,
     }
 
-    #[derive(PartialEq, Eq)]
+    #[derive(PartialEq, Eq, Clone)]
     struct TotalSumAttr {
         value: usize,
     }
@@ -138,10 +145,7 @@ mod tests {
         where
             Self: Sized,
         {
-            let doc = context
-                .analyzer()
-                .read_document(context.node_ref().id)
-                .unwrap();
+            let doc = context.read_doc(context.node_ref().id).unwrap();
 
             let Some(TestNode::Root { sums, .. }) = context.node_ref().deref(doc.deref()) else {
                 panic!()
@@ -154,10 +158,7 @@ mod tests {
                     continue;
                 };
 
-                let sum = semantics
-                    .attr_ref()
-                    .query::<NumSumAttr, _>(context)
-                    .unwrap();
+                let sum = semantics.attr_ref().read::<NumSumAttr, _>(context).unwrap();
 
                 value += sum.sum
             }
@@ -166,7 +167,7 @@ mod tests {
         }
     }
 
-    #[derive(PartialEq, Eq)]
+    #[derive(PartialEq, Eq, Clone)]
     struct NumSumAttr {
         sum: usize,
     }
@@ -180,10 +181,7 @@ mod tests {
         where
             Self: Sized,
         {
-            let doc = context
-                .analyzer()
-                .read_document(context.node_ref().id)
-                .unwrap();
+            let doc = context.read_doc(context.node_ref().id).unwrap();
 
             let Some(TestNode::Sum { numbers, .. }) = context.node_ref().deref(doc.deref()) else {
                 panic!()
@@ -209,16 +207,16 @@ mod tests {
 
         let id = {
             let handle = Latch::new();
-            let mutation = analyzer.mutate(&handle).unwrap();
+            let mut mutation = analyzer.mutate(&handle).unwrap();
 
-            mutation.add_mutable_document("(1+ 2) (8 + 2)")
+            mutation.add_mutable_doc("(1+ 2) (8 + 2)")
         };
 
         {
             let handle = Latch::new();
             let analysis = analyzer.analyze(&handle).unwrap();
 
-            let doc = analysis.analyzer().read_document(id).unwrap();
+            let doc = analysis.read_doc(id).unwrap();
 
             assert!(doc.is_mutable());
 
@@ -229,32 +227,31 @@ mod tests {
                 .unwrap()
                 .attr_ref();
 
-            let total_sum = analysis.read_attr_ref::<TotalSumAttr>(total_sum).unwrap();
+            let (_, total_sum) = total_sum.snapshot::<TotalSumAttr, _>(&analysis).unwrap();
 
             assert_eq!(total_sum.value, 13);
         }
 
         {
             let handle = Latch::new();
-            let mutation = analyzer.mutate(&handle).unwrap();
+            let mut mutation = analyzer.mutate(&handle).unwrap();
 
-            let _ = mutation.write_to_document(id, 4..5, "0 + 1").unwrap();
+            let _ = mutation.write_to_doc(id, 4..5, "0 + 1").unwrap();
         }
 
         {
             let handle = Latch::new();
             let analysis = analyzer.analyze(&handle).unwrap();
 
-            let doc = analysis.analyzer().read_document(id).unwrap();
+            let doc = analysis.read_doc(id).unwrap();
 
-            let Some(TestNode::Root { semantics, .. }) = doc.root_node_ref().deref(doc.deref())
-            else {
-                panic!();
+            let TestNode::Root { semantics, .. } = doc.root() else {
+                panic!()
             };
 
             let total_sum = &semantics.get().unwrap().total_sum;
 
-            let total_sum = analysis.read_attr(total_sum).unwrap();
+            let (_, total_sum) = total_sum.snapshot(&analysis).unwrap();
 
             assert_eq!(total_sum.value, 12);
         }

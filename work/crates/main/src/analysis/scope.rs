@@ -95,7 +95,7 @@ impl<N: Grammar> Computable for Scope<N> {
         Self: Sized,
     {
         let node_ref = context.node_ref();
-        let document = context.analyzer().read_document(node_ref.id)?;
+        let document = context.read_doc(node_ref.id)?;
 
         let Some(node) = node_ref.deref(document.deref()) else {
             return Ok(Self::default());
@@ -114,6 +114,6 @@ impl<N: Grammar> Computable for Scope<N> {
             });
         }
 
-        Ok(*parent.scope_attr()?.query(context)?.deref())
+        Ok(*parent.scope_attr()?.read(context)?.deref())
     }
 }

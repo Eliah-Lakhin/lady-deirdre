@@ -45,6 +45,6 @@ mod storage;
 pub use crate::units::{
     document::Document,
     immutable::ImmutableUnit,
-    mutable::{MutableUnit, Mutations},
+    mutable::{MutableUnit, WatchReport},
     unit::{CompilationUnit, Lexis, Syntax},
 };

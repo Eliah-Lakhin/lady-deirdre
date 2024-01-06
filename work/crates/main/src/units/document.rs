@@ -52,7 +52,7 @@ use crate::{
     },
     std::*,
     syntax::{Cluster, Node, NodeRef, SyntaxTree},
-    units::{CompilationUnit, ImmutableUnit, MutableUnit, Mutations},
+    units::{CompilationUnit, ImmutableUnit, MutableUnit, WatchReport},
 };
 
 pub enum Document<N: Node> {
@@ -343,9 +343,9 @@ impl<N: Node> Document<N> {
     }
 
     #[inline(always)]
-    pub fn mutations(&mut self) -> Option<Mutations<N>> {
+    pub fn report(&mut self) -> Option<WatchReport> {
         match self {
-            Self::Mutable(unit) => Some(unit.mutations()),
+            Self::Mutable(unit) => unit.report(),
             Self::Immutable(..) => None,
         }
     }

@@ -123,6 +123,7 @@ impl Latch {
         Self { data }
     }
 
+    //todo consider renaming
     pub fn get(&self) -> bool {
         // Safety: Latch owns a pointer to valid data leaked from the Box.
         let state = unsafe { self.data.as_ref() };
@@ -132,6 +133,7 @@ impl Latch {
         value & CHECK_MASK == CHECK_MASK
     }
 
+    //todo consider renaming
     pub fn get_relaxed(&self) -> bool {
         // Safety: Latch owns a pointer to valid data leaked from the Box.
         let state = unsafe { self.data.as_ref() };
@@ -141,6 +143,7 @@ impl Latch {
         value & CHECK_MASK == CHECK_MASK
     }
 
+    //todo consider renaming
     pub fn set(&self) {
         // Safety: Latch owns a pointer to valid data leaked from the Box.
         let state = unsafe { self.data.as_ref() };

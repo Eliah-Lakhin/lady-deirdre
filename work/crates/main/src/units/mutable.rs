@@ -58,7 +58,17 @@ use crate::{
     },
     report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
-    syntax::{Cluster, ClusterRef, NoSyntax, Node, NodeRef, SyntaxTree, NON_RULE, ROOT_RULE},
+    syntax::{
+        Cluster,
+        ClusterRef,
+        ErrorRef,
+        NoSyntax,
+        Node,
+        NodeRef,
+        SyntaxTree,
+        NON_RULE,
+        ROOT_RULE,
+    },
     units::{
         mutable::{
             chars::MutableCharIter,
@@ -72,7 +82,7 @@ use crate::{
     },
 };
 
-const UPDATES_CAPACITY: usize = 100;
+const REPORT_CAPACITY: usize = 100;
 
 /// An incrementally managed compilation unit.
 ///
@@ -319,8 +329,7 @@ pub struct MutableUnit<N: Node> {
     tree: Tree<N>,
     token_count: TokenCount,
     pub(super) references: References<N>,
-    updates: StdSet<NodeRef>,
-    watch: bool,
+    watch: Option<WatchReport>,
     lines: LineIndex,
 }
 
@@ -583,9 +592,8 @@ impl<N: Node> Default for MutableUnit<N> {
         let id = Id::new();
         let mut tree = Tree::default();
         let mut references = References::default();
-        let mut updates = StdSet::new_std_set();
 
-        let root_cluster = Self::initial_parse(id, &mut tree, &mut references, &mut updates, false);
+        let root_cluster = Self::initial_parse(id, &mut tree, &mut references, &mut None);
 
         Self {
             id,
@@ -593,8 +601,7 @@ impl<N: Node> Default for MutableUnit<N> {
             tree,
             token_count: 0,
             references,
-            updates,
-            watch: false,
+            watch: None,
             lines: LineIndex::new(),
         }
     }
@@ -687,13 +694,12 @@ impl<N: Node> MutableUnit<N> {
             )
         };
 
-        let mut updates = match watch {
-            true => StdSet::new_std_set_with_capacity(UPDATES_CAPACITY),
-            false => StdSet::new_std_set(),
+        let mut watch = match watch {
+            true => Some(WatchReport::new()),
+            false => None,
         };
 
-        let root_cluster =
-            MutableUnit::initial_parse(id, &mut tree, &mut references, &mut updates, watch);
+        let root_cluster = MutableUnit::initial_parse(id, &mut tree, &mut references, &mut watch);
 
         Self {
             id,
@@ -701,7 +707,6 @@ impl<N: Node> MutableUnit<N> {
             tree,
             token_count,
             references,
-            updates,
             watch,
             lines,
         }
@@ -787,15 +792,34 @@ impl<N: Node> MutableUnit<N> {
             node_entry: Entry::Primary,
         };
 
-        if self.watch {
-            self.updates.insert(cover);
+        if let Some(watch) = &mut self.watch {
+            watch.node_refs.push(cover);
         }
 
         cover
     }
 
-    pub fn mutations(&mut self) -> Mutations<'_, N> {
-        Mutations { unit: self }
+    pub fn watch(&mut self, enabled: bool) {
+        if enabled && self.watch.is_none() {
+            self.watch = Some(WatchReport::new());
+            return;
+        }
+
+        if !enabled && self.watch.is_some() {
+            self.watch = None;
+            return;
+        }
+    }
+
+    pub fn watches(&self) -> bool {
+        self.watch.is_some()
+    }
+
+    #[inline(always)]
+    pub fn report(&mut self) -> Option<WatchReport> {
+        let report = self.watch.as_mut()?;
+
+        Some(replace(report, WatchReport::new()))
     }
 
     #[inline(always)]
@@ -1265,11 +1289,6 @@ impl<N: Node> MutableUnit<N> {
                 }
             }
 
-            let updates = match self.watch {
-                false => None,
-                true => Some(&mut self.updates),
-            };
-
             match rule == ROOT_RULE {
                 false => {
                     let cluster_entry = unsafe {
@@ -1283,7 +1302,7 @@ impl<N: Node> MutableUnit<N> {
                             self.id,
                             &mut self.tree,
                             &mut self.references,
-                            updates,
+                            self.watch.as_mut(),
                             rule,
                             cover.span.start,
                             cover.chunk_cursor,
@@ -1309,7 +1328,7 @@ impl<N: Node> MutableUnit<N> {
                             self.id,
                             &mut self.tree,
                             &mut self.references,
-                            updates,
+                            self.watch.as_mut(),
                             ROOT_RULE,
                             0,
                             head,
@@ -1348,8 +1367,7 @@ impl<N: Node> MutableUnit<N> {
         id: Id,
         tree: &'unit mut Tree<N>,
         references: &'unit mut References<N>,
-        updates: &'unit mut StdSet<NodeRef>,
-        watch: bool,
+        watch: &'unit mut Option<WatchReport>,
     ) -> Cluster<N> {
         let head = tree.first();
 
@@ -1358,10 +1376,7 @@ impl<N: Node> MutableUnit<N> {
                 id,
                 tree,
                 references,
-                match watch {
-                    true => Some(updates),
-                    false => None,
-                },
+                watch.as_mut(),
                 ROOT_RULE,
                 0,
                 head,
@@ -1369,79 +1384,17 @@ impl<N: Node> MutableUnit<N> {
             )
         };
 
-        if watch {
+        if let Some(watch) = watch {
             let cover = NodeRef {
                 id,
                 cluster_entry: Entry::Primary,
                 node_entry: Entry::Primary,
             };
 
-            let _ = updates.insert(cover);
+            watch.node_refs.push(cover);
         }
 
         cluster_cache.cluster
-    }
-}
-
-#[repr(transparent)]
-pub struct Mutations<'unit, N: Node> {
-    unit: &'unit mut MutableUnit<N>,
-}
-
-impl<'unit, N: Node> Debug for Mutations<'unit, N> {
-    #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter.write_str("Mutations ")?;
-
-        let mut debug_set = formatter.debug_set();
-
-        for update in &self.unit.updates {
-            debug_set.entry(update);
-        }
-
-        debug_set.finish()
-    }
-}
-
-impl<'a, 'unit, N: Node> IntoIterator for &'a Mutations<'unit, N> {
-    type Item = &'a NodeRef;
-    type IntoIter = StdSetIter<'a, NodeRef>;
-
-    #[inline(always)]
-    fn into_iter(self) -> Self::IntoIter {
-        self.unit.updates.iter()
-    }
-}
-
-impl<'unit, N: Node> Mutations<'unit, N> {
-    #[inline(always)]
-    pub fn unit(&self) -> &MutableUnit<N> {
-        self.unit
-    }
-
-    #[inline(always)]
-    pub fn watch(&mut self, watch: bool) {
-        self.unit.watch = watch;
-    }
-
-    #[inline(always)]
-    pub fn iter(&self) -> impl Iterator<Item = &NodeRef> + '_ {
-        self.unit.updates.iter()
-    }
-
-    #[inline(always)]
-    pub fn contains(&self, node_ref: &NodeRef) -> bool {
-        self.unit.updates.contains(node_ref)
-    }
-
-    #[inline(always)]
-    pub fn take(&mut self) -> Vec<NodeRef> {
-        self.unit.updates.std_set_drain(UPDATES_CAPACITY)
-    }
-
-    #[inline(always)]
-    pub fn flush(&mut self) {
-        self.unit.updates.clear();
     }
 }
 
@@ -1467,6 +1420,21 @@ impl<T: Token> TokenBuffer<T> {
         N: Node<Token = T>,
     {
         MutableUnit::from_token_buffer(self, false)
+    }
+}
+
+pub struct WatchReport {
+    pub node_refs: Vec<NodeRef>,
+    pub error_refs: Vec<ErrorRef>,
+}
+
+impl WatchReport {
+    #[inline(always)]
+    fn new() -> Self {
+        Self {
+            node_refs: Vec::with_capacity(REPORT_CAPACITY),
+            error_refs: Vec::with_capacity(REPORT_CAPACITY),
+        }
     }
 }
 

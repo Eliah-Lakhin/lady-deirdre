@@ -156,7 +156,7 @@ impl<T> AsRef<T> for Shared<T> {
         // Safety:
         //   1. Shared owns a pointer to valid data leaked from the Box.
         //   2. If there are no other instances of Shared, immutable access can be granted.
-        //   3. If there are more than one instance, non of them acquire mutable access
+        //   3. If there are more than one instance, none of them acquire mutable access
         //      because of the inner counter.
         let inner = unsafe { self.inner.as_ref() };
 
@@ -191,8 +191,8 @@ impl<T> Shared<T> {
         if counter == 1 {
             // Safety:
             //   1. Shared owns a pointer to valid data leaked from the Box.
-            //   2. This ownership is unique because because of the counter value.
-            //   3. No new Shared instances can be created in between,
+            //   2. This ownership is unique because of the counter value.
+            //   3. No new Shared clones may be created in between,
             //      because this Shared instance is borrowed mutably.
             let inner = unsafe { self.inner.as_mut() };
 
@@ -222,7 +222,7 @@ impl<T> Shared<T> {
         // Safety:
         //   1. Shared owns a pointer to valid data leaked from the Box.
         //   2. Since there are no active borrows into the inner data (upheld by the caller).
-        //   3. No new Shared instances can be created in between,
+        //   3. No new Shared clones may be created in between,
         //      because this Shared instance is borrowed mutably.
         let inner = unsafe { self.inner.as_mut() };
 
@@ -259,7 +259,7 @@ impl<T> Shared<T> {
         // Safety:
         //   1. Shared owns a pointer to valid data leaked from the Box.
         //   2. Owner uniqueness ensured above.
-        //   3. No new Shared instances can be created in between,
+        //   3. No new Shared clones may be created in between,
         //      because this Shared instance is borrowed mutably.
         let inner = unsafe { self.inner.as_mut() };
 
@@ -293,7 +293,7 @@ impl<T> Shared<T> {
     }
 
     #[inline(always)]
-    fn addr(&self) -> usize {
+    pub fn addr(&self) -> usize {
         self.inner.as_ptr() as usize
     }
 }

@@ -38,24 +38,26 @@
 use crate::{
     analysis::{
         database::Database,
-        mutation::MutationTask,
+        manager::TaskManager,
         table::{UnitTable, UnitTableReadGuard},
-        tasks::TaskManager,
-        AnalysisError,
         AnalysisResult,
         AnalysisTask,
+        ExclusiveTask,
+        FeatureInitializer,
         Grammar,
+        MutationTask,
     },
-    arena::Id,
+    arena::{Identifiable, Repository},
     std::*,
-    sync::{Latch, SyncBuildHasher},
+    sync::{Latch, Shared, SyncBuildHasher},
+    syntax::{ErrorRef, NodeRef, SyntaxTree},
     units::Document,
 };
 
 pub type Revision = u64;
 
 pub struct Analyzer<N: Grammar, S: SyncBuildHasher = RandomState> {
-    pub(super) documents: UnitTable<Document<N>, S>,
+    pub(super) docs: UnitTable<DocEntry<N, S>, S>,
     pub(super) database: Arc<Database<N, S>>,
     pub(super) tasks: TaskManager<S>,
 }
@@ -70,7 +72,7 @@ impl<N: Grammar, S: SyncBuildHasher> Default for Analyzer<N, S> {
 impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
     pub fn for_single_document() -> Self {
         Self {
-            documents: UnitTable::new_single(),
+            docs: UnitTable::new_single(),
             database: Arc::new(Database::new_single()),
             tasks: TaskManager::new(),
         }
@@ -78,7 +80,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
     pub fn for_many_documents() -> Self {
         Self {
-            documents: UnitTable::new_multi(1),
+            docs: UnitTable::new_multi(1),
             database: Arc::new(Database::new_multi()),
             tasks: TaskManager::new(),
         }
@@ -87,92 +89,99 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
     pub fn analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<AnalysisTask<'a, N, S>> {
         self.tasks.acquire_analysis(handle, true)?;
 
-        Ok(AnalysisTask::new_non_exclusive(self, handle))
+        Ok(AnalysisTask::new(self, handle))
     }
 
     pub fn try_analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<AnalysisTask<'a, N, S>> {
         self.tasks.acquire_analysis(handle, false)?;
 
-        Ok(AnalysisTask::new_non_exclusive(self, handle))
+        Ok(AnalysisTask::new(self, handle))
     }
 
     pub fn mutate<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<MutationTask<'a, N, S>> {
         self.tasks.acquire_mutation(handle, true)?;
 
-        Ok(MutationTask::new_non_exclusive(self, handle))
+        Ok(MutationTask::new(self, handle))
     }
 
     pub fn try_mutate<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<MutationTask<'a, N, S>> {
         self.tasks.acquire_mutation(handle, false)?;
 
-        Ok(MutationTask::new_non_exclusive(self, handle))
+        Ok(MutationTask::new(self, handle))
     }
 
-    pub fn mutate_exclusive<'a>(
-        &'a self,
-        handle: &'a Latch,
-    ) -> AnalysisResult<MutationTask<'a, N, S>> {
+    pub fn exclusive<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<ExclusiveTask<'a, N, S>> {
         self.tasks.acquire_exclusive(handle, true)?;
 
-        Ok(MutationTask::new_exclusive(self, handle))
+        Ok(ExclusiveTask::new(self, handle))
     }
 
-    pub fn try_mutate_exclusive<'a>(
+    pub fn try_exclusive<'a>(
         &'a self,
         handle: &'a Latch,
-    ) -> AnalysisResult<MutationTask<'a, N, S>> {
+    ) -> AnalysisResult<ExclusiveTask<'a, N, S>> {
         self.tasks.acquire_exclusive(handle, false)?;
 
-        Ok(MutationTask::new_exclusive(self, handle))
+        Ok(ExclusiveTask::new(self, handle))
     }
 
     pub fn interrupt(&self, tasks_mask: u8) {
         self.tasks.interrupt(tasks_mask);
     }
 
-    #[inline(always)]
-    pub fn read_document(&self, id: Id) -> AnalysisResult<DocumentReadGuard<N, S>> {
-        let Some(guard) = self.documents.get(id) else {
-            return Err(AnalysisError::MissingDocument);
-        };
+    pub(super) fn register_doc(&self, mut document: Document<N>) {
+        let id = document.id();
 
-        Ok(DocumentReadGuard { guard })
-    }
+        let node_refs = document.node_refs().collect::<Vec<_>>();
+        let mut records = Repository::with_capacity(node_refs.len());
+        let mut scopes = HashSet::with_capacity_and_hasher(node_refs.len(), S::default());
 
-    #[inline(always)]
-    pub fn try_read_document(&self, id: Id) -> Option<DocumentReadGuard<N, S>> {
-        Some(DocumentReadGuard {
-            guard: self.documents.try_get(id)?,
-        })
-    }
+        if !node_refs.is_empty() {
+            let mut initializer = FeatureInitializer {
+                id,
+                database: Arc::downgrade(&self.database) as Weak<_>,
+                records: &mut records,
+            };
 
-    #[inline(always)]
-    pub fn contains_document(&self, id: Id) -> bool {
-        self.documents.contains(id)
-    }
+            for node_ref in node_refs {
+                let Some(node) = node_ref.deref_mut(&mut document) else {
+                    continue;
+                };
 
-    #[inline(always)]
-    pub fn is_document_mutable(&self, id: Id) -> bool {
-        let Some(document) = self.documents.get(id) else {
-            return false;
-        };
+                if node.is_scope() {
+                    let _ = scopes.insert(node_ref);
+                }
 
-        document.is_mutable()
-    }
+                node.initialize(&mut initializer);
+            }
 
-    #[inline(always)]
-    pub fn is_document_immutable(&self, id: Id) -> bool {
-        let Some(document) = self.documents.get(id) else {
-            return false;
-        };
+            self.database.commit();
+        }
 
-        document.is_mutable()
+        let errors = document.error_refs().collect();
+
+        // Safety: Ids are globally unique.
+        unsafe {
+            self.docs.insert(
+                id,
+                DocEntry {
+                    document,
+                    scope_accumulator: Shared::new(scopes),
+                    error_accumulator: Shared::new(errors),
+                },
+            );
+        }
+
+        // Safety: records are always in sync with documents.
+        unsafe {
+            self.database.records.insert(id, records);
+        }
     }
 }
 
 #[repr(transparent)]
 pub struct DocumentReadGuard<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
-    guard: UnitTableReadGuard<'a, Document<N>, S>,
+    guard: UnitTableReadGuard<'a, DocEntry<N, S>, S>,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Deref for DocumentReadGuard<'a, N, S> {
@@ -180,13 +189,21 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Deref for DocumentReadGuard<'a, N, S> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        self.guard.deref()
+        &self.guard.deref().document
     }
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> AsRef<Document<N>> for DocumentReadGuard<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> From<UnitTableReadGuard<'a, DocEntry<N, S>, S>>
+    for DocumentReadGuard<'a, N, S>
+{
     #[inline(always)]
-    fn as_ref(&self) -> &Document<N> {
-        self.guard.deref()
+    fn from(guard: UnitTableReadGuard<'a, DocEntry<N, S>, S>) -> Self {
+        Self { guard }
     }
+}
+
+pub(super) struct DocEntry<N: Grammar, S: SyncBuildHasher> {
+    pub(super) document: Document<N>,
+    pub(super) scope_accumulator: Shared<HashSet<NodeRef, S>>,
+    pub(super) error_accumulator: Shared<HashSet<ErrorRef, S>>,
 }

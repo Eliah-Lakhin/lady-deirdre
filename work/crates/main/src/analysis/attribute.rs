@@ -38,14 +38,13 @@
 use crate::{
     analysis::{
         database::AbstractDatabase,
-        record::{Cell, Record},
-        table::UnitTableReadGuard,
+        tasks::TaskSealed,
         AbstractFeature,
-        AbstractTask,
         AnalysisError,
         AnalysisResult,
-        AnalysisTask,
-        Analyzer,
+        AttrContext,
+        AttrReadGuard,
+        Computable,
         Feature,
         FeatureInitializer,
         FeatureInvalidator,
@@ -53,17 +52,15 @@ use crate::{
         MutationTask,
         Revision,
         ScopeAttr,
+        SemanticAccess,
     },
-    arena::{Entry, Id, Identifiable, Repository},
-    report::{debug_unreachable, system_panic},
+    arena::{Entry, Id, Identifiable},
     std::*,
-    sync::{Latch, Lazy, SyncBuildHasher},
-    syntax::{Key, NodeRef, NIL_NODE_REF},
+    sync::SyncBuildHasher,
+    syntax::{Key, NodeRef},
 };
 
 pub static NIL_ATTR_REF: AttrRef = AttrRef::nil();
-
-const DEPS_CAPACITY: usize = 30;
 
 #[repr(transparent)]
 pub struct Attr<C: Computable> {
@@ -228,7 +225,24 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 
 impl<C: Computable> Attr<C> {
     #[inline(always)]
-    pub fn query<'a, S: SyncBuildHasher>(
+    pub fn snapshot<'a, S: SyncBuildHasher>(
+        &self,
+        task: &impl SemanticAccess<'a, C::Node, S>,
+    ) -> AnalysisResult<(Revision, C)>
+    where
+        C: Clone,
+    {
+        let mut reader = AttrContext::new(task.analyzer(), task.revision(), task.handle());
+
+        let result = self.read(&mut reader)?;
+        let revision = result.attr_revision();
+        let data = result.deref().clone();
+
+        Ok((revision, data))
+    }
+
+    #[inline(always)]
+    pub fn read<'a, S: SyncBuildHasher>(
         &self,
         reader: &mut AttrContext<'a, C::Node, S>,
     ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
@@ -291,7 +305,21 @@ impl AttrRef {
     }
 
     #[inline(always)]
-    pub fn query<'a, C: Computable, S: SyncBuildHasher>(
+    pub fn snapshot<'a, C: Computable + Clone, S: SyncBuildHasher>(
+        &self,
+        task: &impl SemanticAccess<'a, C::Node, S>,
+    ) -> AnalysisResult<(Revision, C)> {
+        let mut reader = AttrContext::new(task.analyzer(), task.revision(), task.handle());
+
+        let result = self.read::<C, S>(&mut reader)?;
+        let revision = result.attr_revision();
+        let data = result.deref().clone();
+
+        Ok((revision, data))
+    }
+
+    #[inline(always)]
+    pub fn read<'a, C: Computable, S: SyncBuildHasher>(
         &self,
         reader: &mut AttrContext<'a, C::Node, S>,
     ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
@@ -327,152 +355,6 @@ impl AttrRef {
         };
 
         records.contains(&self.entry)
-    }
-}
-
-pub struct AttrContext<'a, N: Grammar, S: SyncBuildHasher> {
-    analyzer: &'a Analyzer<N, S>,
-    revision: Revision,
-    handle: &'a Latch,
-    node_ref: &'a NodeRef,
-    deps: HashSet<AttrRef, S>,
-}
-
-impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
-    #[inline(always)]
-    pub(super) fn for_analysis_task(task: &AnalysisTask<'a, N, S>) -> Self {
-        Self {
-            analyzer: task.analyzer(),
-            revision: task.db_revision(),
-            handle: task.handle(),
-            node_ref: &NIL_NODE_REF,
-            deps: HashSet::with_capacity_and_hasher(1, S::default()),
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn for_mutation_task(task: &MutationTask<'a, N, S>) -> Self {
-        static DUMMY: Lazy<Latch> = Lazy::new(Latch::new);
-
-        #[cfg(debug_assertions)]
-        if DUMMY.get_relaxed() {
-            system_panic!("Dummy handle cancelled");
-        }
-
-        Self {
-            analyzer: task.analyzer(),
-            revision: task.analyzer().database.revision(),
-            handle: &DUMMY,
-            node_ref: &NIL_NODE_REF,
-            deps: HashSet::with_capacity_and_hasher(1, S::default()),
-        }
-    }
-
-    #[inline(always)]
-    pub fn node_ref(&self) -> &'a NodeRef {
-        self.node_ref
-    }
-
-    #[inline(always)]
-    pub fn analyzer(&self) -> &'a Analyzer<N, S> {
-        self.analyzer
-    }
-
-    #[inline(always)]
-    pub fn proceed(&self) -> AnalysisResult<()> {
-        if self.handle().get_relaxed() {
-            return Err(AnalysisError::Interrupted);
-        }
-
-        Ok(())
-    }
-
-    #[inline(always)]
-    pub(super) fn fork(&self, node_ref: &'a NodeRef) -> AttrContext<'a, N, S> {
-        AttrContext {
-            analyzer: self.analyzer,
-            revision: self.revision,
-            handle: self.handle,
-            node_ref,
-            deps: HashSet::with_capacity_and_hasher(DEPS_CAPACITY, S::default()),
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn handle(&self) -> &'a Latch {
-        self.handle
-    }
-
-    #[inline(always)]
-    pub(super) fn db_revision(&self) -> Revision {
-        self.revision
-    }
-
-    #[inline(always)]
-    pub(super) fn track(&mut self, dep: &AttrRef) {
-        let _ = self.deps.insert(*dep);
-    }
-
-    #[inline(always)]
-    pub(super) fn reset_deps(&mut self) {
-        self.deps.clear();
-    }
-
-    #[inline(always)]
-    pub(super) fn into_deps(self) -> HashSet<AttrRef, S> {
-        self.deps
-    }
-}
-
-pub trait Computable: Send + Sync + 'static {
-    type Node: Grammar;
-
-    fn compute<S: SyncBuildHasher>(
-        context: &mut AttrContext<Self::Node, S>,
-    ) -> AnalysisResult<Self>
-    where
-        Self: Sized;
-}
-
-// Safety: Entries order reflects guards drop semantics.
-#[allow(dead_code)]
-pub struct AttrReadGuard<'a, C: Computable, S: SyncBuildHasher = RandomState> {
-    pub(super) data: &'a C,
-    pub(super) cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-    pub(super) records_guard: UnitTableReadGuard<'a, Repository<Record<C::Node, S>>, S>,
-}
-
-impl<'a, C: Computable + Debug, S: SyncBuildHasher> Debug for AttrReadGuard<'a, C, S> {
-    #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        Debug::fmt(self.data, formatter)
-    }
-}
-
-impl<'a, C: Computable + Display, S: SyncBuildHasher> Display for AttrReadGuard<'a, C, S> {
-    #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        Display::fmt(self.data, formatter)
-    }
-}
-
-impl<'a, C: Computable, S: SyncBuildHasher> Deref for AttrReadGuard<'a, C, S> {
-    type Target = C;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        self.data
-    }
-}
-
-impl<'a, C: Computable, S: SyncBuildHasher> AttrReadGuard<'a, C, S> {
-    #[inline(always)]
-    pub fn attr_revision(&self) -> Revision {
-        let Some(cache) = &self.cell_guard.cache else {
-            unsafe { debug_unreachable!("AttrReadGuard without cache.") }
-        };
-
-        cache.updated_at
     }
 }
 

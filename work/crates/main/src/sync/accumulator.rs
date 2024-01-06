@@ -35,6 +35,8 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+//todo consider removing this module
+
 use crate::{report::debug_unreachable, std::*, sync::Shared};
 
 pub struct Accumulator<T, S = RandomState> {

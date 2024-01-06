@@ -41,16 +41,185 @@ use crate::{
         table::UnitTableReadGuard,
         AnalysisError,
         AnalysisResult,
-        AttrContext,
-        AttrReadGuard,
+        Analyzer,
         AttrRef,
-        Computable,
+        DocumentReadGuard,
         Grammar,
+        Revision,
     },
-    arena::Repository,
+    arena::{Id, Repository},
+    report::debug_unreachable,
     std::*,
-    sync::{Shared, SyncBuildHasher},
+    sync::{Latch, Shared, SyncBuildHasher},
+    syntax::{ErrorRef, NodeRef, NIL_NODE_REF},
 };
+
+const DEPS_CAPACITY: usize = 30;
+
+pub trait Computable: Send + Sync + 'static {
+    type Node: Grammar;
+
+    fn compute<S: SyncBuildHasher>(
+        context: &mut AttrContext<Self::Node, S>,
+    ) -> AnalysisResult<Self>
+    where
+        Self: Sized;
+}
+
+pub struct AttrContext<'a, N: Grammar, S: SyncBuildHasher> {
+    analyzer: &'a Analyzer<N, S>,
+    revision: Revision,
+    handle: &'a Latch,
+    node_ref: &'a NodeRef,
+    deps: HashSet<AttrRef, S>,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, revision: Revision, handle: &'a Latch) -> Self {
+        Self {
+            analyzer,
+            revision,
+            handle,
+            node_ref: &NIL_NODE_REF,
+            deps: HashSet::with_capacity_and_hasher(1, S::default()),
+        }
+    }
+
+    #[inline(always)]
+    pub fn node_ref(&self) -> &'a NodeRef {
+        self.node_ref
+    }
+
+    #[inline(always)]
+    pub fn read_doc(&self, id: Id) -> AnalysisResult<DocumentReadGuard<'a, N, S>> {
+        let Some(guard) = self.analyzer.docs.get(id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        Ok(DocumentReadGuard::from(guard))
+    }
+
+    #[inline(always)]
+    pub fn try_read_doc(&self, id: Id) -> Option<DocumentReadGuard<N, S>> {
+        Some(DocumentReadGuard::from(self.analyzer.docs.try_get(id)?))
+    }
+
+    #[inline(always)]
+    pub fn snapshot_scopes(&self, id: Id) -> AnalysisResult<Shared<HashSet<NodeRef, S>>> {
+        let Some(guard) = self.analyzer.docs.get(id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        Ok(guard.scope_accumulator.clone())
+    }
+
+    #[inline(always)]
+    pub fn snapshot_errors(&self, id: Id) -> AnalysisResult<Shared<HashSet<ErrorRef, S>>> {
+        let Some(guard) = self.analyzer.docs.get(id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        Ok(guard.error_accumulator.clone())
+    }
+
+    #[inline(always)]
+    pub fn contains_doc(&self, id: Id) -> bool {
+        self.analyzer.docs.contains(id)
+    }
+
+    #[inline(always)]
+    pub fn proceed(&self) -> AnalysisResult<()> {
+        if self.handle().get_relaxed() {
+            return Err(AnalysisError::Interrupted);
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(super) fn fork(&self, node_ref: &'a NodeRef) -> AttrContext<'a, N, S> {
+        AttrContext {
+            analyzer: self.analyzer,
+            revision: self.revision,
+            handle: self.handle,
+            node_ref,
+            deps: HashSet::with_capacity_and_hasher(DEPS_CAPACITY, S::default()),
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn handle(&self) -> &'a Latch {
+        self.handle
+    }
+
+    #[inline(always)]
+    pub(super) fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    #[inline(always)]
+    pub(super) fn analyzer(&self) -> &'a Analyzer<N, S> {
+        self.analyzer
+    }
+
+    #[inline(always)]
+    pub(super) fn track(&mut self, dep: &AttrRef) {
+        let _ = self.deps.insert(*dep);
+    }
+
+    #[inline(always)]
+    pub(super) fn reset_deps(&mut self) {
+        self.deps.clear();
+    }
+
+    #[inline(always)]
+    pub(super) fn into_deps(self) -> HashSet<AttrRef, S> {
+        self.deps
+    }
+}
+
+// Safety: Entries order reflects guards drop semantics.
+#[allow(dead_code)]
+pub struct AttrReadGuard<'a, C: Computable, S: SyncBuildHasher = RandomState> {
+    pub(super) data: &'a C,
+    pub(super) cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
+    pub(super) records_guard: UnitTableReadGuard<'a, Repository<Record<C::Node, S>>, S>,
+}
+
+impl<'a, C: Computable + Debug, S: SyncBuildHasher> Debug for AttrReadGuard<'a, C, S> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Debug::fmt(self.data, formatter)
+    }
+}
+
+impl<'a, C: Computable + Display, S: SyncBuildHasher> Display for AttrReadGuard<'a, C, S> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(self.data, formatter)
+    }
+}
+
+impl<'a, C: Computable, S: SyncBuildHasher> Deref for AttrReadGuard<'a, C, S> {
+    type Target = C;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
+impl<'a, C: Computable, S: SyncBuildHasher> AttrReadGuard<'a, C, S> {
+    #[inline(always)]
+    pub(super) fn attr_revision(&self) -> Revision {
+        let Some(cache) = &self.cell_guard.cache else {
+            unsafe { debug_unreachable!("AttrReadGuard without cache.") }
+        };
+
+        cache.updated_at
+    }
+}
 
 impl AttrRef {
     // Safety: If `CHECK == false` then `C` properly describes underlying attribute's computable data.
@@ -69,7 +238,7 @@ impl AttrRef {
 
             let cell_guard = record.read();
 
-            if cell_guard.verified_at >= context.db_revision() {
+            if cell_guard.verified_at >= context.revision() {
                 if let Some(cache) = &cell_guard.cache {
                     let data = match CHECK {
                         true => cache.downcast::<C>()?,
@@ -134,6 +303,14 @@ impl AttrRef {
                 return Err(AnalysisError::MissingAttribute);
             };
 
+            {
+                let record_read_guard = record.read();
+
+                if record_read_guard.verified_at >= context.revision() {
+                    return Ok(());
+                }
+            }
+
             let mut record_write_guard = record.write(context.handle())?;
             let cell = record_write_guard.deref_mut();
 
@@ -144,17 +321,17 @@ impl AttrRef {
 
                 cell.cache = Some(Cache {
                     dirty: false,
-                    updated_at: context.db_revision(),
+                    updated_at: context.revision(),
                     memo,
                     deps,
                 });
 
-                cell.verified_at = context.db_revision();
+                cell.verified_at = context.revision();
 
                 return Ok(());
             };
 
-            if cell.verified_at >= context.db_revision() {
+            if cell.verified_at >= context.revision() {
                 return Ok(());
             }
 
@@ -191,12 +368,12 @@ impl AttrRef {
                     }
 
                     deps_verified =
-                        deps_verified && dep_record_read_guard.verified_at >= context.db_revision();
+                        deps_verified && dep_record_read_guard.verified_at >= context.revision();
                 }
 
                 if valid {
                     if deps_verified {
-                        cell.verified_at = context.db_revision();
+                        cell.verified_at = context.revision();
                         return Ok(());
                     }
 
@@ -227,10 +404,10 @@ impl AttrRef {
             cache.deps = new_deps;
 
             if !same {
-                cache.updated_at = context.db_revision();
+                cache.updated_at = context.revision();
             }
 
-            cell.verified_at = context.db_revision();
+            cell.verified_at = context.revision();
 
             return Ok(());
         }

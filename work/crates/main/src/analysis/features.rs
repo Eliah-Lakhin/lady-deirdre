@@ -41,13 +41,15 @@ pub use lady_deirdre_derive::Feature;
 
 use crate::{
     analysis::{
+        database::AbstractDatabase,
+        record::Record,
         AnalysisResult,
         AttrRef,
-        FeatureInitializer,
-        FeatureInvalidator,
+        Computable,
         Grammar,
         ScopeAttr,
     },
+    arena::{Entry, Id, Identifiable, Repository},
     std::*,
     sync::SyncBuildHasher,
     syntax::{Key, NodeRef},
@@ -76,4 +78,53 @@ pub trait AbstractFeature {
     fn feature(&self, key: Key) -> AnalysisResult<&dyn AbstractFeature>;
 
     fn feature_keys(&self) -> &'static [&'static Key];
+}
+
+pub struct FeatureInitializer<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    pub(super) id: Id,
+    pub(super) database: Weak<dyn AbstractDatabase>,
+    pub(super) records: &'a mut Repository<Record<N, S>>,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for FeatureInitializer<'a, N, S> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> FeatureInitializer<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn register_attribute<C: Computable<Node = N> + Eq>(
+        &mut self,
+        node_ref: NodeRef,
+    ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        (
+            self.database.clone(),
+            self.records.insert(Record::new::<C>(node_ref)),
+        )
+    }
+}
+
+pub struct FeatureInvalidator<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    pub(super) id: Id,
+    pub(super) records: &'a mut Repository<Record<N, S>>,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for FeatureInvalidator<'a, N, S> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> FeatureInvalidator<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn invalidate_attribute(&mut self, entry: &Entry) {
+        let Some(record) = self.records.get(entry) else {
+            return;
+        };
+
+        record.invalidate();
+    }
 }

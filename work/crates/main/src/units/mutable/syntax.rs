@@ -43,14 +43,17 @@ use crate::{
     report::{debug_assert, debug_assert_eq},
     std::*,
     syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, NodeRule, SyntaxSession},
-    units::storage::{ChildCursor, ClusterCache, References, Tree},
+    units::{
+        storage::{ChildCursor, ClusterCache, References, Tree},
+        WatchReport,
+    },
 };
 
 pub struct MutableSyntaxSession<'unit, N: Node> {
     id: Id,
     tree: &'unit mut Tree<N>,
     references: &'unit mut References<N>,
-    updates: Option<&'unit mut StdSet<NodeRef>>,
+    watch: Option<&'unit mut WatchReport>,
     context: Vec<NodeRef>,
     pending: Pending<N>,
     failing: bool,
@@ -320,8 +323,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
             unsafe { self.pending.nodes.set_unchecked(index, node) };
 
-            if let Some(updates) = &mut self.updates {
-                updates.insert(node_ref);
+            if let Some(watch) = &mut self.watch {
+                watch.node_refs.push(node_ref);
             }
 
             return node_ref;
@@ -361,8 +364,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
                 self.peek_site = end_site;
                 self.peek_caches = 0;
 
-                if let Some(updates) = &mut self.updates {
-                    updates.insert(result);
+                if let Some(watch) = &mut self.watch {
+                    watch.node_refs.push(result);
                 }
 
                 return result;
@@ -401,8 +404,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
         self.context.push(node_ref);
 
-        if let Some(updates) = &mut self.updates {
-            updates.insert(node_ref);
+        if let Some(watch) = &mut self.watch {
+            watch.node_refs.push(node_ref);
         }
 
         let primary = N::parse(self, rule);
@@ -461,8 +464,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
         self.context.push(node_ref);
 
-        if let Some(updates) = &mut self.updates {
-            updates.insert(node_ref);
+        if let Some(watch) = &mut self.watch {
+            watch.node_refs.push(node_ref);
         }
 
         node_ref
@@ -517,8 +520,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             if let Some(sibling) = self.pending.nodes.get_mut(&sibling_ref.node_entry) {
                 sibling.set_parent_ref(node_ref);
 
-                if let Some(updates) = &mut self.updates {
-                    updates.insert(*sibling_ref);
+                if let Some(watch) = &mut self.watch {
+                    watch.node_refs.push(*sibling_ref);
                 }
                 return;
             }
@@ -535,8 +538,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
                 if let Some(cache) = unsafe { cursor.cache_mut() } {
                     cache.cluster.primary.set_parent_ref(node_ref);
 
-                    if let Some(updates) = &mut self.updates {
-                        updates.insert(*sibling_ref);
+                    if let Some(watch) = &mut self.watch {
+                        watch.node_refs.push(*sibling_ref);
                     }
                     return;
                 }
@@ -569,11 +572,17 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
         if !self.failing {
             self.failing = true;
 
-            return ErrorRef {
+            let error_ref = ErrorRef {
                 id: self.id,
                 cluster_entry: self.pending.cluster_entry,
                 error_entry: self.pending.errors.insert(error.into()),
             };
+
+            if let Some(watch) = &mut self.watch {
+                watch.error_refs.push(error_ref);
+            }
+
+            return error_ref;
         }
 
         ErrorRef::nil()
@@ -588,7 +597,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         id: Id,
         tree: &'unit mut Tree<N>,
         references: &'unit mut References<N>,
-        updates: Option<&'unit mut StdSet<NodeRef>>,
+        watch: Option<&'unit mut WatchReport>,
         rule: NodeRule,
         start: Site,
         head: ChildCursor<N>,
@@ -652,7 +661,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             id,
             tree,
             references,
-            updates,
+            watch,
             context,
             pending,
             failing: false,
