@@ -581,37 +581,31 @@ impl Rule {
                     let variant =
                         expect_some!(input.variants.get(&ident), "Unresolved reference.",);
 
-                    let descend = match variant.secondary.is_some() {
-                        false => {
-                            let index = expect_some!(
-                                variant.index.as_ref(),
-                                "Missing parsable variant index.",
-                            );
+                    let index =
+                        expect_some!(variant.index.as_ref(), "Missing parsable variant index.",);
 
-                            let index = match output_comments {
-                                false => index.to_token_stream(),
-                                true => {
-                                    let comment = LitStr::new(&format!(" {}", ident), ident.span());
+                    let ident = variant.parser_fn_ident();
 
-                                    quote_spanned!(span=> #[doc = #comment] #index)
-                                }
-                            };
-
-                            quote_spanned!(span=> #core::syntax::SyntaxSession::descend(
-                                session,
-                                #index,
-                            ))
-                        }
-
+                    let index = match output_comments {
+                        false => index.to_token_stream(),
                         true => {
-                            let ident = variant.parser_fn_ident();
+                            let comment = LitStr::new(&format!(" {}", ident), ident.span());
 
-                            quote_spanned!(span=> {
-                                #core::syntax::SyntaxSession::enter_node(session);
-                                let node = #ident(session);
-                                #core::syntax::SyntaxSession::leave_node(session, node)
-                            })
+                            quote_spanned!(span=> #[doc = #comment] #index)
                         }
+                    };
+
+                    let descend = match variant.secondary.is_some() {
+                        false => quote_spanned!(span=> #core::syntax::SyntaxSession::descend(
+                            session,
+                            #index,
+                        )),
+
+                        true => quote_spanned!(span=> {
+                            #core::syntax::SyntaxSession::enter_node(session, #index);
+                            let node = #ident(session);
+                            #core::syntax::SyntaxSession::leave_node(session, node)
+                        }),
                     };
 
                     match action.capture {

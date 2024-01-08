@@ -63,18 +63,18 @@ pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     handle: &'a Latch,
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<'a, N, S> for AnalysisTask<'a, N, S> {}
+impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<N, S> for AnalysisTask<'a, N, S> {}
 
-impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for AnalysisTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<N, S> for AnalysisTask<'a, N, S> {
     #[inline(always)]
-    fn handle(&self) -> &'a Latch {
+    fn handle(&self) -> &Latch {
         self.handle
     }
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<'a, N, S> for AnalysisTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<N, S> for AnalysisTask<'a, N, S> {
     #[inline(always)]
-    fn analyzer(&self) -> &'a Analyzer<N, S> {
+    fn analyzer(&self) -> &Analyzer<N, S> {
         self.analyzer
     }
 
@@ -106,18 +106,18 @@ pub struct MutationTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     handle: &'a Latch,
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<'a, N, S> for MutationTask<'a, N, S> {}
+impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<N, S> for MutationTask<'a, N, S> {}
 
-impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for MutationTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<N, S> for MutationTask<'a, N, S> {
     #[inline(always)]
-    fn handle(&self) -> &'a Latch {
+    fn handle(&self) -> &Latch {
         self.handle
     }
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<'a, N, S> for MutationTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<N, S> for MutationTask<'a, N, S> {
     #[inline(always)]
-    fn analyzer(&self) -> &'a Analyzer<N, S> {
+    fn analyzer(&self) -> &Analyzer<N, S> {
         self.analyzer
     }
 
@@ -145,20 +145,20 @@ pub struct ExclusiveTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     handle: &'a Latch,
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<'a, N, S> for ExclusiveTask<'a, N, S> {}
+impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<N, S> for ExclusiveTask<'a, N, S> {}
 
-impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<'a, N, S> for ExclusiveTask<'a, N, S> {}
+impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<N, S> for ExclusiveTask<'a, N, S> {}
 
-impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<'a, N, S> for ExclusiveTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<N, S> for ExclusiveTask<'a, N, S> {
     #[inline(always)]
-    fn handle(&self) -> &'a Latch {
+    fn handle(&self) -> &Latch {
         self.handle
     }
 }
 
-impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<'a, N, S> for ExclusiveTask<'a, N, S> {
+impl<'a, N: Grammar, S: SyncBuildHasher> TaskSealed<N, S> for ExclusiveTask<'a, N, S> {
     #[inline(always)]
-    fn analyzer(&self) -> &'a Analyzer<N, S> {
+    fn analyzer(&self) -> &Analyzer<N, S> {
         self.analyzer
     }
 
@@ -181,7 +181,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> ExclusiveTask<'a, N, S> {
     }
 }
 
-pub trait MutationAccess<'a, N: Grammar, S: SyncBuildHasher>: AbstractTask<'a, N, S> {
+pub trait MutationAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {
     fn add_mutable_doc(&mut self, text: impl Into<TokenBuffer<N::Token>>) -> Id {
         let document = {
             let mut unit = MutableUnit::new(text, false);
@@ -439,10 +439,10 @@ pub trait MutationAccess<'a, N: Grammar, S: SyncBuildHasher>: AbstractTask<'a, N
     }
 }
 
-pub trait SemanticAccess<'a, N: Grammar, S: SyncBuildHasher>: AbstractTask<'a, N, S> {}
+pub trait SemanticAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {}
 
-pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher>: TaskSealed<'a, N, S> {
-    fn handle(&self) -> &'a Latch;
+pub trait AbstractTask<N: Grammar, S: SyncBuildHasher>: TaskSealed<N, S> {
+    fn handle(&self) -> &Latch;
 
     #[inline(always)]
     fn proceed(&self) -> AnalysisResult<()> {
@@ -454,10 +454,7 @@ pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher>: TaskSealed<'a, N, S>
     }
 
     #[inline(always)]
-    fn read_doc<'b>(&'b self, id: Id) -> AnalysisResult<DocumentReadGuard<'b, N, S>>
-    where
-        'a: 'b,
-    {
+    fn read_doc(&self, id: Id) -> AnalysisResult<DocumentReadGuard<N, S>> {
         let Some(guard) = self.analyzer().docs.get(id) else {
             return Err(AnalysisError::MissingDocument);
         };
@@ -466,10 +463,7 @@ pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher>: TaskSealed<'a, N, S>
     }
 
     #[inline(always)]
-    fn try_read_doc<'b>(&'b self, id: Id) -> Option<DocumentReadGuard<N, S>>
-    where
-        'a: 'b,
-    {
+    fn try_read_doc(&self, id: Id) -> Option<DocumentReadGuard<N, S>> {
         Some(DocumentReadGuard::from(self.analyzer().docs.try_get(id)?))
     }
 
@@ -515,8 +509,8 @@ pub trait AbstractTask<'a, N: Grammar, S: SyncBuildHasher>: TaskSealed<'a, N, S>
     }
 }
 
-pub trait TaskSealed<'a, N: Grammar, S: SyncBuildHasher> {
-    fn analyzer(&self) -> &'a Analyzer<N, S>;
+pub trait TaskSealed<N: Grammar, S: SyncBuildHasher> {
+    fn analyzer(&self) -> &Analyzer<N, S>;
 
     fn revision(&self) -> Revision;
 }

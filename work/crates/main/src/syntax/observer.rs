@@ -36,119 +36,88 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable},
-    format::SnippetFormatter,
-    lexis::{SourceCode, Token, TokenBuffer},
     std::*,
-    syntax::{Node, SyntaxBuffer},
-    units::{CompilationUnit, Lexis, Syntax},
+    syntax::{Node, NodeRule},
 };
 
-pub struct ImmutableUnit<N: Node> {
-    lexis: TokenBuffer<N::Token>,
-    syntax: SyntaxBuffer<N>,
+pub trait Observer {
+    type Node: Node;
+
+    fn enter_rule(&mut self, rule: NodeRule);
+
+    fn leave_rule(&mut self, rule: NodeRule, node: &Self::Node);
+
+    fn parse_error(&mut self);
 }
 
-impl<N: Node> Identifiable for ImmutableUnit<N> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.lexis.id()
-    }
+pub struct DebugObserver<N: Node> {
+    depth: usize,
+    _phantom: PhantomData<N>,
 }
 
-impl<N: Node> Debug for ImmutableUnit<N> {
-    #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .debug_struct("ImmutableUnit")
-            .field("id", &self.lexis.id())
-            .field("length", &self.lexis.length())
-            .finish_non_exhaustive()
-    }
-}
-
-impl<N: Node> Display for ImmutableUnit<N> {
+impl<N: Node> Default for DebugObserver<N> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        formatter
-            .snippet(self)
-            .set_caption(format!("ImmutableUnit({})", self.id()))
-            .finish()
-    }
-}
-
-impl<N: Node> Lexis for ImmutableUnit<N> {
-    type Lexis = TokenBuffer<N::Token>;
-
-    #[inline(always)]
-    fn lexis(&self) -> &Self::Lexis {
-        &self.lexis
-    }
-}
-
-impl<N: Node> Syntax for ImmutableUnit<N> {
-    type Syntax = SyntaxBuffer<N>;
-
-    #[inline(always)]
-    fn syntax(&self) -> &Self::Syntax {
-        &self.syntax
-    }
-
-    #[inline(always)]
-    fn syntax_mut(&mut self) -> &mut Self::Syntax {
-        &mut self.syntax
-    }
-}
-
-impl<N: Node, S: AsRef<str>> From<S> for ImmutableUnit<N> {
-    #[inline(always)]
-    fn from(string: S) -> Self {
-        Self::new(string)
-    }
-}
-
-impl<T: Token> TokenBuffer<T> {
-    #[inline(always)]
-    pub fn into_immutable_unit<N>(mut self) -> ImmutableUnit<N>
-    where
-        N: Node<Token = T>,
-    {
-        self.reset_id();
-
-        let syntax = SyntaxBuffer::with_id(self.id(), self.cursor(..));
-
-        ImmutableUnit {
-            lexis: self,
-            syntax,
+    fn default() -> Self {
+        Self {
+            depth: 0,
+            _phantom: PhantomData,
         }
     }
 }
 
-impl<N: Node> CompilationUnit for ImmutableUnit<N> {
-    #[inline(always)]
-    fn is_mutable(&self) -> bool {
-        false
+impl<N: Node> Observer for DebugObserver<N> {
+    type Node = N;
+
+    fn enter_rule(&mut self, rule: NodeRule) {
+        let indent = self.indent();
+        let name = N::rule_name(rule).unwrap_or("?");
+
+        println!("{indent} {name} {{",);
+
+        self.depth += 1;
     }
 
-    #[inline(always)]
-    fn into_token_buffer(mut self) -> TokenBuffer<N::Token> {
-        self.lexis.reset_id();
+    fn leave_rule(&mut self, rule: NodeRule, _node: &Self::Node) {
+        self.depth = self.depth.checked_sub(1).unwrap_or_default();
 
-        self.lexis
+        let indent = self.indent();
+        let name = N::rule_name(rule).unwrap_or("?");
+
+        println!("{indent} }} {name}",);
     }
 
-    #[inline(always)]
-    fn into_immutable_unit(self) -> ImmutableUnit<N> {
-        self
+    fn parse_error(&mut self) {
+        let indent = self.indent();
+        println!("{indent} --- error ---",);
     }
 }
 
-impl<N: Node> ImmutableUnit<N> {
-    pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
-        let lexis = text.into();
-
-        let syntax = SyntaxBuffer::with_id(lexis.id(), lexis.cursor(..));
-
-        Self { lexis, syntax }
+impl<N: Node> DebugObserver<N> {
+    #[inline(always)]
+    fn indent(&self) -> String {
+        "    ".repeat(self.depth)
     }
+}
+
+#[repr(transparent)]
+pub(super) struct VoidObserver<N: Node>(PhantomData<N>);
+
+impl<N: Node> Default for VoidObserver<N> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<N: Node> Observer for VoidObserver<N> {
+    type Node = N;
+
+    #[inline(always)]
+    fn enter_rule(&mut self, _rule: NodeRule) {}
+
+    #[inline(always)]
+    fn leave_rule(&mut self, _rule: NodeRule, _node: &Self::Node) {}
+
+    #[inline(always)]
+    fn parse_error(&mut self) {}
 }

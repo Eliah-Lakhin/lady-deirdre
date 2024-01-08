@@ -39,7 +39,7 @@ use crate::{
     arena::{Entry, EntryIndex, Id, Identifiable, Repository},
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
     std::*,
-    syntax::{ErrorRef, Node, NodeRef, NodeRule, ROOT_RULE},
+    syntax::{ErrorRef, Node, NodeRef, NodeRule, Observer, ROOT_RULE},
 };
 
 /// An interface to the source code syntax parsing/re-parsing session.
@@ -91,7 +91,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// avoid of calling of this function with the [ROOT_RULE](crate::syntax::ROOT_RULE) value.
     fn descend(&mut self, rule: NodeRule) -> NodeRef;
 
-    fn enter_node(&mut self) -> NodeRef;
+    fn enter_node(&mut self, rule: NodeRule) -> NodeRef;
 
     fn leave_node(&mut self, node: Self::Node) -> NodeRef;
 
@@ -115,8 +115,10 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
 
 pub(super) struct SequentialSyntaxSession<
     'code,
+    'observer,
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
+    O: Observer<Node = N>,
 > {
     pub(super) id: Id,
     pub(super) context: Vec<EntryIndex>,
@@ -125,13 +127,15 @@ pub(super) struct SequentialSyntaxSession<
     pub(super) errors: Repository<N::Error>,
     pub(super) failing: bool,
     pub(super) token_cursor: C,
-    pub(super) _code_lifetime: PhantomData<&'code ()>,
+    pub(super) observer: &'observer mut O,
+    pub(super) _phantom: PhantomData<&'code ()>,
 }
 
-impl<'code, N, C> Identifiable for SequentialSyntaxSession<'code, N, C>
+impl<'code, 'observer, N, C, O> Identifiable for SequentialSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
+    O: Observer<Node = N>,
 {
     #[inline(always)]
     fn id(&self) -> Id {
@@ -139,10 +143,12 @@ where
     }
 }
 
-impl<'code, N, C> TokenCursor<'code> for SequentialSyntaxSession<'code, N, C>
+impl<'code, 'observer, N, C, O> TokenCursor<'code>
+    for SequentialSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
+    O: Observer<Node = N>,
 {
     type Token = <N as Node>::Token;
 
@@ -200,10 +206,12 @@ where
     }
 }
 
-impl<'code, N, C> SyntaxSession<'code> for SequentialSyntaxSession<'code, N, C>
+impl<'code, 'observer, N, C, O> SyntaxSession<'code>
+    for SequentialSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
+    O: Observer<Node = N>,
 {
     type Node = N;
 
@@ -212,7 +220,9 @@ where
 
         self.context.push(index);
 
+        self.observer.enter_rule(rule);
         let node = N::parse(self, rule);
+        self.observer.leave_rule(rule, &node);
 
         #[allow(unused)]
         let last = self.context.pop();
@@ -232,7 +242,8 @@ where
     }
 
     #[inline]
-    fn enter_node(&mut self) -> NodeRef {
+    fn enter_node(&mut self, rule: NodeRule) -> NodeRef {
+        self.observer.enter_rule(rule);
         let index = self.nodes.reserve();
 
         self.context.push(index);
@@ -246,6 +257,8 @@ where
 
     #[inline]
     fn leave_node(&mut self, node: Self::Node) -> NodeRef {
+        self.observer.leave_rule(node.rule(), &node);
+
         let index = match self.context.pop() {
             None => panic!("Inheritance imbalance."),
             Some(index) => index,
@@ -332,6 +345,8 @@ where
     #[inline(always)]
     fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
         if !self.failing {
+            self.observer.parse_error();
+
             self.failing = true;
 
             return ErrorRef {
@@ -345,10 +360,11 @@ where
     }
 }
 
-impl<'code, N, C> SequentialSyntaxSession<'code, N, C>
+impl<'code, 'observer, N, C, O> SequentialSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
+    O: Observer<Node = N>,
 {
     pub(super) fn enter_root(&mut self) {
         let node = N::parse(self, ROOT_RULE);

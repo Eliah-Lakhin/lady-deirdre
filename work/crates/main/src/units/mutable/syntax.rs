@@ -453,7 +453,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 
     #[inline(always)]
-    fn enter_node(&mut self) -> NodeRef {
+    fn enter_node(&mut self, _rule: NodeRule) -> NodeRef {
         let index = self.pending.nodes.reserve();
 
         let node_ref = NodeRef {

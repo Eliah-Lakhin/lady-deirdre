@@ -41,19 +41,21 @@ pub use lady_deirdre_derive::Node;
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    lexis::{Site, SiteSpan, Token, TokenRef, NIL_TOKEN_REF},
+    lexis::{Site, SiteSpan, SourceCode, Token, TokenBuffer, TokenRef, NIL_TOKEN_REF},
     std::*,
     syntax::{
         Capture,
         CapturesIter,
         ChildrenIter,
         ClusterRef,
+        DebugObserver,
         Key,
         NodeRule,
         ParseError,
         PolyRef,
         PolyVariant,
         RefKind,
+        SyntaxBuffer,
         SyntaxSession,
         SyntaxTree,
         NON_RULE,
@@ -371,6 +373,12 @@ pub trait Node: AbstractNode + Sized {
     /// assert_eq!(doc.errors().count(), 0);
     /// ```
     fn parse<'code>(session: &mut impl SyntaxSession<'code, Node = Self>, rule: NodeRule) -> Self;
+
+    fn debug(text: impl AsRef<str>) {
+        let tokens = TokenBuffer::<Self::Token>::from(text);
+
+        SyntaxBuffer::<Self>::parse_with_observer(tokens.cursor(..), &mut DebugObserver::default());
+    }
 }
 
 pub trait AbstractNode: Send + Sync + 'static {

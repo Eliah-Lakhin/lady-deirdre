@@ -39,7 +39,14 @@ use crate::{
     arena::{Entry, Id, Identifiable, Repository},
     lexis::TokenCursor,
     std::*,
-    syntax::{session::SequentialSyntaxSession, Cluster, Node, SyntaxTree},
+    syntax::{
+        observer::VoidObserver,
+        session::SequentialSyntaxSession,
+        Cluster,
+        Node,
+        Observer,
+        SyntaxTree,
+    },
 };
 
 /// A non-incrementally managed syntax structure of a compilation unit.
@@ -171,12 +178,28 @@ impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
 impl<N: Node> SyntaxBuffer<N> {
     #[inline(always)]
     pub fn parse<'code>(token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>) -> Self {
-        Self::new(Id::new(), token_cursor)
+        Self::with_id(Id::new(), token_cursor)
+    }
+    #[inline(always)]
+    pub fn parse_with_observer<'code>(
+        token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
+        observer: &mut impl Observer<Node = N>,
+    ) -> Self {
+        Self::new(Id::new(), token_cursor, observer)
     }
 
-    pub(crate) fn new<'code>(
+    #[inline(always)]
+    pub(crate) fn with_id<'code>(
         id: Id,
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
+    ) -> Self {
+        Self::new(id, token_cursor, &mut VoidObserver::default())
+    }
+
+    fn new<'code, 'observer>(
+        id: Id,
+        token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
+        observer: &'observer mut impl Observer<Node = N>,
     ) -> Self {
         let mut session = SequentialSyntaxSession {
             id,
@@ -186,7 +209,8 @@ impl<N: Node> SyntaxBuffer<N> {
             errors: Repository::default(),
             failing: false,
             token_cursor,
-            _code_lifetime: Default::default(),
+            observer,
+            _phantom: PhantomData,
         };
 
         session.enter_root();

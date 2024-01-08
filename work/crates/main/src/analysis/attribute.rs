@@ -225,9 +225,9 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 
 impl<C: Computable> Attr<C> {
     #[inline(always)]
-    pub fn snapshot<'a, S: SyncBuildHasher>(
+    pub fn snapshot<S: SyncBuildHasher>(
         &self,
-        task: &impl SemanticAccess<'a, C::Node, S>,
+        task: &impl SemanticAccess<C::Node, S>,
     ) -> AnalysisResult<(Revision, C)>
     where
         C: Clone,
@@ -305,9 +305,9 @@ impl AttrRef {
     }
 
     #[inline(always)]
-    pub fn snapshot<'a, C: Computable + Clone, S: SyncBuildHasher>(
+    pub fn snapshot<C: Computable + Clone, S: SyncBuildHasher>(
         &self,
-        task: &impl SemanticAccess<'a, C::Node, S>,
+        task: &impl SemanticAccess<C::Node, S>,
     ) -> AnalysisResult<(Revision, C)> {
         let mut reader = AttrContext::new(task.analyzer(), task.revision(), task.handle());
 
