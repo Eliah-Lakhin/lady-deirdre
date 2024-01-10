@@ -41,7 +41,7 @@ mod child;
 mod item;
 mod nesting;
 mod page;
-mod references;
+mod refs;
 mod spread;
 mod string;
 mod tree;
@@ -49,7 +49,7 @@ mod tree;
 pub(crate) use crate::units::storage::{
     cache::ClusterCache,
     child::ChildCursor,
-    references::References,
+    refs::TreeRefs,
     tree::Tree,
 };
 use crate::{lexis::CHUNK_SIZE, units::storage::spread::capacity};
@@ -66,6 +66,7 @@ const STRING_INLINE: usize = PAGE_CAP * CHUNK_SIZE;
 mod tests {
     #[cfg(not(debug_assertions))]
     use crate::{
+        arena::Id,
         lexis::{Length, Site},
         units::storage::{branch::Branch, item::Item, page::Page},
     };
@@ -77,7 +78,7 @@ mod tests {
             child::ChildIndex,
             item::{ItemRef, ItemRefVariant},
             nesting::{BranchLayer, Height, PageLayer},
-            references::References,
+            refs::TreeRefs,
             tree::Tree,
         },
     };
@@ -581,10 +582,10 @@ mod tests {
 
         for high in 0..4 {
             for low in 1..20 {
-                let mut references = References::<TestNode>::default();
+                let mut refs = TreeRefs::<TestNode>::new(Id::new());
 
                 let child_count = high * 1000 + low;
-                let mut tree = gen(&mut references, 1..=child_count);
+                let mut tree = gen(&mut refs, 1..=child_count);
 
                 check_tree_structure(&tree);
                 check_tree_data(&tree, 1);
@@ -604,7 +605,7 @@ mod tests {
 
                     let start = unsafe { chunk_cursor.token().0 };
 
-                    let right = unsafe { tree.split(&mut references, chunk_cursor) };
+                    let right = unsafe { tree.split(&mut refs, chunk_cursor) };
 
                     assert_eq!(tree.code_length(), site);
                     assert_eq!(right.code_length(), length - site);
@@ -615,7 +616,7 @@ mod tests {
                     check_tree_structure(&right);
                     check_tree_data(&right, start);
 
-                    unsafe { tree.join(&mut references, right) };
+                    unsafe { tree.join(&mut refs, right) };
 
                     check_tree_structure(&tree);
                     check_tree_data(&tree, 1);
@@ -628,10 +629,7 @@ mod tests {
         }
     }
 
-    fn gen(
-        references: &mut References<TestNode>,
-        range: RangeInclusive<ChildIndex>,
-    ) -> Tree<TestNode> {
+    fn gen(refs: &mut TreeRefs<TestNode>, range: RangeInclusive<ChildIndex>) -> Tree<TestNode> {
         let count = range.end() - range.start() + 1;
 
         let mut spans = Vec::with_capacity(count);
@@ -648,7 +646,7 @@ mod tests {
 
         unsafe {
             Tree::from_chunks(
-                references,
+                refs,
                 count,
                 spans.into_iter(),
                 indices.into_iter(),

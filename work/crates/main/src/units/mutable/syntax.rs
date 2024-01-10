@@ -44,16 +44,15 @@ use crate::{
     std::*,
     syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, NodeRule, SyntaxSession},
     units::{
-        storage::{ChildCursor, ClusterCache, References, Tree},
-        WatchReport,
+        storage::{ChildCursor, ClusterCache, Tree, TreeRefs},
+        Watch,
     },
 };
 
-pub struct MutableSyntaxSession<'unit, N: Node> {
-    id: Id,
+pub struct MutableSyntaxSession<'unit, N: Node, W: Watch> {
     tree: &'unit mut Tree<N>,
-    references: &'unit mut References<N>,
-    watch: Option<&'unit mut WatchReport>,
+    refs: &'unit mut TreeRefs<N>,
+    watch: &'unit mut W,
     context: Vec<NodeRef>,
     pending: Pending<N>,
     failing: bool,
@@ -66,14 +65,14 @@ pub struct MutableSyntaxSession<'unit, N: Node> {
     end_site: Site,
 }
 
-impl<'unit, N: Node> Identifiable for MutableSyntaxSession<'unit, N> {
+impl<'unit, N: Node, W: Watch> Identifiable for MutableSyntaxSession<'unit, N, W> {
     #[inline(always)]
     fn id(&self) -> Id {
-        self.id
+        self.refs.id()
     }
 }
 
-impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
+impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit, N, W> {
     type Token = N::Token;
 
     fn advance(&mut self) -> bool {
@@ -94,9 +93,18 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
                 }
 
                 _ => {
-                    let entry_index = unsafe { self.next_chunk_cursor.remove_cache() };
+                    let (cluster_entry_index, cluster_cache) =
+                        unsafe { self.next_chunk_cursor.take_cache() };
 
-                    unsafe { self.references.clusters_mut().remove_unchecked(entry_index) };
+                    let cluster_entry = unsafe {
+                        self.refs
+                            .clusters_mut()
+                            .remove_unchecked(cluster_entry_index)
+                    };
+
+                    cluster_cache
+                        .cluster
+                        .report(self.watch, self.id(), cluster_entry);
                 }
             }
         }
@@ -253,10 +261,10 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
         let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.references.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.refs.chunks().entry_of(entry_index) };
 
         TokenRef {
-            id: self.id,
+            id: self.id(),
             chunk_entry,
         }
     }
@@ -279,10 +287,10 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
 
         let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.references.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.refs.chunks().entry_of(entry_index) };
 
         TokenRef {
-            id: self.id,
+            id: self.id(),
             chunk_entry,
         }
         .site_ref()
@@ -292,11 +300,11 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableSyntaxSession<'unit, N> {
     fn end_site_ref(&mut self) -> SiteRef {
         self.pending.lookahead_end_site = self.end_site;
 
-        SiteRef::end_of(self.id)
+        SiteRef::end_of(self.id())
     }
 }
 
-impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
+impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N, W> {
     type Node = N;
 
     fn descend(&mut self, rule: NodeRule) -> NodeRef {
@@ -304,7 +312,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             let index = self.pending.nodes.reserve();
 
             let node_ref = NodeRef {
-                id: self.id,
+                id: self.id(),
                 cluster_entry: self.pending.cluster_entry,
                 node_entry: unsafe { self.pending.nodes.entry_of(index) },
             };
@@ -323,9 +331,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
 
             unsafe { self.pending.nodes.set_unchecked(index, node) };
 
-            if let Some(watch) = &mut self.watch {
-                watch.node_refs.push(node_ref);
-            }
+            self.watch.report_node(&node_ref);
 
             return node_ref;
         }
@@ -341,15 +347,13 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
                 let cluster_entry_index = unsafe { self.next_chunk_cursor.cache_index() };
 
                 let result = NodeRef {
-                    id: self.id,
-                    cluster_entry: unsafe {
-                        self.references.clusters().entry_of(cluster_entry_index)
-                    },
+                    id: self.id(),
+                    cluster_entry: unsafe { self.refs.clusters().entry_of(cluster_entry_index) },
                     node_entry: Entry::Primary,
                 };
 
                 let (end_site, end_chunk_cursor) =
-                    unsafe { cache.jump_to_end(self.tree, self.references) };
+                    unsafe { cache.jump_to_end(self.tree, self.refs) };
 
                 self.pending.lookahead_end_site = self
                     .pending
@@ -364,9 +368,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
                 self.peek_site = end_site;
                 self.peek_caches = 0;
 
-                if let Some(watch) = &mut self.watch {
-                    watch.node_refs.push(result);
-                }
+                self.watch.report_node(&result);
 
                 return result;
             }
@@ -378,7 +380,7 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
         let cluster_entry;
 
         {
-            let clusters = self.references.clusters_mut();
+            let clusters = self.refs.clusters_mut();
 
             cluster_entry_index = clusters.insert_raw(child_chunk_cursor);
             cluster_entry = unsafe { clusters.entry_of(cluster_entry_index) };
@@ -397,16 +399,14 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
         );
 
         let node_ref = NodeRef {
-            id: self.id,
+            id: self.id(),
             cluster_entry,
             node_entry: Entry::Primary,
         };
 
         self.context.push(node_ref);
 
-        if let Some(watch) = &mut self.watch {
-            watch.node_refs.push(node_ref);
-        }
+        self.watch.report_node(&node_ref);
 
         let primary = N::parse(self, rule);
 
@@ -457,16 +457,14 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
         let index = self.pending.nodes.reserve();
 
         let node_ref = NodeRef {
-            id: self.id,
+            id: self.id(),
             cluster_entry: self.pending.cluster_entry,
             node_entry: unsafe { self.pending.nodes.entry_of(index) },
         };
 
         self.context.push(node_ref);
 
-        if let Some(watch) = &mut self.watch {
-            watch.node_refs.push(node_ref);
-        }
+        self.watch.report_node(&node_ref);
 
         node_ref
     }
@@ -501,16 +499,20 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     fn node(&mut self, node: Self::Node) -> NodeRef {
         let node_entry = self.pending.nodes.insert(node);
 
-        NodeRef {
-            id: self.id,
+        let node_ref = NodeRef {
+            id: self.id(),
             cluster_entry: self.pending.cluster_entry,
             node_entry,
-        }
+        };
+
+        self.watch.report_node(&node_ref);
+
+        node_ref
     }
 
     fn lift_sibling(&mut self, sibling_ref: &NodeRef) {
         #[cfg(debug_assertions)]
-        if sibling_ref.id != self.id {
+        if sibling_ref.id != self.id() {
             panic!("An attempt to lift external Node.");
         }
 
@@ -520,9 +522,8 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             if let Some(sibling) = self.pending.nodes.get_mut(&sibling_ref.node_entry) {
                 sibling.set_parent_ref(node_ref);
 
-                if let Some(watch) = &mut self.watch {
-                    watch.node_refs.push(*sibling_ref);
-                }
+                self.watch.report_node(sibling_ref);
+
                 return;
             }
 
@@ -530,17 +531,12 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
         }
 
         if let Entry::Primary = &sibling_ref.node_entry {
-            if let Some(cursor) = self
-                .references
-                .clusters_mut()
-                .get_mut(&sibling_ref.cluster_entry)
-            {
+            if let Some(cursor) = self.refs.clusters_mut().get_mut(&sibling_ref.cluster_entry) {
                 if let Some(cache) = unsafe { cursor.cache_mut() } {
                     cache.cluster.primary.set_parent_ref(node_ref);
 
-                    if let Some(watch) = &mut self.watch {
-                        watch.node_refs.push(*sibling_ref);
-                    }
+                    self.watch.report_node(sibling_ref);
+
                     return;
                 }
             }
@@ -573,14 +569,12 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
             self.failing = true;
 
             let error_ref = ErrorRef {
-                id: self.id,
+                id: self.id(),
                 cluster_entry: self.pending.cluster_entry,
                 error_entry: self.pending.errors.insert(error.into()),
             };
 
-            if let Some(watch) = &mut self.watch {
-                watch.error_refs.push(error_ref);
-            }
+            self.watch.report_error(&error_ref);
 
             return error_ref;
         }
@@ -589,15 +583,14 @@ impl<'unit, N: Node> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N> {
     }
 }
 
-impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
+impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
     // Safety:
     // 1. `head` belongs to the `tree` instance.
-    // 2. All references of the `tree` belong to `references` instance.
+    // 2. All references of the `tree` belong to `refs` instance.
     pub(super) unsafe fn run(
-        id: Id,
         tree: &'unit mut Tree<N>,
-        references: &'unit mut References<N>,
-        watch: Option<&'unit mut WatchReport>,
+        refs: &'unit mut TreeRefs<N>,
+        watch: &'unit mut W,
         rule: NodeRule,
         start: Site,
         head: ChildCursor<N>,
@@ -642,7 +635,7 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
             };
 
             let node_ref = NodeRef {
-                id,
+                id: refs.id(),
                 cluster_entry,
                 node_entry: Entry::Primary,
             };
@@ -658,9 +651,8 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         let length = tree.code_length();
 
         let mut session = Self {
-            id,
             tree,
-            references,
+            refs,
             watch,
             context,
             pending,
@@ -704,16 +696,16 @@ impl<'unit, N: Node> MutableSyntaxSession<'unit, N> {
         match self.next_chunk_cursor.is_dangling() {
             false => {
                 let chunk_entry_index = unsafe { self.next_chunk_cursor.chunk_entry_index() };
-                let chunk_entry = unsafe { self.references.chunks().entry_of(chunk_entry_index) };
+                let chunk_entry = unsafe { self.refs.chunks().entry_of(chunk_entry_index) };
 
                 TokenRef {
-                    id: self.id,
+                    id: self.id(),
                     chunk_entry,
                 }
                 .site_ref()
             }
 
-            true => SiteRef::end_of(self.id),
+            true => SiteRef::end_of(self.id()),
         }
     }
 

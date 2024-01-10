@@ -35,23 +35,53 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("readme.md")]
-
-mod entry;
-mod id;
-mod repository;
-mod sequence;
-
-pub use crate::arena::{
-    entry::{Entry, EntryIndex, EntryVersion},
-    id::{Id, Identifiable},
-    repository::{
-        Repository,
-        RepositoryEntriesIntoIter,
-        RepositoryEntriesIter,
-        RepositoryIntoIter,
-        RepositoryIter,
-        RepositoryIterMut,
-    },
-    sequence::Sequence,
+use crate::{
+    std::*,
+    syntax::{ErrorRef, NodeRef},
 };
+
+pub trait Watch {
+    fn report_node(&mut self, node_ref: &NodeRef);
+
+    fn report_error(&mut self, error_ref: &ErrorRef);
+}
+
+#[repr(transparent)]
+pub struct VoidWatch;
+
+impl Default for VoidWatch {
+    #[inline(always)]
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl Watch for VoidWatch {
+    #[inline(always)]
+    fn report_node(&mut self, _node_ref: &NodeRef) {}
+
+    #[inline(always)]
+    fn report_error(&mut self, _error_ref: &ErrorRef) {}
+}
+
+#[repr(transparent)]
+pub struct DebugWatch;
+
+impl Default for DebugWatch {
+    #[inline(always)]
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl Watch for DebugWatch {
+    #[inline(always)]
+    fn report_node(&mut self, node_ref: &NodeRef) {
+        println!("{node_ref:?}");
+    }
+
+    #[inline(always)]
+    fn report_error(&mut self, error_ref: &ErrorRef) {
+        println!("{error_ref:?}");
+    }
+}

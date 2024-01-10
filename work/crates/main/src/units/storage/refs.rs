@@ -35,23 +35,56 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#![doc = include_str!("readme.md")]
-
-mod entry;
-mod id;
-mod repository;
-mod sequence;
-
-pub use crate::arena::{
-    entry::{Entry, EntryIndex, EntryVersion},
-    id::{Id, Identifiable},
-    repository::{
-        Repository,
-        RepositoryEntriesIntoIter,
-        RepositoryEntriesIter,
-        RepositoryIntoIter,
-        RepositoryIter,
-        RepositoryIterMut,
-    },
-    sequence::Sequence,
+use crate::{
+    arena::{Id, Identifiable, Repository},
+    syntax::Node,
+    units::storage::child::ChildCursor,
 };
+
+pub(crate) struct TreeRefs<N: Node> {
+    pub(super) id: Id,
+    pub(super) chunks: Repository<ChildCursor<N>>,
+    pub(super) clusters: Repository<ChildCursor<N>>,
+}
+
+impl<N: Node> Identifiable for TreeRefs<N> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl<N: Node> TreeRefs<N> {
+    #[inline(always)]
+    pub(crate) fn new(id: Id) -> Self {
+        Self {
+            id,
+            chunks: Repository::new(),
+            clusters: Repository::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn with_capacity(id: Id, capacity: usize) -> Self {
+        Self {
+            id,
+            chunks: Repository::with_capacity(capacity),
+            clusters: Repository::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn chunks(&self) -> &Repository<ChildCursor<N>> {
+        &self.chunks
+    }
+
+    #[inline(always)]
+    pub(crate) fn clusters(&self) -> &Repository<ChildCursor<N>> {
+        &self.clusters
+    }
+
+    #[inline(always)]
+    pub(crate) fn clusters_mut(&mut self) -> &mut Repository<ChildCursor<N>> {
+        &mut self.clusters
+    }
+}

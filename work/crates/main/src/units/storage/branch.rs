@@ -41,13 +41,16 @@ use crate::{
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
-    units::storage::{
-        child::{ChildCount, ChildCursor, ChildIndex},
-        item::{Item, ItemRef, ItemRefVariant, Split},
-        nesting::{BranchLayer, Height, Layer, LayerDescriptor, PageLayer},
-        references::References,
-        BRANCH_B,
-        BRANCH_CAP,
+    units::{
+        storage::{
+            child::{ChildCount, ChildCursor, ChildIndex},
+            item::{Item, ItemRef, ItemRefVariant, Split},
+            nesting::{BranchLayer, Height, Layer, LayerDescriptor, PageLayer},
+            refs::TreeRefs,
+            BRANCH_B,
+            BRANCH_CAP,
+        },
+        Watch,
     },
 };
 
@@ -208,13 +211,14 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
     }
 
     // Safety:
-    // 1. All references belong to `references` instance.
+    // 1. All references belong to `refs` instance.
     // 2. `height >= 2`.
     // 3. `height` fits to `ChildLayer`.
     pub(crate) unsafe fn free_subtree(
         mut self,
         height: Height,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
     ) -> ChildCount {
         let mut child_count = 0;
 
@@ -234,7 +238,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let page = unsafe { page_ref.into_owned() };
 
-                    child_count += unsafe { page.free_subtree(references) };
+                    child_count += unsafe { page.free_subtree(refs, watch) };
                 }
 
                 3 => {
@@ -247,7 +251,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let branch = unsafe { branch_ref.into_owned() };
 
-                    child_count += unsafe { branch.free_subtree(height - 1, references) }
+                    child_count += unsafe { branch.free_subtree(height - 1, refs, watch) }
                 }
 
                 _ => {
@@ -260,7 +264,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let branch = unsafe { branch_ref.into_owned() };
 
-                    child_count += unsafe { branch.free_subtree(height - 1, references) }
+                    child_count += unsafe { branch.free_subtree(height - 1, refs, watch) }
                 }
             }
         }
@@ -435,7 +439,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
     #[inline(always)]
     unsafe fn update_children(
         &mut self,
-        _references: &mut References<N>,
+        _refs: &mut TreeRefs<N>,
         from: ChildIndex,
         count: ChildCount,
     ) -> Length {
@@ -449,7 +453,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
     #[inline]
     unsafe fn split(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         mut children_split: Split<N>,
         length: Length,
         from: ChildIndex,
@@ -517,7 +521,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
                             };
 
                             let right_parent_span = unsafe {
-                                right_parent_ref.update_children(references, 0, occupied - from)
+                                right_parent_ref.update_children(refs, 0, occupied - from)
                             };
 
                             parent_split.left_span = length - right_parent_span;
@@ -589,9 +593,8 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
                         };
                         left_parent.inner.occupied = from;
 
-                        parent_split.right_span = unsafe {
-                            right_parent_ref.update_children(references, 0, occupied - from)
-                        };
+                        parent_split.right_span =
+                            unsafe { right_parent_ref.update_children(refs, 0, occupied - from) };
                         parent_split.right_item = unsafe { right_parent_ref.into_variant() };
 
                         parent_split.left_span = length - parent_split.right_span;
@@ -667,11 +670,11 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
     // 1. `self` is not dangling.
     // 2. `ChildLayer` correctly describes children later of `self`.
     // 3. `GrandchildLayer` correctly describes children later of the `ChildLayer`.
-    // 4. All references inside `self` subtree belong to `references` instance.
+    // 4. All references inside `self` subtree belong to `refs` instance.
     #[inline]
     pub(super) unsafe fn fix_leftmost_balance<GrandchildLayer: Layer>(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> (bool, ItemRefVariant<N>) {
         let parent_occupied = unsafe { self.as_ref().occupied() };
 
@@ -727,7 +730,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                                 unsafe { next_child_variant.as_branch_mut::<GrandchildLayer>() };
 
                             unsafe {
-                                ItemRef::merge_to_right(first_child_ref, next_child_ref, references)
+                                ItemRef::merge_to_right(first_child_ref, next_child_ref, refs)
                             }
                         }
 
@@ -737,7 +740,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                             let next_child_ref = unsafe { next_child_variant.as_page_mut() };
 
                             unsafe {
-                                ItemRef::merge_to_right(first_child_ref, next_child_ref, references)
+                                ItemRef::merge_to_right(first_child_ref, next_child_ref, refs)
                             }
                         }
                     };
@@ -763,9 +766,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                         let next_child_ref =
                             unsafe { next_child_variant.as_branch_mut::<GrandchildLayer>() };
 
-                        unsafe {
-                            ItemRef::balance_to_left(first_child_ref, next_child_ref, references)
-                        }
+                        unsafe { ItemRef::balance_to_left(first_child_ref, next_child_ref, refs) }
                     }
 
                     LayerDescriptor::Page => {
@@ -773,9 +774,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
 
                         let next_child_ref = unsafe { next_child_variant.as_page_mut() };
 
-                        unsafe {
-                            ItemRef::balance_to_left(first_child_ref, next_child_ref, references)
-                        }
+                        unsafe { ItemRef::balance_to_left(first_child_ref, next_child_ref, refs) }
                     }
                 };
 
@@ -793,11 +792,11 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
     // 1. `self` is not dangling.
     // 2. `ChildLayer` correctly describes children later of `self`.
     // 3. `GrandchildLayer` correctly describes children later of the `ChildLayer`.
-    // 4. All references inside `self` subtree belong to `references` instance.
+    // 4. All references inside `self` subtree belong to `refs` instance.
     #[inline]
     pub(super) unsafe fn fix_rightmost_balance<GrandchildLayer: Layer>(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> (bool, ItemRefVariant<N>) {
         let parent_occupied = unsafe { self.as_ref().occupied() };
 
@@ -866,11 +865,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                                 unsafe { last_child_variant.as_branch_mut::<GrandchildLayer>() };
 
                             unsafe {
-                                ItemRef::merge_to_left(
-                                    previous_child_ref,
-                                    last_child_ref,
-                                    references,
-                                )
+                                ItemRef::merge_to_left(previous_child_ref, last_child_ref, refs)
                             }
                         }
 
@@ -881,11 +876,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                             let last_child_ref = unsafe { last_child_variant.as_page_mut() };
 
                             unsafe {
-                                ItemRef::merge_to_left(
-                                    previous_child_ref,
-                                    last_child_ref,
-                                    references,
-                                )
+                                ItemRef::merge_to_left(previous_child_ref, last_child_ref, refs)
                             }
                         }
                     };
@@ -913,11 +904,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                             unsafe { last_child_variant.as_branch_mut::<GrandchildLayer>() };
 
                         unsafe {
-                            ItemRef::balance_to_right(
-                                previous_child_ref,
-                                last_child_ref,
-                                references,
-                            )
+                            ItemRef::balance_to_right(previous_child_ref, last_child_ref, refs)
                         }
                     }
 
@@ -927,11 +914,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
                         let last_child_ref = unsafe { last_child_variant.as_page_mut() };
 
                         unsafe {
-                            ItemRef::balance_to_right(
-                                previous_child_ref,
-                                last_child_ref,
-                                references,
-                            )
+                            ItemRef::balance_to_right(previous_child_ref, last_child_ref, refs)
                         }
                     }
                 };

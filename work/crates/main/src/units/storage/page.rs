@@ -42,16 +42,19 @@ use crate::{
     report::{debug_assert, debug_unreachable},
     std::*,
     syntax::Node,
-    units::storage::{
-        branch::BranchRef,
-        cache::CacheEntry,
-        child::{ChildCount, ChildCursor, ChildIndex},
-        item::{Item, ItemRef, ItemRefVariant, Split},
-        nesting::PageLayer,
-        references::References,
-        string::PageString,
-        PAGE_B,
-        PAGE_CAP,
+    units::{
+        storage::{
+            branch::BranchRef,
+            cache::CacheEntry,
+            child::{ChildCount, ChildCursor, ChildIndex},
+            item::{Item, ItemRef, ItemRefVariant, Split},
+            nesting::PageLayer,
+            refs::TreeRefs,
+            string::PageString,
+            PAGE_B,
+            PAGE_CAP,
+        },
+        Watch,
     },
 };
 
@@ -254,8 +257,12 @@ impl<N: Node> Page<N> {
     }
 
     // Safety:
-    // 1. All references belong to `references` instance.
-    pub(super) unsafe fn free_subtree(mut self, references: &mut References<N>) -> ChildCount {
+    // 1. All references belong to `refs` instance.
+    pub(super) unsafe fn free_subtree(
+        mut self,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
+    ) -> ChildCount {
         for index in 0..self.occupied {
             let token = unsafe { self.tokens.get_unchecked_mut(index) };
 
@@ -263,17 +270,19 @@ impl<N: Node> Page<N> {
 
             let chunk_index = *unsafe { self.chunks.get_unchecked(index) };
 
-            unsafe { references.chunks.remove_unchecked(chunk_index) };
+            let _ = unsafe { refs.chunks.remove_unchecked(chunk_index) };
 
             let cache_entry =
                 take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
 
             if let Some(cache_entry) = cache_entry {
-                unsafe {
-                    references
-                        .clusters
-                        .remove_unchecked(cache_entry.entry_index)
-                };
+                let cluster_entry =
+                    unsafe { refs.clusters.remove_unchecked(cache_entry.entry_index) };
+
+                cache_entry
+                    .cache
+                    .cluster
+                    .report(watch, refs.id, cluster_entry);
             }
         }
 
@@ -383,7 +392,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
     unsafe fn update_children(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         from: ChildIndex,
         count: ChildCount,
     ) -> Length {
@@ -393,7 +402,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
         debug_assert!(
             from + count <= page.occupied,
-            "An attempt to update references in non occupied data in Page.",
+            "An attempt to update refs in non occupied data in Page.",
         );
 
         let mut length = 0;
@@ -403,7 +412,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
             {
                 let chunk_index = *unsafe { page.chunks.get_unchecked(index) };
-                let chunk_ref = unsafe { references.chunks.get_unchecked_mut(chunk_index) };
+                let chunk_ref = unsafe { refs.chunks.get_unchecked_mut(chunk_index) };
 
                 chunk_ref.item = self_variant;
                 chunk_ref.index = index;
@@ -412,11 +421,8 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
             let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
 
             if let Some(cache_entry) = cache_entry {
-                let cluster_ref = unsafe {
-                    references
-                        .clusters
-                        .get_unchecked_mut(cache_entry.entry_index)
-                };
+                let cluster_ref =
+                    unsafe { refs.clusters.get_unchecked_mut(cache_entry.entry_index) };
 
                 cluster_ref.item = self_variant;
                 cluster_ref.index = index;
@@ -429,7 +435,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
     #[inline]
     unsafe fn split(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         _children_split: Split<N>,
         length: Length,
         from: ChildIndex,
@@ -467,7 +473,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
                 left.occupied = from;
 
                 parent_split.right_span =
-                    unsafe { right_ref.update_children(references, 0, occupied - from) };
+                    unsafe { right_ref.update_children(refs, 0, occupied - from) };
                 parent_split.right_item = unsafe { right_ref.into_variant() };
 
                 parent_split.left_span = length - parent_split.right_span;
@@ -528,7 +534,7 @@ impl<N: Node> PageRef<N> {
 
     // Safety:
     // 1. `self` is not a dangling reference.
-    // 2. All references belong to `references` instance.
+    // 2. All references belong to `refs` instance.
     // 3. `from < self.occupied`.
     // 4. `from + count <= self.occupied.
     // 5. `count > 0`
@@ -536,7 +542,8 @@ impl<N: Node> PageRef<N> {
     #[inline]
     pub(super) unsafe fn rewrite(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
         from: ChildIndex,
         count: ChildCount,
         spans: &mut impl Iterator<Item = Length>,
@@ -559,7 +566,7 @@ impl<N: Node> PageRef<N> {
         let mut dec = 0;
         let mut inc = 0;
 
-        references.chunks.commit(true);
+        refs.chunks.commit(true);
 
         unsafe {
             page.string
@@ -595,14 +602,16 @@ impl<N: Node> PageRef<N> {
             *span = new_span;
             let _ = replace(token, new_token);
 
-            unsafe { references.chunks.upgrade(chunk_index) };
+            unsafe { refs.chunks.upgrade(chunk_index) };
 
             if let Some(cache_entry) = cache_entry {
-                unsafe {
-                    references
-                        .clusters
-                        .remove_unchecked(cache_entry.entry_index)
-                }
+                let cluster_entry =
+                    unsafe { refs.clusters.remove_unchecked(cache_entry.entry_index) };
+
+                cache_entry
+                    .cache
+                    .cluster
+                    .report(watch, refs.id, cluster_entry);
             }
         }
 
@@ -611,14 +620,15 @@ impl<N: Node> PageRef<N> {
 
     // Safety:
     // 1. `self` is not a dangling reference.
-    // 2. All references belong to `references` instance.
+    // 2. All references belong to `refs` instance.
     // 3. `from < self.occupied`.
     // 4. `from + count <= self.occupied.
     // 5. `count > 0`
     #[inline]
     pub(super) unsafe fn remove(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
         from: ChildIndex,
         count: ChildCount,
     ) -> Length {
@@ -643,17 +653,19 @@ impl<N: Node> PageRef<N> {
 
             let chunk_index = unsafe { *page.chunks.get_unchecked(index) };
 
-            unsafe { references.chunks.remove_unchecked(chunk_index) };
+            let _ = unsafe { refs.chunks.remove_unchecked(chunk_index) };
 
             let cache_entry =
                 take(unsafe { page.clusters.get_unchecked_mut(index).assume_init_mut() });
 
             if let Some(cache_entry) = cache_entry {
-                unsafe {
-                    references
-                        .clusters
-                        .remove_unchecked(cache_entry.entry_index)
-                }
+                let cluster_entry =
+                    unsafe { refs.clusters.remove_unchecked(cache_entry.entry_index) };
+
+                cache_entry
+                    .cache
+                    .cluster
+                    .report(watch, refs.id, cluster_entry);
             }
 
             length += span;
@@ -696,7 +708,7 @@ impl<N: Node> PageRef<N> {
             for index in from..(page.occupied - count) {
                 {
                     let chunk_index = *unsafe { page.chunks.get_unchecked(index) };
-                    let chunk_ref = unsafe { references.chunks.get_unchecked_mut(chunk_index) };
+                    let chunk_ref = unsafe { refs.chunks.get_unchecked_mut(chunk_index) };
 
                     chunk_ref.index = index;
                 }
@@ -704,11 +716,8 @@ impl<N: Node> PageRef<N> {
                 let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
 
                 if let Some(cache_entry) = cache_entry {
-                    let cluster_ref = unsafe {
-                        references
-                            .clusters
-                            .get_unchecked_mut(cache_entry.entry_index)
-                    };
+                    let cluster_ref =
+                        unsafe { refs.clusters.get_unchecked_mut(cache_entry.entry_index) };
 
                     cluster_ref.index = index;
                 }
@@ -723,7 +732,7 @@ impl<N: Node> PageRef<N> {
 
     // Safety:
     // 1. `self` is not a dangling reference.
-    // 2. All references belong to `references` instance.
+    // 2. All references belong to `refs` instance.
     // 3. `from <= self.occupied`.
     // 4. `from + count <= self.occupied.
     // 5. `count > 0`
@@ -731,7 +740,7 @@ impl<N: Node> PageRef<N> {
     #[inline]
     pub(super) unsafe fn insert(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         from: ChildIndex,
         count: ChildCount,
         spans: &mut impl Iterator<Item = Length>,
@@ -791,7 +800,7 @@ impl<N: Node> PageRef<N> {
             }
 
             unsafe {
-                *page.chunks.get_unchecked_mut(index) = references.chunks.insert_raw(ChildCursor {
+                *page.chunks.get_unchecked_mut(index) = refs.chunks.insert_raw(ChildCursor {
                     item: self_ref_variant,
                     index,
                 })
@@ -805,7 +814,7 @@ impl<N: Node> PageRef<N> {
         for index in (from + count)..page.occupied {
             {
                 let chunk_index = *unsafe { page.chunks.get_unchecked(index) };
-                let chunk_ref = unsafe { references.chunks.get_unchecked_mut(chunk_index) };
+                let chunk_ref = unsafe { refs.chunks.get_unchecked_mut(chunk_index) };
 
                 chunk_ref.index = index;
             }
@@ -813,11 +822,8 @@ impl<N: Node> PageRef<N> {
             let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
 
             if let Some(cache_entry) = cache_entry {
-                let cluster_ref = unsafe {
-                    references
-                        .clusters
-                        .get_unchecked_mut(cache_entry.entry_index)
-                };
+                let cluster_ref =
+                    unsafe { refs.clusters.get_unchecked_mut(cache_entry.entry_index) };
 
                 cluster_ref.index = index;
             }

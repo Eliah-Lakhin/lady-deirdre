@@ -52,7 +52,7 @@ use crate::{
     },
     std::*,
     syntax::{Cluster, Node, NodeRef, SyntaxTree},
-    units::{CompilationUnit, ImmutableUnit, MutableUnit, WatchReport},
+    units::{CompilationUnit, ImmutableUnit, MutableUnit, VoidWatch, Watch},
 };
 
 pub enum Document<N: Node> {
@@ -307,8 +307,8 @@ impl<N: Node> CompilationUnit for Document<N> {
 
 impl<N: Node> Document<N> {
     #[inline(always)]
-    pub fn new_mutable(text: impl Into<TokenBuffer<N::Token>>, watch: bool) -> Self {
-        Self::Mutable(MutableUnit::new(text, watch))
+    pub fn new_mutable(text: impl Into<TokenBuffer<N::Token>>) -> Self {
+        Self::Mutable(MutableUnit::new(text))
     }
 
     #[inline(always)]
@@ -333,21 +333,23 @@ impl<N: Node> Document<N> {
     }
 
     #[inline(always)]
-    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) -> NodeRef {
+    pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) {
+        self.write_and_watch(span, text, &mut VoidWatch)
+    }
+
+    #[inline(always)]
+    pub fn write_and_watch(
+        &mut self,
+        span: impl ToSpan,
+        text: impl AsRef<str>,
+        watch: &mut impl Watch,
+    ) {
         let unit = match self.as_mutable() {
             Some(unit) => unit,
             None => panic!("Specified Document is not mutable."),
         };
 
-        unit.write(span, text)
-    }
-
-    #[inline(always)]
-    pub fn report(&mut self) -> Option<WatchReport> {
-        match self {
-            Self::Mutable(unit) => unit.report(),
-            Self::Immutable(..) => None,
-        }
+        unit.write_and_watch(span, text, watch);
     }
 
     #[inline(always)]

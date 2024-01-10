@@ -54,7 +54,7 @@ use crate::{
     std::*,
     sync::{Latch, Lazy, Shared, SyncBuildHasher},
     syntax::{ErrorRef, NodeRef, PolyRef, SyntaxTree},
-    units::{Document, MutableUnit},
+    units::{Document, Watch},
 };
 
 pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
@@ -183,13 +183,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> ExclusiveTask<'a, N, S> {
 
 pub trait MutationAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {
     fn add_mutable_doc(&mut self, text: impl Into<TokenBuffer<N::Token>>) -> Id {
-        let document = {
-            let mut unit = MutableUnit::new(text, false);
-
-            unit.watch(true);
-
-            Document::from(unit)
-        };
+        let document = Document::new_mutable(text);
 
         let id = document.id();
 
@@ -214,6 +208,24 @@ pub trait MutationAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {
         span: impl ToSpan,
         text: impl AsRef<str>,
     ) -> AnalysisResult<()> {
+        #[derive(Default)]
+        struct DocWatch {
+            node_refs: Vec<NodeRef>,
+            error_refs: Vec<ErrorRef>,
+        }
+
+        impl Watch for DocWatch {
+            #[inline(always)]
+            fn report_node(&mut self, node_ref: &NodeRef) {
+                self.node_refs.push(*node_ref);
+            }
+
+            #[inline(always)]
+            fn report_error(&mut self, error_ref: &ErrorRef) {
+                self.error_refs.push(*error_ref);
+            }
+        }
+
         let mutations = {
             let Some(mut guard) = self.analyzer().docs.get_mut(id) else {
                 return Err(AnalysisError::MissingDocument);
@@ -233,16 +245,13 @@ pub trait MutationAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {
                 return Err(AnalysisError::InvalidSpan);
             };
 
-            if unit.write(span, text).is_nil() {
+            let mut report = DocWatch::default();
+
+            unit.write_and_watch(span, text, &mut report);
+
+            if report.node_refs.is_empty() && report.error_refs.is_empty() {
                 return Ok(());
             }
-
-            let report = match unit.report() {
-                Some(report) => report,
-
-                // Safety: Mutable documents initialized with watch mode.
-                None => unsafe { debug_unreachable!("Document watch mode off.") },
-            };
 
             let Some(mut records) = self.analyzer().database.records.get_mut(id) else {
                 // Safety:

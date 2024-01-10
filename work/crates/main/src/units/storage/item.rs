@@ -45,7 +45,7 @@ use crate::{
         child::{ChildCount, ChildCursor, ChildIndex},
         nesting::{BranchLayer, Layer, LayerDescriptor},
         page::PageRef,
-        references::References,
+        refs::TreeRefs,
     },
 };
 
@@ -122,25 +122,25 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
     // Safety:
     // 1. `self` is not dangling.
-    // 2. All references belong to `references` instance.
+    // 2. All references belong to `refs` instance.
     // 3. `count > 0`
     // 4. `self` data within `from..(from + count)` range is occupied.
     // 5. `ChildLayer` is correctly describes children kind.
     unsafe fn update_children(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         from: ChildIndex,
         count: ChildCount,
     ) -> Length;
 
     //Safety:
     // 1. `self` is not dangling.
-    // 2. All references belong to `references` instance.
+    // 2. All references belong to `refs` instance.
     // 3. `from` is lesser than the number of occupied children.
     // 4. `children_split` correctly describes children layer splitting.
     unsafe fn split(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         children_split: Split<N>,
         length: Length,
         from: ChildIndex,
@@ -151,7 +151,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     // 6. `left_ref` is not a root item.
     // 7. `right_ref` is a root item.
     #[inline]
@@ -160,13 +160,13 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         right_ref: &mut Self,
         left_root_length: Length,
         right_length: Length,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> (bool, Option<ItemRefVariant<N>>) {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         if left_occupied + right_occupied <= <Self::Item as Item>::CAP {
-            let span_addition = unsafe { ItemRef::merge_to_left(left_ref, right_ref, references) };
+            let span_addition = unsafe { ItemRef::merge_to_left(left_ref, right_ref, refs) };
 
             unsafe { left_ref.parent_mut().inc_span_right(span_addition) };
 
@@ -176,7 +176,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let transfer_length = match right_occupied < <Self::Item as Item>::B {
             false => 0,
 
-            true => unsafe { ItemRef::balance_to_right(left_ref, right_ref, references) },
+            true => unsafe { ItemRef::balance_to_right(left_ref, right_ref, refs) },
         };
 
         let left_parent = unsafe { left_ref.parent_mut() };
@@ -196,7 +196,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     // 6. `left_ref` is a root item.
     // 7. `right_ref` is not a root item.
     #[inline]
@@ -205,13 +205,13 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         right_ref: &mut Self,
         left_length: Length,
         right_root_length: Length,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> (bool, Option<ItemRefVariant<N>>) {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         if left_occupied + right_occupied <= <Self::Item as Item>::CAP {
-            let span_addition = unsafe { ItemRef::merge_to_right(left_ref, right_ref, references) };
+            let span_addition = unsafe { ItemRef::merge_to_right(left_ref, right_ref, refs) };
 
             unsafe { right_ref.parent_mut().inc_span_left(span_addition) };
 
@@ -221,7 +221,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
         let transfer_length = match left_occupied < <Self::Item as Item>::B {
             false => 0,
 
-            true => unsafe { ItemRef::balance_to_left(left_ref, right_ref, references) },
+            true => unsafe { ItemRef::balance_to_left(left_ref, right_ref, refs) },
         };
 
         let right_parent = unsafe { right_ref.parent_mut() };
@@ -241,31 +241,31 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     #[inline]
     unsafe fn join_roots(
         left_ref: &mut Self,
         right_ref: &mut Self,
         mut left_length: Length,
         mut right_length: Length,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> Option<ItemRefVariant<N>> {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
 
         if left_occupied + right_occupied <= <Self::Item as Item>::CAP {
-            let _ = unsafe { ItemRef::merge_to_left(left_ref, right_ref, references) };
+            let _ = unsafe { ItemRef::merge_to_left(left_ref, right_ref, refs) };
 
             return None;
         }
 
         if left_occupied < <Self::Item as Item>::B {
-            let difference = unsafe { ItemRef::balance_to_left(left_ref, right_ref, references) };
+            let difference = unsafe { ItemRef::balance_to_left(left_ref, right_ref, refs) };
 
             left_length += difference;
             right_length -= difference;
         } else if right_occupied < <Self::Item as Item>::B {
-            let difference = unsafe { ItemRef::balance_to_right(left_ref, right_ref, references) };
+            let difference = unsafe { ItemRef::balance_to_right(left_ref, right_ref, refs) };
 
             left_length -= difference;
             right_length += difference;
@@ -306,13 +306,13 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     // 6. The total `left_ref` and `right_ref` occupied count is lesser or equal to capacity.
     #[inline]
     unsafe fn merge_to_left(
         left_ref: &mut Self,
         right_ref: &mut Self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> Length {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
@@ -332,8 +332,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         let _ = *unsafe { right_ref.into_owned() };
 
-        let difference =
-            unsafe { left_ref.update_children(references, left_occupied, right_occupied) };
+        let difference = unsafe { left_ref.update_children(refs, left_occupied, right_occupied) };
 
         difference
     }
@@ -343,13 +342,13 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     // 6. The total `left_ref` and `right_ref` occupied count is lesser or equal to capacity.
     #[inline]
     unsafe fn merge_to_right(
         left_ref: &mut Self,
         right_ref: &mut Self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> Length {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
@@ -369,9 +368,9 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         let _ = *unsafe { left_ref.into_owned() };
 
-        let difference = unsafe { right_ref.update_children(references, 0, left_occupied) };
+        let difference = unsafe { right_ref.update_children(refs, 0, left_occupied) };
 
-        let _ = unsafe { right_ref.update_children(references, left_occupied, right_occupied) };
+        let _ = unsafe { right_ref.update_children(refs, left_occupied, right_occupied) };
 
         difference
     }
@@ -381,7 +380,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     // 6. The total `left_ref` and `right_ref` occupied count is greater than capacity.
     // 7. `left_ref` occupied count is lesser than branching factor.
     // 8. `right_ref` occupied count is greater or equal to branching factor.
@@ -389,7 +388,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     unsafe fn balance_to_left(
         left_ref: &mut Self,
         right_ref: &mut Self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> Length {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
@@ -425,11 +424,9 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         debug_assert!(is_right_balanced, "Balance-to-left failure.");
 
-        let difference =
-            unsafe { left_ref.update_children(references, left_occupied, transfer_count) };
+        let difference = unsafe { left_ref.update_children(refs, left_occupied, transfer_count) };
 
-        let _ =
-            unsafe { right_ref.update_children(references, 0, right_occupied - transfer_count) };
+        let _ = unsafe { right_ref.update_children(refs, 0, right_occupied - transfer_count) };
 
         difference
     }
@@ -439,7 +436,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     // 2. `right_ref` is not dangling.
     // 3. `left_ref` and `right_ref` both have children layers of the same kind.
     // 4. `ChildLayer` is correctly describes children kind.
-    // 5. All references belong to `references` instance.
+    // 5. All references belong to `refs` instance.
     // 6. The total `left_ref` and `right_ref` occupied count is greater than capacity.
     // 7. `left_ref` occupied count is greater or equal to branching factor.
     // 8. `right_ref` occupied count is lesser than branching factor.
@@ -447,7 +444,7 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
     unsafe fn balance_to_right(
         left_ref: &mut Self,
         right_ref: &mut Self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
     ) -> Length {
         let left_occupied = unsafe { left_ref.as_ref().occupied() };
         let right_occupied = unsafe { right_ref.as_ref().occupied() };
@@ -489,11 +486,11 @@ pub(super) trait ItemRef<ChildLayer: Layer, N: Node>: Copy {
 
         debug_assert!(is_left_balanced, "Balance-to-right failure.");
 
-        let difference = unsafe { right_ref.update_children(references, 0, transfer_count) };
+        let difference = unsafe { right_ref.update_children(refs, 0, transfer_count) };
 
         let _ = unsafe {
             right_ref.update_children(
-                references,
+                refs,
                 transfer_count,
                 <Self::Item as Item>::B - transfer_count,
             )

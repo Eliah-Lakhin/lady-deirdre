@@ -35,44 +35,10 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{arena::Repository, std::*, syntax::Node, units::storage::child::ChildCursor};
+pub(crate) mod unit;
+pub(crate) mod watch;
 
-pub(crate) struct References<N: Node> {
-    pub(super) chunks: Repository<ChildCursor<N>>,
-    pub(super) clusters: Repository<ChildCursor<N>>,
-}
-
-impl<N: Node> Default for References<N> {
-    #[inline(always)]
-    fn default() -> Self {
-        Self {
-            chunks: Default::default(),
-            clusters: Default::default(),
-        }
-    }
-}
-
-impl<N: Node> References<N> {
-    #[inline(always)]
-    pub(crate) fn with_capacity(capacity: usize) -> Self {
-        Self {
-            chunks: Repository::with_capacity(capacity),
-            clusters: Default::default(),
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn chunks(&self) -> &Repository<ChildCursor<N>> {
-        &self.chunks
-    }
-
-    #[inline(always)]
-    pub(crate) fn clusters(&self) -> &Repository<ChildCursor<N>> {
-        &self.clusters
-    }
-
-    #[inline(always)]
-    pub(crate) fn clusters_mut(&mut self) -> &mut Repository<ChildCursor<N>> {
-        &mut self.clusters
-    }
-}
+mod chars;
+mod cursor;
+mod lexis;
+mod syntax;

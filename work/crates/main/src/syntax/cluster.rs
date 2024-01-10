@@ -39,6 +39,7 @@ use crate::{
     arena::{Entry, Id, Identifiable, Repository},
     std::*,
     syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
+    units::Watch,
 };
 
 pub static NIL_CLUSTER_REF: ClusterRef = ClusterRef::nil();
@@ -114,6 +115,33 @@ impl<N: Node + Debug> Debug for Cluster<N> {
             .field("nodes", &self.nodes)
             .field("errors", &self.errors)
             .finish_non_exhaustive()
+    }
+}
+
+impl<N: Node> Cluster<N> {
+    #[inline(always)]
+    pub(crate) fn report(self, watch: &mut impl Watch, id: Id, cluster_entry: Entry) {
+        watch.report_node(&NodeRef {
+            id,
+            cluster_entry,
+            node_entry: Entry::Primary,
+        });
+
+        for node_entry in self.nodes.into_entries() {
+            watch.report_node(&NodeRef {
+                id,
+                cluster_entry,
+                node_entry,
+            })
+        }
+
+        for error_entry in self.errors.into_entries() {
+            watch.report_error(&ErrorRef {
+                id,
+                cluster_entry,
+                error_entry,
+            })
+        }
     }
 }
 

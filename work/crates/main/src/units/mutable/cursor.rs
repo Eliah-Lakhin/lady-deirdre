@@ -164,7 +164,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
         let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.unit.refs.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.unit.id(),
@@ -184,7 +184,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
         let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.unit.refs.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.unit.id(),
@@ -201,7 +201,7 @@ impl<'unit, N: Node> TokenCursor<'unit> for MutableCursor<'unit, N> {
 
         let entry_index = unsafe { self.end_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.unit.references.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.unit.refs.chunks().entry_of(entry_index) };
 
         TokenRef {
             id: self.unit.id(),

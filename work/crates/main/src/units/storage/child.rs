@@ -360,7 +360,7 @@ impl<N: Node> ChildCursor<N> {
     // 3. Referred item contains a cluster cache.
     // 4. There are no other references to this ClusterCache.
     #[inline(always)]
-    pub(crate) unsafe fn remove_cache(&self) -> EntryIndex {
+    pub(crate) unsafe fn take_cache(&self) -> (EntryIndex, ClusterCache<N>) {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
@@ -380,39 +380,7 @@ impl<N: Node> ChildCursor<N> {
                     .assume_init_mut(),
             )
         } {
-            Some(cache_entry) => cache_entry.entry_index,
-
-            None => unsafe { debug_unreachable!("An attempt to remove undefined ClusterCache.") },
-        }
-    }
-
-    // Safety:
-    // 1. `self` is not dangling.
-    // 2. `self.item` is a Page reference.
-    // 3. Referred item contains a cluster cache.
-    // 4. There are no other references to this ClusterCache.
-    #[inline(always)]
-    pub(crate) unsafe fn take_cache(&self) -> ClusterCache<N> {
-        debug_assert!(
-            !self.is_dangling(),
-            "An attempt to access dangling ChildCursor.",
-        );
-
-        let page = unsafe { self.item.as_page_ref().as_external_mut() };
-
-        debug_assert!(
-            self.index < page.occupied,
-            "ChildCursor index out of bounds.",
-        );
-
-        match unsafe {
-            take(
-                page.clusters
-                    .get_unchecked_mut(self.index)
-                    .assume_init_mut(),
-            )
-        } {
-            Some(cache_entry) => cache_entry.cache,
+            Some(cache_entry) => (cache_entry.entry_index, cache_entry.cache),
 
             None => unsafe { debug_unreachable!("An attempt to take undefined ClusterCache.") },
         }
@@ -460,7 +428,7 @@ impl<N: Node> ChildCursor<N> {
     // 3. Referred item contains a cluster cache.
     // 4. There are no references to this ClusterCache.
     #[inline(always)]
-    pub(crate) unsafe fn update_cache(&self, cache: ClusterCache<N>) {
+    pub(crate) unsafe fn update_cache(&self, cache: ClusterCache<N>) -> ClusterCache<N> {
         debug_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
@@ -478,9 +446,7 @@ impl<N: Node> ChildCursor<N> {
                 .get_unchecked_mut(self.index)
                 .assume_init_mut()
         } {
-            Some(cache_entry) => {
-                cache_entry.cache = cache;
-            }
+            Some(cache_entry) => replace(&mut cache_entry.cache, cache),
 
             None => unsafe { debug_unreachable!("An attempt to remove undefined ClusterCache.") },
         }

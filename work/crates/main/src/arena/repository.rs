@@ -135,6 +135,11 @@ pub type RepositoryEntriesIter<'a, T> = FilterMap<
     fn((usize, &'a RepositoryEntry<T>)) -> Option<Entry>,
 >;
 
+pub type RepositoryEntriesIntoIter<T> = FilterMap<
+    Enumerate<IntoIter<RepositoryEntry<T>>>,
+    fn((usize, RepositoryEntry<T>)) -> Option<Entry>,
+>;
+
 pub type RepositoryIntoIter<T> =
     FilterMap<IntoIter<RepositoryEntry<T>>, fn(RepositoryEntry<T>) -> Option<T>>;
 
@@ -568,6 +573,20 @@ impl<T> Repository<T> {
             })
     }
 
+    #[inline(always)]
+    pub fn into_entries(self) -> RepositoryEntriesIntoIter<T> {
+        self.entries
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, entry)| match entry {
+                RepositoryEntry::Occupied { revision, .. } => Some(Entry::Repo {
+                    index,
+                    version: revision,
+                }),
+                _ => None,
+            })
+    }
+
     /// Returns item weak reference by internal index.
     ///
     /// This is a low-level API.
@@ -827,7 +846,7 @@ impl<T> Repository<T> {
     /// **Safety:**
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
-    pub unsafe fn remove_unchecked(&mut self, index: EntryIndex) {
+    pub unsafe fn remove_unchecked(&mut self, index: EntryIndex) -> Entry {
         debug_assert!(index < self.entries.len(), "Index out of bounds.");
 
         let entry = unsafe { self.entries.get_unchecked_mut(index) };
@@ -836,8 +855,12 @@ impl<T> Repository<T> {
 
         self.modified = true;
 
-        match occupied {
-            RepositoryEntry::Occupied { .. } | RepositoryEntry::Reserved { .. } => (),
+        let entry = match occupied {
+            RepositoryEntry::Occupied { revision, .. }
+            | RepositoryEntry::Reserved { revision, .. } => Entry::Repo {
+                index,
+                version: revision,
+            },
 
             // Safety: Upheld by the caller.
             RepositoryEntry::Vacant { .. } => unsafe {
@@ -846,6 +869,8 @@ impl<T> Repository<T> {
         };
 
         self.next = index;
+
+        entry
     }
 
     /// Upgrades collection's Occupied or Reserved entry version without changing of their content.

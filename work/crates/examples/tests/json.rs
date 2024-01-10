@@ -481,8 +481,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 1 }
 
-    let node_ref = doc.write(0..0, "{");
-    assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{"#,);
+    doc.write(0..0, "{");
     assert_eq!(doc.substring(..), r#"{"#);
     assert_eq!(
         doc.debug_errors(),
@@ -493,16 +492,14 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 2 }
 
-    let node_ref = doc.write(1..1, "}");
-    assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{}"#,);
+    doc.write(1..1, "}");
     assert_eq!(doc.substring(..), r#"{}"#);
     assert_eq!(doc.to_json_string(), r#"{}"#);
     assert_eq!(doc.debug_print(), r#"2(2({}))"#);
 
     unsafe { VERSION = 3 }
 
-    let node_ref = doc.write(1..1, r#""foo""#);
-    assert_eq!(doc.substring(node_ref.span(&doc).unwrap()), r#"{"foo"}"#,);
+    doc.write(1..1, r#""foo""#);
     assert_eq!(doc.substring(..), r#"{"foo"}"#);
     assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(doc.to_json_string(), r#"{"foo": ?}"#);
@@ -510,13 +507,9 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 4 }
 
-    let node_ref = doc.write(
+    doc.write(
         6..6,
         r#"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#,
-    );
-    assert_eq!(
-        doc.substring(node_ref.span(&doc).unwrap()),
-        r#""foo"[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
     );
     assert_eq!(
         doc.substring(..),
@@ -534,11 +527,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 5 }
 
-    let node_ref = doc.write(6..6, r#" :"#);
-    assert_eq!(
-        doc.substring(node_ref.span(&doc).unwrap()),
-        r#""foo" :[1, 3, true, false, null, {"a": "xyz", "b": null}]"#
-    );
+    doc.write(6..6, r#" :"#);
     assert_eq!(
         doc.substring(..),
         r#"{"foo" :[1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
@@ -555,11 +544,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 6 }
 
-    let node_ref = doc.write(6..8, r#": "#);
-    assert_eq!(
-        doc.substring(node_ref.span(&doc).unwrap()),
-        r#""foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]"#
-    );
+    doc.write(6..8, r#": "#);
     assert_eq!(
         doc.substring(..),
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}]}"#
@@ -575,11 +560,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 7 }
 
-    let node_ref = doc.write(8..34, r#""#);
-    assert_eq!(
-        doc.substring(node_ref.span(&doc).unwrap()),
-        r#"{"foo": {"a": "xyz", "b": null}]}"#
-    );
+    doc.write(8..34, r#""#);
     assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}]}"#);
     assert_eq!(
         doc.debug_errors(),
@@ -593,11 +574,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 8 }
 
-    let node_ref = doc.write(31..32, r#""#);
-    assert_eq!(
-        doc.substring(node_ref.span(&doc).unwrap()),
-        r#"{"foo": {"a": "xyz", "b": null}}"#
-    );
+    doc.write(31..32, r#""#);
     assert_eq!(doc.substring(..), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(doc.debug_errors(), "");
     assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
@@ -608,11 +585,7 @@ fn test_json_incremental() {
 
     unsafe { VERSION = 9 }
 
-    let node_ref = doc.write(14..14, r#"111, "c": "#);
-    assert_eq!(
-        doc.substring(node_ref.span(&doc).unwrap()),
-        r#"{"a": 111, "c": "xyz", "b": null}"#
-    );
+    doc.write(14..14, r#"111, "c": "#);
     assert_eq!(
         doc.substring(..),
         r#"{"foo": {"a": 111, "c": "xyz", "b": null}}"#

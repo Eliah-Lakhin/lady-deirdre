@@ -40,14 +40,17 @@ use crate::{
     report::{debug_assert, debug_assert_eq, debug_unreachable},
     std::*,
     syntax::Node,
-    units::storage::{
-        branch::Branch,
-        child::{ChildCursor, ChildIndex},
-        item::{Item, ItemRef, ItemRefVariant, Split},
-        nesting::{BranchLayer, Height, PageLayer},
-        page::{Page, PageList, PageRef},
-        references::References,
-        spread::Spread,
+    units::{
+        storage::{
+            branch::Branch,
+            child::{ChildCursor, ChildIndex},
+            item::{Item, ItemRef, ItemRefVariant, Split},
+            nesting::{BranchLayer, Height, PageLayer},
+            page::{Page, PageList, PageRef},
+            refs::TreeRefs,
+            spread::Spread,
+        },
+        Watch,
     },
 };
 
@@ -81,7 +84,7 @@ impl<N: Node> Tree<N> {
     // 1. `spans`, `strings` and `tokens` produce the same number of items equal to `count`.
     // 2. All `spans` values are positive integers.
     pub(crate) unsafe fn from_chunks(
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         count: TokenCount,
         mut spans: impl Iterator<Item = Length>,
         mut indices: impl Iterator<Item = ByteIndex>,
@@ -152,7 +155,7 @@ impl<N: Node> Tree<N> {
 
             match &mut last_page {
                 Some(page_ref) => {
-                    let entry_index = references.chunks.insert_raw(ChildCursor {
+                    let entry_index = refs.chunks.insert_raw(ChildCursor {
                         item: unsafe { page_ref.into_variant() },
                         index,
                     });
@@ -536,14 +539,15 @@ impl<N: Node> Tree<N> {
     }
 
     // Safety:
-    // 1. All references belong to `references` instance.
+    // 1. All references belong to `refs` instance.
     // 2. `chunk_ref` is not dangling and refers valid data inside this instance.
     // 3. Referred Page has enough space to remove `remove` and to insert `insert` items.
     // 4. `spans`, `indices` and `tokens` have the same number of items equal to `insert`.
     // 5. All `spans` values are positive integers.
     pub(crate) unsafe fn write(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
         mut chunk_ref: ChildCursor<N>,
         remove: TokenCount,
         insert: TokenCount,
@@ -565,7 +569,7 @@ impl<N: Node> Tree<N> {
         if self.height == 1 && insert == 0 && remove == occupied {
             let mut tree = replace(self, Self::default());
 
-            let removed_count = unsafe { tree.free_as_subtree(references) };
+            let removed_count = unsafe { tree.free_as_subtree(refs, watch) };
 
             debug_assert_eq!(remove, removed_count, "Token count inconsistency.");
 
@@ -577,7 +581,8 @@ impl<N: Node> Tree<N> {
         let (mut span_dec, mut span_inc) = match rewrite > 0 {
             true => unsafe {
                 page_ref.rewrite(
-                    references,
+                    refs,
+                    watch,
                     chunk_ref.index,
                     rewrite,
                     &mut spans,
@@ -592,14 +597,15 @@ impl<N: Node> Tree<N> {
 
         if remove > rewrite {
             unsafe {
-                span_dec += page_ref.remove(references, chunk_ref.index + rewrite, remove - rewrite)
+                span_dec +=
+                    page_ref.remove(refs, watch, chunk_ref.index + rewrite, remove - rewrite)
             };
         }
 
         if insert > rewrite {
             unsafe {
                 span_inc += page_ref.insert(
-                    references,
+                    refs,
                     chunk_ref.index + rewrite,
                     insert - rewrite,
                     &mut spans,
@@ -645,11 +651,11 @@ impl<N: Node> Tree<N> {
     }
 
     //Safety:
-    // 1. All references belong to `references` instance.
+    // 1. All references belong to `refs` instance.
     // 2. `chunk_ref` refers valid data inside this instance.
     pub(crate) unsafe fn split(
         &mut self,
-        references: &mut References<N>,
+        refs: &mut TreeRefs<N>,
         mut chunk_ref: ChildCursor<N>,
     ) -> Self {
         if chunk_ref.is_dangling() {
@@ -665,7 +671,7 @@ impl<N: Node> Tree<N> {
                 false => {
                     let split = unsafe {
                         chunk_ref.item.as_page_mut().split(
-                            references,
+                            refs,
                             Split::dangling(),
                             self.length,
                             chunk_ref.index,
@@ -696,12 +702,10 @@ impl<N: Node> Tree<N> {
             let length = unsafe { container.branch_span() };
 
             unsafe {
-                chunk_ref.item.as_page_mut().split(
-                    references,
-                    Split::dangling(),
-                    length,
-                    chunk_ref.index,
-                )
+                chunk_ref
+                    .item
+                    .as_page_mut()
+                    .split(refs, Split::dangling(), length, chunk_ref.index)
             }
         };
 
@@ -713,7 +717,7 @@ impl<N: Node> Tree<N> {
                     let length = unsafe { parent.branch_span() };
                     let container_ref = unsafe { container.item.as_branch_mut::<PageLayer>() };
 
-                    unsafe { container_ref.split(references, split, length, container.index) }
+                    unsafe { container_ref.split(refs, split, length, container.index) }
                 };
 
                 container = parent;
@@ -728,7 +732,7 @@ impl<N: Node> Tree<N> {
                         let container_ref =
                             unsafe { container.item.as_branch_mut::<BranchLayer>() };
 
-                        unsafe { container_ref.split(references, split, length, container.index) }
+                        unsafe { container_ref.split(refs, split, length, container.index) }
                     };
 
                     container = parent;
@@ -738,15 +742,13 @@ impl<N: Node> Tree<N> {
 
                 let container_ref = unsafe { container.item.as_branch_mut::<BranchLayer>() };
 
-                split =
-                    unsafe { container_ref.split(references, split, self.length, container.index) }
+                split = unsafe { container_ref.split(refs, split, self.length, container.index) }
             }
 
             false => {
                 let container_ref = unsafe { container.item.as_branch_mut::<PageLayer>() };
 
-                split =
-                    unsafe { container_ref.split(references, split, self.length, container.index) }
+                split = unsafe { container_ref.split(refs, split, self.length, container.index) }
             }
         };
 
@@ -764,7 +766,7 @@ impl<N: Node> Tree<N> {
             },
         };
 
-        while !unsafe { right.fix_leftmost_balance(references) } {}
+        while !unsafe { right.fix_leftmost_balance(refs) } {}
 
         if unsafe { right.pages.first.as_ref().next.is_none() } {
             right.pages.last = right.pages.first;
@@ -775,7 +777,7 @@ impl<N: Node> Tree<N> {
         self.length = split.left_span;
         self.root = split.left_item;
 
-        while !unsafe { self.fix_rightmost_balance(references) } {}
+        while !unsafe { self.fix_rightmost_balance(refs) } {}
 
         if unsafe { self.pages.last.as_ref().previous.is_none() } {
             self.pages.first = self.pages.last;
@@ -787,9 +789,9 @@ impl<N: Node> Tree<N> {
     }
 
     //Safety:
-    // 1. All references belong to `references` instance.
+    // 1. All references belong to `refs` instance.
     #[inline]
-    pub(crate) unsafe fn join(&mut self, references: &mut References<N>, other: Self) {
+    pub(crate) unsafe fn join(&mut self, refs: &mut TreeRefs<N>, other: Self) {
         if other.height == 0 {
             return;
         }
@@ -800,21 +802,25 @@ impl<N: Node> Tree<N> {
         }
 
         if self.height == other.height {
-            unsafe { self.join_roots(other, references) };
+            unsafe { self.join_roots(other, refs) };
             return;
         }
 
         if self.height > other.height {
-            unsafe { self.join_to_left(other, references) };
+            unsafe { self.join_to_left(other, refs) };
             return;
         }
 
-        unsafe { self.join_to_right(other, references) };
+        unsafe { self.join_to_right(other, refs) };
     }
 
     //Safety:
-    // 1. All references belong to `references` instance.
-    pub(crate) unsafe fn free_as_subtree(&mut self, references: &mut References<N>) -> TokenCount {
+    // 1. All references belong to `refs` instance.
+    pub(crate) unsafe fn free_as_subtree(
+        &mut self,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
+    ) -> TokenCount {
         if self.height == 0 {
             return 0;
         }
@@ -822,18 +828,20 @@ impl<N: Node> Tree<N> {
         let root = &mut self.root;
 
         let token_count = match self.height {
-            1 => unsafe { root.as_page_ref().into_owned().free_subtree(references) },
+            1 => unsafe { root.as_page_ref().into_owned().free_subtree(refs, watch) },
 
             2 => unsafe {
-                root.as_branch_ref::<PageLayer>()
-                    .into_owned()
-                    .free_subtree(self.height, references)
+                root.as_branch_ref::<PageLayer>().into_owned().free_subtree(
+                    self.height,
+                    refs,
+                    watch,
+                )
             },
 
             _ => unsafe {
                 root.as_branch_ref::<BranchLayer>()
                     .into_owned()
-                    .free_subtree(self.height, references)
+                    .free_subtree(self.height, refs, watch)
             },
         };
 
@@ -870,8 +878,8 @@ impl<N: Node> Tree<N> {
 
     //Safety:
     // 1. `self.height >= 2`.
-    // 2. All references belong to `references` instance.
-    unsafe fn fix_leftmost_balance(&mut self, references: &mut References<N>) -> bool {
+    // 2. All references belong to `refs` instance.
+    unsafe fn fix_leftmost_balance(&mut self, refs: &mut TreeRefs<N>) -> bool {
         debug_assert!(self.height >= 2, "Incorrect height.");
 
         let mut depth = 1;
@@ -885,7 +893,7 @@ impl<N: Node> Tree<N> {
             let is_balanced;
 
             (is_balanced, leftmost_variant) =
-                unsafe { leftmost_ref.fix_leftmost_balance::<BranchLayer>(references) };
+                unsafe { leftmost_ref.fix_leftmost_balance::<BranchLayer>(refs) };
 
             balanced = balanced && is_balanced;
         }
@@ -897,7 +905,7 @@ impl<N: Node> Tree<N> {
             let is_balanced;
 
             (is_balanced, leftmost_variant) =
-                unsafe { leftmost_ref.fix_leftmost_balance::<PageLayer>(references) };
+                unsafe { leftmost_ref.fix_leftmost_balance::<PageLayer>(refs) };
 
             balanced = balanced && is_balanced;
         }
@@ -909,7 +917,7 @@ impl<N: Node> Tree<N> {
             let is_balanced;
 
             (is_balanced, leftmost_variant) =
-                unsafe { leftmost_ref.fix_leftmost_balance::<()>(references) };
+                unsafe { leftmost_ref.fix_leftmost_balance::<()>(refs) };
 
             balanced = balanced && is_balanced;
 
@@ -925,9 +933,9 @@ impl<N: Node> Tree<N> {
 
     //Safety:
     // 1. `self.height >= 2`.
-    // 2. All references belong to `references` instance.
+    // 2. All references belong to `refs` instance.
     #[inline]
-    unsafe fn fix_rightmost_balance(&mut self, references: &mut References<N>) -> bool {
+    unsafe fn fix_rightmost_balance(&mut self, refs: &mut TreeRefs<N>) -> bool {
         debug_assert!(self.height >= 2, "Incorrect height.");
 
         let mut depth = 1;
@@ -941,7 +949,7 @@ impl<N: Node> Tree<N> {
             let is_balanced;
 
             (is_balanced, rightmost_variant) =
-                unsafe { rightmost_ref.fix_rightmost_balance::<BranchLayer>(references) };
+                unsafe { rightmost_ref.fix_rightmost_balance::<BranchLayer>(refs) };
 
             balanced = balanced && is_balanced;
         }
@@ -953,7 +961,7 @@ impl<N: Node> Tree<N> {
             let is_balanced;
 
             (is_balanced, rightmost_variant) =
-                unsafe { rightmost_ref.fix_rightmost_balance::<PageLayer>(references) };
+                unsafe { rightmost_ref.fix_rightmost_balance::<PageLayer>(refs) };
 
             balanced = balanced && is_balanced;
         }
@@ -965,7 +973,7 @@ impl<N: Node> Tree<N> {
             let is_balanced;
 
             (is_balanced, rightmost_variant) =
-                unsafe { rightmost_ref.fix_rightmost_balance::<()>(references) };
+                unsafe { rightmost_ref.fix_rightmost_balance::<()>(refs) };
 
             balanced = balanced && is_balanced;
 
@@ -1016,8 +1024,8 @@ impl<N: Node> Tree<N> {
     //Safety:
     // 1. `self` height is greater than `other` height.
     // 2. `self.height` is positive value.
-    // 3. All references belong to `references` instance.
-    unsafe fn join_to_left(&mut self, mut other: Self, references: &mut References<N>) {
+    // 3. All references belong to `refs` instance.
+    unsafe fn join_to_left(&mut self, mut other: Self, refs: &mut TreeRefs<N>) {
         let mut depth = self.height;
         let mut left = self.root;
 
@@ -1044,13 +1052,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_page_mut() };
 
                 let (merged, new_root) = unsafe {
-                    ItemRef::join_to_left(
-                        left_ref,
-                        right_ref,
-                        self.length,
-                        other.length,
-                        references,
-                    )
+                    ItemRef::join_to_left(left_ref, right_ref, self.length, other.length, refs)
                 };
 
                 if !merged {
@@ -1075,13 +1077,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_branch_mut::<PageLayer>() };
 
                 unsafe {
-                    ItemRef::join_to_left(
-                        left_ref,
-                        right_ref,
-                        self.length,
-                        other.length,
-                        references,
-                    )
+                    ItemRef::join_to_left(left_ref, right_ref, self.length, other.length, refs)
                 }
                 .1
             }
@@ -1097,13 +1093,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_branch_mut::<BranchLayer>() };
 
                 unsafe {
-                    ItemRef::join_to_left(
-                        left_ref,
-                        right_ref,
-                        self.length,
-                        other.length,
-                        references,
-                    )
+                    ItemRef::join_to_left(left_ref, right_ref, self.length, other.length, refs)
                 }
                 .1
             }
@@ -1122,8 +1112,8 @@ impl<N: Node> Tree<N> {
     //Safety:
     // 1. `self` height is greater than `other` height.
     // 2. `self.height` is positive value.
-    // 3. All references belong to `references` instance.
-    unsafe fn join_to_right(&mut self, mut other: Self, references: &mut References<N>) {
+    // 3. All references belong to `refs` instance.
+    unsafe fn join_to_right(&mut self, mut other: Self, refs: &mut TreeRefs<N>) {
         let mut depth = other.height;
         let mut right = other.root;
 
@@ -1145,13 +1135,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_page_mut() };
 
                 let (merged, new_root) = unsafe {
-                    ItemRef::join_to_right(
-                        left_ref,
-                        right_ref,
-                        self.length,
-                        other.length,
-                        references,
-                    )
+                    ItemRef::join_to_right(left_ref, right_ref, self.length, other.length, refs)
                 };
 
                 if !merged {
@@ -1176,13 +1160,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_branch_mut::<PageLayer>() };
 
                 unsafe {
-                    ItemRef::join_to_right(
-                        left_ref,
-                        right_ref,
-                        self.length,
-                        other.length,
-                        references,
-                    )
+                    ItemRef::join_to_right(left_ref, right_ref, self.length, other.length, refs)
                 }
                 .1
             }
@@ -1198,13 +1176,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_branch_mut::<BranchLayer>() };
 
                 unsafe {
-                    ItemRef::join_to_right(
-                        left_ref,
-                        right_ref,
-                        self.length,
-                        other.length,
-                        references,
-                    )
+                    ItemRef::join_to_right(left_ref, right_ref, self.length, other.length, refs)
                 }
                 .1
             }
@@ -1225,8 +1197,8 @@ impl<N: Node> Tree<N> {
     //Safety:
     // 1. `self` height equals to `right` height.
     // 2. Height is positive value.
-    // 3. All references belong to `references` instance.
-    unsafe fn join_roots(&mut self, mut other: Self, references: &mut References<N>) {
+    // 3. All references belong to `refs` instance.
+    unsafe fn join_roots(&mut self, mut other: Self, refs: &mut TreeRefs<N>) {
         let left = &mut self.root;
         let right = &mut other.root;
 
@@ -1240,7 +1212,7 @@ impl<N: Node> Tree<N> {
                 let right_ref = unsafe { right.as_page_mut() };
 
                 let new_root = unsafe {
-                    ItemRef::join_roots(left_ref, right_ref, self.length, other.length, references)
+                    ItemRef::join_roots(left_ref, right_ref, self.length, other.length, refs)
                 };
 
                 if new_root.is_some() {
@@ -1264,9 +1236,7 @@ impl<N: Node> Tree<N> {
                 let left_ref = unsafe { left.as_branch_mut::<PageLayer>() };
                 let right_ref = unsafe { right.as_branch_mut::<PageLayer>() };
 
-                unsafe {
-                    ItemRef::join_roots(left_ref, right_ref, self.length, other.length, references)
-                }
+                unsafe { ItemRef::join_roots(left_ref, right_ref, self.length, other.length, refs) }
             }
 
             _ => {
@@ -1279,9 +1249,7 @@ impl<N: Node> Tree<N> {
                 let left_ref = unsafe { left.as_branch_mut::<BranchLayer>() };
                 let right_ref = unsafe { right.as_branch_mut::<BranchLayer>() };
 
-                unsafe {
-                    ItemRef::join_roots(left_ref, right_ref, self.length, other.length, references)
-                }
+                unsafe { ItemRef::join_roots(left_ref, right_ref, self.length, other.length, refs) }
             }
         };
 
