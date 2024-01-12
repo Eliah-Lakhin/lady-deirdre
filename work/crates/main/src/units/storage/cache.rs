@@ -37,19 +37,120 @@
 
 use crate::{
     arena::EntryIndex,
-    lexis::{Length, SiteRef},
-    syntax::{Cluster, Node, NodeRule},
+    lexis::{Length, Site, SiteRef, SiteRefInner},
+    report::debug_unreachable,
+    std::*,
+    syntax::{ErrorRef, Node, NodeRef, NodeRule},
+    units::{
+        storage::{ChildCursor, Tree, TreeRefs},
+        Watch,
+    },
 };
 
-pub(crate) struct ClusterCache<N: Node> {
-    pub(crate) cluster: Cluster<N>,
+pub(crate) struct Cache {
     pub(crate) rule: NodeRule,
-    pub(crate) parsed_end: SiteRef,
+    pub(crate) parse_end: SiteRef,
     pub(crate) lookahead: Length,
-    pub(crate) successful: bool,
+    pub(crate) primary_node: EntryIndex,
+    pub(crate) secondary_nodes: Vec<EntryIndex>,
+    pub(crate) errors: Vec<EntryIndex>,
 }
 
-pub(super) struct CacheEntry<N: Node> {
-    pub(super) cache: ClusterCache<N>,
-    pub(super) entry_index: EntryIndex,
+impl Cache {
+    #[inline(always)]
+    pub(crate) fn free<N: Node>(self, refs: &mut TreeRefs<N>, watch: &mut impl Watch) {
+        watch.report_node(&NodeRef {
+            id: refs.id,
+            entry: unsafe { refs.nodes.remove_unchecked(self.primary_node) },
+        });
+
+        for index in self.secondary_nodes {
+            watch.report_node(&NodeRef {
+                id: refs.id,
+                entry: unsafe { refs.nodes.remove_unchecked(index) },
+            });
+        }
+
+        for index in self.errors {
+            watch.report_error(&ErrorRef {
+                id: refs.id,
+                entry: unsafe { refs.errors.remove_unchecked(index) },
+            });
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn free_inner<N: Node>(
+        self,
+        refs: &mut TreeRefs<N>,
+        watch: &mut impl Watch,
+    ) -> (NodeRule, EntryIndex) {
+        watch.report_node(&NodeRef {
+            id: refs.id,
+            entry: unsafe { refs.nodes.entry_of_unchecked(self.primary_node) },
+        });
+
+        for index in self.secondary_nodes {
+            watch.report_node(&NodeRef {
+                id: refs.id,
+                entry: unsafe { refs.nodes.remove_unchecked(index) },
+            });
+        }
+
+        for index in self.errors {
+            watch.report_error(&ErrorRef {
+                id: refs.id,
+                entry: unsafe { refs.errors.remove_unchecked(index) },
+            });
+        }
+
+        (self.rule, self.primary_node)
+    }
+
+    // Safety:
+    // 1. Cache belongs to specified `tree` and `refs` pair.
+    #[inline(always)]
+    pub(crate) unsafe fn jump_to_end<N: Node>(
+        &self,
+        tree: &Tree<N>,
+        refs: &TreeRefs<N>,
+    ) -> (Site, ChildCursor<N>) {
+        match self.parse_end.inner() {
+            SiteRefInner::ChunkStart(token_ref) => {
+                if token_ref.entry.version == 0 {
+                    // Safety: Chunks stored in Repository.
+                    unsafe { debug_unreachable!("Incorrect cache end site Ref type.") }
+                }
+
+                let chunk_entry_index = token_ref.entry.index;
+
+                let chunk_cursor = unsafe { refs.chunks.get_unchecked(chunk_entry_index) };
+
+                let site = unsafe { tree.site_of(chunk_cursor) };
+
+                (site, *chunk_cursor)
+            }
+
+            SiteRefInner::CodeEnd(_) => (tree.code_length(), ChildCursor::dangling()),
+        }
+    }
+
+    // Safety:
+    // 1. Cache belongs to specified `tree` and `refs` pair.
+    #[inline(always)]
+    pub(crate) unsafe fn end_site<N: Node>(
+        &self,
+        tree: &Tree<N>,
+        refs: &TreeRefs<N>,
+    ) -> Option<Site> {
+        match self.parse_end.inner() {
+            SiteRefInner::ChunkStart(token_ref) => {
+                let chunk_cursor = refs.chunks.get(&token_ref.entry)?;
+
+                Some(unsafe { tree.site_of(chunk_cursor) })
+            }
+
+            SiteRefInner::CodeEnd(_) => Some(tree.code_length()),
+        }
+    }
 }

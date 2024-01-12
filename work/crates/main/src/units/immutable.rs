@@ -40,13 +40,13 @@ use crate::{
     format::SnippetFormatter,
     lexis::{SourceCode, Token, TokenBuffer},
     std::*,
-    syntax::{Node, SyntaxBuffer},
+    syntax::{ImmutableSyntaxTree, Node},
     units::{CompilationUnit, Lexis, Syntax},
 };
 
 pub struct ImmutableUnit<N: Node> {
     lexis: TokenBuffer<N::Token>,
-    syntax: SyntaxBuffer<N>,
+    syntax: ImmutableSyntaxTree<N>,
 }
 
 impl<N: Node> Identifiable for ImmutableUnit<N> {
@@ -87,7 +87,7 @@ impl<N: Node> Lexis for ImmutableUnit<N> {
 }
 
 impl<N: Node> Syntax for ImmutableUnit<N> {
-    type Syntax = SyntaxBuffer<N>;
+    type Syntax = ImmutableSyntaxTree<N>;
 
     #[inline(always)]
     fn syntax(&self) -> &Self::Syntax {
@@ -115,7 +115,7 @@ impl<T: Token> TokenBuffer<T> {
     {
         self.reset_id();
 
-        let syntax = SyntaxBuffer::with_id(self.id(), self.cursor(..));
+        let syntax = ImmutableSyntaxTree::with_id(self.id(), self.cursor(..));
 
         ImmutableUnit {
             lexis: self,
@@ -147,7 +147,7 @@ impl<N: Node> ImmutableUnit<N> {
     pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         let lexis = text.into();
 
-        let syntax = SyntaxBuffer::with_id(lexis.id(), lexis.cursor(..));
+        let syntax = ImmutableSyntaxTree::with_id(lexis.id(), lexis.cursor(..));
 
         Self { lexis, syntax }
     }

@@ -38,7 +38,7 @@
 pub(crate) mod unit;
 pub(crate) mod watch;
 
-mod chars;
 mod cursor;
+mod iters;
 mod lexis;
 mod syntax;

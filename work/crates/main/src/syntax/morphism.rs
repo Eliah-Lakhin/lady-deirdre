@@ -222,8 +222,8 @@ impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
                 summary.push_str(token.name().unwrap_or("?"));
                 summary.push_str("\nDescription: ");
                 summary.push_str(token.describe(true).unwrap_or("?"));
-                summary.push_str("\nChunk entry: ");
-                summary.push_str(&format!("{:?}", variant.chunk_entry));
+                summary.push_str("\nEntry: ");
+                summary.push_str(&format!("{:?}", variant.entry));
                 summary.push_str("\nLength: ");
                 summary.push_str(&chunk.length.to_string());
                 summary.push_str("\nSite span: ");
@@ -249,10 +249,8 @@ impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
                 summary.push_str(node.name().unwrap_or("?"));
                 summary.push_str("\nDescription: ");
                 summary.push_str(node.describe(true).unwrap_or("?"));
-                summary.push_str("\nCluster entry: ");
-                summary.push_str(&format!("{:?}", variant.cluster_entry));
                 summary.push_str("\nNode entry: ");
-                summary.push_str(&format!("{:?}", variant.node_entry));
+                summary.push_str(&format!("{:?}", variant.entry));
                 summary.push_str("\nSite span: ");
                 summary.push_str(&span.start.to_string());
                 summary.push_str("..");

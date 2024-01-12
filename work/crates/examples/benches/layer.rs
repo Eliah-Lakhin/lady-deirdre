@@ -91,7 +91,7 @@ impl BenchDataLayer {
             if !path.exists() {
                 println!(
                     "{path:?} file does not exist.\nThe test data will be \
-                regenerated and the saved to this file.",
+                regenerated and saved to this file.",
                 );
 
                 save = true;
@@ -107,7 +107,7 @@ impl BenchDataLayer {
                         Err(error) => {
                             println!(
                                 "{path:?} deserialization error: {error}.\nThe \
-                            test data will be regenerated and the saved to \
+                            test data will be regenerated and saved to \
                             this file.",
                             );
 
@@ -120,7 +120,7 @@ impl BenchDataLayer {
                 Err(error) => {
                     println!(
                         "{path:?} read error: {error}.\nThe test data will be \
-                    regenerated and the saved to this file.",
+                    regenerated and saved to this file.",
                     );
 
                     save = true;
@@ -146,7 +146,7 @@ impl BenchDataLayer {
 
                 match write(&path, serialized) {
                     Ok(()) => {
-                        println!("The test data successfully save to file: {path:?}.");
+                        println!("The test data successfully saved to file: {path:?}.");
                     }
 
                     Err(error) => {

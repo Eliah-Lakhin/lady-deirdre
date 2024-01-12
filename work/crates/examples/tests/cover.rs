@@ -138,44 +138,6 @@ pub enum DebugNode {
 }
 
 #[test]
-fn test_clusters_traverse() {
-    let mut doc = Document::<DebugNode>::default();
-
-    assert!(doc.root_node_ref().span(&doc).is_none());
-
-    doc.write(
-        ..,
-        r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,
-    );
-
-    assert_eq!(0..70, doc.root_node_ref().span(&doc).unwrap());
-
-    let mut cluster = doc.root_cluster_ref();
-
-    cluster = cluster.next(&doc);
-    assert_eq!(8..58, cluster.primary_node_ref().span(&doc).unwrap());
-
-    cluster = cluster.next(&doc);
-    assert_eq!(34..57, cluster.primary_node_ref().span(&doc).unwrap());
-
-    cluster = cluster.next(&doc);
-    assert_eq!(67..69, cluster.primary_node_ref().span(&doc).unwrap());
-
-    assert!(!cluster.next(&doc).is_valid_ref(&doc));
-
-    cluster = cluster.previous(&doc);
-    assert_eq!(34..57, cluster.primary_node_ref().span(&doc).unwrap());
-
-    cluster = cluster.previous(&doc);
-    assert_eq!(8..58, cluster.primary_node_ref().span(&doc).unwrap());
-
-    cluster = cluster.previous(&doc);
-    assert_eq!(0..70, cluster.primary_node_ref().span(&doc).unwrap());
-
-    assert!(!cluster.previous(&doc).is_valid_ref(&doc));
-}
-
-#[test]
 fn test_nodes_cover() {
     let doc = Document::<DebugNode>::from(
         r#"{"foo": [1, 3, true, false, null, {"a": "xyz", "b": null}], "baz": {}}"#,

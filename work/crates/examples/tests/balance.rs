@@ -111,18 +111,11 @@ fn test_balance() {
                     Some(node) => node,
                 };
 
-                let errors = match document.get_cluster(&node_ref.cluster_entry) {
-                    None => 0,
-
-                    Some(cluster) => (&cluster.errors).into_iter().count(),
-                };
-
                 match node {
                     DebugNode::Root { version, inner } => {
                         format!(
-                            "{}:{}<{}>",
+                            "{}<{}>",
                             version,
-                            errors,
                             inner
                                 .iter()
                                 .map(|node_ref| traverse(document, node_ref))
@@ -133,9 +126,8 @@ fn test_balance() {
 
                     DebugNode::Parenthesis { version, inner } => {
                         format!(
-                            "{}:{}({})",
+                            "{}({})",
                             version,
-                            errors,
                             inner
                                 .iter()
                                 .map(|node_ref| traverse(document, node_ref))
@@ -146,9 +138,8 @@ fn test_balance() {
 
                     DebugNode::Brackets { version, inner } => {
                         format!(
-                            "{}:{}[{}]",
+                            "{}[{}]",
                             version,
-                            errors,
                             inner
                                 .iter()
                                 .map(|node_ref| traverse(document, node_ref))
@@ -159,9 +150,8 @@ fn test_balance() {
 
                     DebugNode::Braces { version, inner } => {
                         format!(
-                            "{}:{}{{{}}}",
+                            "{}{{{}}}",
                             version,
-                            errors,
                             inner
                                 .iter()
                                 .map(|node_ref| traverse(document, node_ref))
@@ -185,14 +175,14 @@ fn test_balance() {
 
     let mut document = Document::<DebugNode>::from("foo bar baz");
 
-    assert_eq!(document.debug_print(), "0:0<>");
+    assert_eq!(document.debug_print(), "0<>");
     assert_eq!(document.substring(..), "foo bar baz");
     assert_eq!(document.debug_errors(), "");
 
     unsafe { VERSION = 1 };
 
     document.write(0..0, "(");
-    assert_eq!(document.debug_print(), "1:1<1:1()>");
+    assert_eq!(document.debug_print(), "1<1()>");
     assert_eq!(document.substring(..), "(foo bar baz");
     assert_eq!(
         document.debug_errors(),
@@ -202,7 +192,7 @@ fn test_balance() {
     unsafe { VERSION = 2 };
 
     document.write(1..1, "[{");
-    assert_eq!(document.debug_print(), "2:0<2:0(2:0[2:1{}])>");
+    assert_eq!(document.debug_print(), "1<2(2[2{}])>");
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
@@ -212,7 +202,7 @@ fn test_balance() {
     unsafe { VERSION = 3 };
 
     document.write(6..6, ")");
-    assert_eq!(document.debug_print(), "3:0<3:0(3:0[3:1{}])>");
+    assert_eq!(document.debug_print(), "3<3(3[3{}])>");
     assert_eq!(document.substring(..), "([{foo) bar baz");
     assert_eq!(
         document.debug_errors(),
@@ -222,11 +212,11 @@ fn test_balance() {
     unsafe { VERSION = 4 };
 
     document.write(6..7, "");
-    assert_eq!(document.debug_print(), "4:0<4:0(4:0[4:1{}])>");
+    assert_eq!(document.debug_print(), "3<4(4[4{}])>");
     assert_eq!(document.substring(..), "([{foo bar baz");
     assert_eq!(
         document.debug_errors(),
-        "1:4 (11 chars): Unexpected end of input in Braces."
+        "1:4 (11 chars): Unexpected end of input in Braces.\n1:15: Unexpected end of input in Parenthesis."
     );
 
     unsafe { VERSION = 5 };
@@ -236,14 +226,14 @@ fn test_balance() {
     unsafe { VERSION = 7 };
 
     document.write(20..20, ")");
-    assert_eq!(document.debug_print(), "7:0<7:0(6:0[5:0{}5:0()5:0[]])>");
+    assert_eq!(document.debug_print(), "3<7(6[5{}5()5[]])>");
     assert_eq!(document.substring(..), "([{foo}()[] bar] baz)");
     assert_eq!(document.debug_errors(), r#""#);
 
     unsafe { VERSION = 8 };
 
     document.write(7..8, "");
-    assert_eq!(document.debug_print(), "8:1<8:1(8:1[8:0{}])5:0[]>");
+    assert_eq!(document.debug_print(), "8<8(8[8{}])5[]>");
     assert_eq!(document.substring(..), "([{foo})[] bar] baz)");
     assert_eq!(
         document.debug_errors(),
@@ -254,7 +244,7 @@ fn test_balance() {
     unsafe { VERSION = 9 };
 
     document.write(12..12, "X");
-    assert_eq!(document.debug_print(), "9:1<9:1(9:1[8:0{}])5:0[]>");
+    assert_eq!(document.debug_print(), "9<8(8[8{}])5[]>");
     assert_eq!(document.substring(..), "([{foo})[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
@@ -265,17 +255,14 @@ fn test_balance() {
     unsafe { VERSION = 10 };
 
     document.write(2..2, "(");
-    assert_eq!(document.debug_print(), "10:0<10:0(10:0[10:0(8:0{})5:0[]])>");
+    assert_eq!(document.debug_print(), "10<10(10[10(8{})5[]])>");
     assert_eq!(document.substring(..), "([({foo})[] bXar] baz)");
     assert_eq!(document.debug_errors(), "");
 
     unsafe { VERSION = 11 };
 
     document.write(7..8, "");
-    assert_eq!(
-        document.debug_print(),
-        "10:0<10:0(10:0[10:0(11:1{})5:0[]])>",
-    );
+    assert_eq!(document.debug_print(), "10<10(10[10(11{})5[]])>");
     assert_eq!(document.substring(..), "([({foo)[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
@@ -285,10 +272,7 @@ fn test_balance() {
     unsafe { VERSION = 12 };
 
     document.write(7..7, "}");
-    assert_eq!(
-        document.debug_print(),
-        "10:0<10:0(10:0[10:0(12:0{})5:0[]])>",
-    );
+    assert_eq!(document.debug_print(), "10<10(10[10(12{})5[]])>");
     assert_eq!(document.substring(..), "([({foo})[] bXar] baz)");
     assert_eq!(document.debug_errors(), "");
 }

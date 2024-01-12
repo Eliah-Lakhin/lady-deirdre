@@ -39,7 +39,7 @@ use std::fmt::{Display, Formatter};
 
 use lady_deirdre::{
     lexis::{SourceCode, TokenRef},
-    syntax::{NodeRef, SyntaxBuffer, SyntaxTree},
+    syntax::{ImmutableSyntaxTree, NodeRef, SyntaxTree},
 };
 
 use crate::json::{lexis::JsonToken, syntax::JsonNode};
@@ -50,7 +50,7 @@ pub trait ToJsonString {
 
 impl<L: SourceCode<Token = JsonToken>> ToJsonString for L {
     fn to_json_string(&self) -> String {
-        let syntax = SyntaxBuffer::parse(self.cursor(..));
+        let syntax = ImmutableSyntaxTree::parse(self.cursor(..));
 
         let formatter = JsonFormatter {
             lexis: self,

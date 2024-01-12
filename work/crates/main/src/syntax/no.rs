@@ -80,6 +80,15 @@ pub struct NoSyntax<T: Token> {
     _token: PhantomData<T>,
 }
 
+impl<T: Token> Default for NoSyntax<T> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self {
+            _token: PhantomData,
+        }
+    }
+}
+
 impl<T: Token> Debug for NoSyntax<T> {
     #[inline(always)]
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
@@ -152,15 +161,11 @@ impl<T: Token> Node for NoSyntax<T> {
         _session: &mut impl SyntaxSession<'code, Node = Self>,
         _rule: NodeRule,
     ) -> Self {
-        Self::nil()
+        Self::default()
     }
 }
 
-impl<T: Token> NoSyntax<T> {
-    #[inline(always)]
-    pub(crate) fn nil() -> Self {
-        Self {
-            _token: PhantomData::default(),
-        }
-    }
+#[inline(always)]
+pub(crate) fn is_void_syntax<N: Node>() -> bool {
+    TypeId::of::<N>() == TypeId::of::<NoSyntax<N::Token>>()
 }

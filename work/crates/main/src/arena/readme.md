@@ -20,11 +20,11 @@ As a rule of thumb you can implement an [Identifiable] trait for your Container,
 so it would be easier for your users to distinct between Container instances.
 
 ```rust
-use lady_deirdre::arena::{Id, Identifiable, Repository, Sequence, Entry};
+use lady_deirdre::arena::{Id, Identifiable, Repo, Entry};
 
 pub struct IntStorage {
     id: Id,
-    inner: Repository<usize>,
+    inner: Repo<usize>,
 }
 
 impl Identifiable for IntStorage {
@@ -36,8 +36,8 @@ impl IntStorage {
         Self {
             // Id::new() returns a globally unique value. 
             id: Id::new(),
-            // Alternatively use Repository::with_capacity(...).
-            inner: Repository::default(),
+            // Alternatively use Repo::with_capacity(...).
+            inner: Repo::default(),
         }
     }
 
@@ -91,7 +91,7 @@ impl IntRef {
             return None;
         }
 
-        // Returns "Some" if referred Item still exists in this Repository,
+        // Returns "Some" if referred Item still exists in this Repo,
         // otherwise returns "None"(IntRef weak reference considered obsolete).
         storage.inner.get(&self.entry)
     }

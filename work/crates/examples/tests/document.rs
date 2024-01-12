@@ -546,7 +546,7 @@ fn test_document_write() {
     );
 
     assert_eq!(document.length(), 47);
-    assert_eq!(document.token_count(), 33);
+    assert_eq!(document.tokens(), 33);
     assert_eq!(document.cursor(..).string(0).unwrap(), "123");
     assert_eq!(document.cursor(..).string(1).unwrap(), " ");
     assert_eq!(document.cursor(..).string(2).unwrap(), "foo");
@@ -570,7 +570,7 @@ fn test_document_write() {
     );
 
     assert_eq!(document.length(), 42);
-    assert_eq!(document.token_count(), 29);
+    assert_eq!(document.tokens(), 29);
     assert_eq!(document.cursor(..).string(0).unwrap(), "123");
     assert_eq!(document.cursor(..).string(1).unwrap(), " ");
     assert_eq!(document.cursor(..).string(2).unwrap(), "foar12");
@@ -584,7 +584,7 @@ fn test_document_write() {
     document.write(4..36, "");
 
     assert_eq!(document.length(), 10);
-    assert_eq!(document.token_count(), 5);
+    assert_eq!(document.tokens(), 5);
     assert_eq!(document.substring(..), "123  14 15");
     assert_eq!(document.cursor(..).string(0).unwrap(), "123");
     assert_eq!(document.cursor(..).string(1).unwrap(), "  ");

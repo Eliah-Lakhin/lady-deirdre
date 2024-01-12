@@ -47,15 +47,14 @@ use crate::{
         Capture,
         CapturesIter,
         ChildrenIter,
-        ClusterRef,
         DebugObserver,
+        ImmutableSyntaxTree,
         Key,
         NodeRule,
         ParseError,
         PolyRef,
         PolyVariant,
         RefKind,
-        SyntaxBuffer,
         SyntaxSession,
         SyntaxTree,
         NON_RULE,
@@ -377,7 +376,10 @@ pub trait Node: AbstractNode + Sized {
     fn debug(text: impl AsRef<str>) {
         let tokens = TokenBuffer::<Self::Token>::from(text);
 
-        SyntaxBuffer::<Self>::parse_with_observer(tokens.cursor(..), &mut DebugObserver::default());
+        ImmutableSyntaxTree::<Self>::parse_with_observer(
+            tokens.cursor(..),
+            &mut DebugObserver::default(),
+        );
     }
 }
 
@@ -533,10 +535,6 @@ pub struct NodeRef {
     /// this weakly referred [Node] belongs to.
     pub id: Id,
 
-    /// An internal weak reference of the node's [Cluster](crate::syntax::Cluster) of the
-    /// [SyntaxTree](crate::syntax::SyntaxTree) instance.
-    pub cluster_entry: Entry,
-
     /// An internal weak reference of the Node object in the
     /// [Cluster](crate::syntax::Cluster).
     ///
@@ -544,7 +542,7 @@ pub struct NodeRef {
     /// refers [`Cluster::primary`](crate::syntax::Cluster::primary) object. Otherwise `node_ref` is
     /// a [`Entry::Repo`] variant that refers an object from the
     /// [`Cluster::nodes`](crate::syntax::Cluster::nodes) repository.
-    pub node_entry: Entry,
+    pub entry: Entry,
 }
 
 impl Debug for NodeRef {
@@ -552,8 +550,8 @@ impl Debug for NodeRef {
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
-                "NodeRef(id: {:?}, cluster_entry: {:?}, node_entry: {:?})",
-                self.id, self.cluster_entry, self.node_entry,
+                "NodeRef(id: {:?}, entry: {:?})",
+                self.id, self.entry,
             )),
             true => formatter.write_str("NodeRef(Nil)"),
         }
@@ -582,7 +580,7 @@ impl PolyRef for NodeRef {
 
     #[inline(always)]
     fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.cluster_entry.is_nil() || self.node_entry.is_nil()
+        self.id.is_nil() || self.entry.is_nil()
     }
 
     #[inline(always)]
@@ -614,8 +612,7 @@ impl NodeRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            cluster_entry: Entry::Nil,
-            node_entry: Entry::Nil,
+            entry: Entry::nil(),
         }
     }
 
@@ -637,13 +634,7 @@ impl NodeRef {
             return None;
         }
 
-        let cluster = tree.get_cluster(&self.cluster_entry)?;
-
-        match &self.node_entry {
-            Entry::Primary => Some(&cluster.primary),
-
-            _ => cluster.nodes.get(&self.node_entry),
-        }
+        tree.get_node(&self.entry)
     }
 
     /// Mutably dereferences weakly referred [Node] of specified
@@ -665,13 +656,7 @@ impl NodeRef {
             return None;
         }
 
-        let cluster = tree.get_cluster_mut(&self.cluster_entry)?;
-
-        match &self.node_entry {
-            Entry::Primary => Some(&mut cluster.primary),
-
-            _ => cluster.nodes.get_mut(&self.node_entry),
-        }
+        tree.get_node_mut(&self.entry)
     }
 
     #[inline(always)]
@@ -795,38 +780,6 @@ impl NodeRef {
         *sibling
     }
 
-    /// Creates a weak reference of the [Cluster](crate::syntax::Cluster) of referred [Node].
-    #[inline(always)]
-    pub fn cluster_ref(&self) -> ClusterRef {
-        ClusterRef {
-            id: self.id,
-            cluster_entry: self.cluster_entry,
-        }
-    }
-
-    /// Removes an instance of the [Node] from the [SyntaxTree](crate::syntax::SyntaxTree)
-    /// that is weakly referred by this reference.
-    ///
-    /// Returns [Some] value of the Node if this weak reference is a valid reference of
-    /// existing node inside `tree` instance. Otherwise returns [None].
-    ///
-    /// Use [is_valid_ref](NodeRef::is_valid_ref) to check NodeRef validity.
-    ///
-    /// This function uses
-    /// [`SyntaxTree::get_cluster_mut`](crate::syntax::SyntaxTree::get_cluster_mut) function under
-    /// the hood.
-    #[inline(always)]
-    pub fn unlink<N: Node>(&self, tree: &mut impl SyntaxTree<Node = N>) -> Option<N> {
-        if self.id != tree.id() {
-            return None;
-        }
-
-        match tree.get_cluster_mut(&self.cluster_entry) {
-            None => None,
-            Some(data) => data.nodes.remove(&self.node_entry),
-        }
-    }
-
     /// Returns `true` if and only if weakly referred Node belongs to specified
     /// [SyntaxTree](crate::syntax::SyntaxTree), and referred Node exists in this SyntaxTree
     /// instance.
@@ -842,15 +795,6 @@ impl NodeRef {
             return false;
         }
 
-        match tree.get_cluster(&self.cluster_entry) {
-            None => false,
-            Some(cluster) => {
-                if let Entry::Primary = &self.node_entry {
-                    return true;
-                }
-
-                cluster.nodes.contains(&self.node_entry)
-            }
-        }
+        tree.has_node(&self.entry)
     }
 }

@@ -37,10 +37,9 @@
 
 #![doc = include_str!("readme.md")]
 
-mod buffer;
 mod captures;
-mod cluster;
 mod error;
+mod immutable;
 mod morphism;
 mod no;
 mod node;
@@ -51,11 +50,11 @@ mod session;
 mod simple;
 mod tree;
 
+pub(crate) use crate::syntax::no::is_void_syntax;
 pub use crate::syntax::{
-    buffer::SyntaxBuffer,
     captures::{Capture, CaptureIntoIter, CapturesIter, ChildrenIter, Key},
-    cluster::{Cluster, ClusterRef, NIL_CLUSTER_REF},
     error::{ErrorRef, ParseError, NIL_ERROR_REF},
+    immutable::ImmutableSyntaxTree,
     morphism::{PolyRef, PolyVariant, RefKind},
     no::NoSyntax,
     node::{AbstractNode, Node, NodeRef, NIL_NODE_REF},
@@ -64,5 +63,5 @@ pub use crate::syntax::{
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,
     simple::SimpleNode,
-    tree::{ErrorIter, ErrorRefsIter, NodeIter, NodeRefsIter, SyntaxTree, Visitor},
+    tree::{ErrorIter, NodeIter, SyntaxTree, Visitor},
 };

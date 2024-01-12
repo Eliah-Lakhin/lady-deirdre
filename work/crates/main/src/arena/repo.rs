@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Entry, EntryIndex, EntryVersion},
-    report::{debug_assert, debug_unreachable},
+    report::debug_unreachable,
     std::*,
 };
 
@@ -76,9 +76,9 @@ use crate::{
 /// that avoids some minor check overhead to benefit performance.
 ///
 /// ```rust
-/// use lady_deirdre::arena::{Repository, Entry};
+/// use lady_deirdre::arena::{Repo, Entry};
 ///
-/// let mut repo = Repository::<&'static str>::default();
+/// let mut repo = Repo::<&'static str>::default();
 ///
 /// let string_a_entry: Entry = repo.insert("foo");
 /// let string_b_entry: Entry = repo.insert("bar");
@@ -103,49 +103,43 @@ use crate::{
 /// assert!(!repo.contains(&string_b_entry));
 /// assert_eq!(repo.get(&string_c_entry).unwrap(), &"baz");
 /// ```
-pub struct Repository<T> {
-    entries: Vec<RepositoryEntry<T>>,
+pub struct Repo<T> {
+    entries: Vec<RepoEntry<T>>,
     next: EntryIndex,
-    revision: EntryVersion,
+    version: EntryVersion,
     modified: bool,
 }
 
-impl<T> Default for Repository<T> {
+impl<T> Default for Repo<T> {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> Debug for Repository<T> {
+impl<T> Debug for Repo<T> {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_str("Repository")
     }
 }
 
-pub type RepositoryIter<'a, T> =
-    FilterMap<Iter<'a, RepositoryEntry<T>>, fn(&'a RepositoryEntry<T>) -> Option<&'a T>>;
+pub type RepoIter<'a, T> = FilterMap<Iter<'a, RepoEntry<T>>, fn(&'a RepoEntry<T>) -> Option<&'a T>>;
 
-pub type RepositoryIterMut<'a, T> =
-    FilterMap<IterMut<'a, RepositoryEntry<T>>, fn(&'a mut RepositoryEntry<T>) -> Option<&'a mut T>>;
+pub type RepoIterMut<'a, T> =
+    FilterMap<IterMut<'a, RepoEntry<T>>, fn(&'a mut RepoEntry<T>) -> Option<&'a mut T>>;
 
-pub type RepositoryEntriesIter<'a, T> = FilterMap<
-    Enumerate<Iter<'a, RepositoryEntry<T>>>,
-    fn((usize, &'a RepositoryEntry<T>)) -> Option<Entry>,
->;
+pub type RepoEntriesIter<'a, T> =
+    FilterMap<Enumerate<Iter<'a, RepoEntry<T>>>, fn((usize, &'a RepoEntry<T>)) -> Option<Entry>>;
 
-pub type RepositoryEntriesIntoIter<T> = FilterMap<
-    Enumerate<IntoIter<RepositoryEntry<T>>>,
-    fn((usize, RepositoryEntry<T>)) -> Option<Entry>,
->;
+pub type RepoEntriesIntoIter<T> =
+    FilterMap<Enumerate<IntoIter<RepoEntry<T>>>, fn((usize, RepoEntry<T>)) -> Option<Entry>>;
 
-pub type RepositoryIntoIter<T> =
-    FilterMap<IntoIter<RepositoryEntry<T>>, fn(RepositoryEntry<T>) -> Option<T>>;
+pub type RepoIntoIter<T> = FilterMap<IntoIter<RepoEntry<T>>, fn(RepoEntry<T>) -> Option<T>>;
 
-impl<'a, T> IntoIterator for &'a Repository<T> {
+impl<'a, T> IntoIterator for &'a Repo<T> {
     type Item = &'a T;
-    type IntoIter = RepositoryIter<'a, T>;
+    type IntoIter = RepoIter<'a, T>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
@@ -153,9 +147,9 @@ impl<'a, T> IntoIterator for &'a Repository<T> {
     }
 }
 
-impl<'a, T> IntoIterator for &'a mut Repository<T> {
+impl<'a, T> IntoIterator for &'a mut Repo<T> {
     type Item = &'a mut T;
-    type IntoIter = RepositoryIterMut<'a, T>;
+    type IntoIter = RepoIterMut<'a, T>;
 
     #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
@@ -163,25 +157,25 @@ impl<'a, T> IntoIterator for &'a mut Repository<T> {
     }
 }
 
-impl<T> IntoIterator for Repository<T> {
+impl<T> IntoIterator for Repo<T> {
     type Item = T;
-    type IntoIter = RepositoryIntoIter<T>;
+    type IntoIter = RepoIntoIter<T>;
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.entries.into_iter().filter_map(|entry| match entry {
-            RepositoryEntry::Occupied { data, .. } => Some(data),
+            RepoEntry::Occupied { data, .. } => Some(data),
             _ => None,
         })
     }
 }
 
-impl<T> FromIterator<T> for Repository<T> {
+impl<T> FromIterator<T> for Repo<T> {
     #[inline(always)]
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         let entries = iter
             .into_iter()
-            .map(|data| RepositoryEntry::Occupied { data, revision: 0 })
+            .map(|data| RepoEntry::Occupied { data, version: 1 })
             .collect::<Vec<_>>();
 
         let next = entries.len();
@@ -189,19 +183,19 @@ impl<T> FromIterator<T> for Repository<T> {
         Self {
             entries,
             next,
-            revision: 0,
+            version: 1,
             modified: false,
         }
     }
 }
 
-impl<T> Repository<T> {
+impl<T> Repo<T> {
     #[inline(always)]
     pub const fn new() -> Self {
         Self {
             entries: Vec::new(),
             next: 0,
-            revision: 0,
+            version: 1,
             modified: false,
         }
     }
@@ -213,7 +207,7 @@ impl<T> Repository<T> {
         Self {
             entries: Vec::with_capacity(capacity),
             next: 0,
-            revision: 0,
+            version: 1,
             modified: false,
         }
     }
@@ -221,9 +215,9 @@ impl<T> Repository<T> {
     /// Adds an item into this collection returning valid weak reference to the item.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_entry = repo.insert(10);
     ///
@@ -233,7 +227,7 @@ impl<T> Repository<T> {
     pub fn insert(&mut self, data: T) -> Entry {
         let index = self.insert_raw(data);
 
-        unsafe { self.entry_of(index) }
+        unsafe { self.entry_of_unchecked(index) }
     }
 
     /// Adds an item into this collection returning valid [RefIndex](crate::arena::EntryIndex) to
@@ -245,9 +239,9 @@ impl<T> Repository<T> {
     /// lesser overhead.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_entry_index = repo.insert_raw(10);
     ///
@@ -258,7 +252,7 @@ impl<T> Repository<T> {
     ///
     /// // This is safe because `insert_index` returns valid index.
     /// let item_entry = unsafe {
-    ///     repo.entry_of(item_entry_index)
+    ///     repo.entry_of_unchecked(item_entry_index)
     /// };
     ///
     /// assert_eq!(repo.get(&item_entry).unwrap(), &10);
@@ -277,34 +271,29 @@ impl<T> Repository<T> {
 
         self.commit(false);
 
-        match self.entries.get_mut(self.next) {
-            None => {
-                self.entries.push(RepositoryEntry::Occupied {
-                    data,
-                    revision: self.revision,
-                });
+        let Some(vacant) = self.entries.get_mut(self.next) else {
+            self.entries.push(RepoEntry::Occupied {
+                data,
+                version: self.version,
+            });
 
-                self.next += 1;
-            }
+            self.next += 1;
 
-            Some(vacant) => {
-                debug_assert!(
-                    matches!(vacant, RepositoryEntry::Vacant(..)),
-                    "Occupied entry in the next position.",
-                );
+            return index;
+        };
 
-                self.next = match replace(
-                    vacant,
-                    RepositoryEntry::Occupied {
-                        data,
-                        revision: self.revision,
-                    },
-                ) {
-                    RepositoryEntry::Vacant(next) => next,
-                    _ => unsafe { unreachable_unchecked() },
-                }
-            }
-        }
+        self.next = match replace(
+            vacant,
+            RepoEntry::Occupied {
+                data,
+                version: self.version,
+            },
+        ) {
+            RepoEntry::Vacant(next) => next,
+
+            // Safety: `next` always refers Vacant entry.
+            _ => unsafe { debug_unreachable!("Wrong discriminant.") },
+        };
 
         index
     }
@@ -318,15 +307,15 @@ impl<T> Repository<T> {
     /// considered invalid, but once the entry initializes it will become valid to dereference.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
-    /// let item_entry_index = repo.reserve();
+    /// let item_entry_index = repo.reserve_entry();
     ///
     /// // This is safe because `reserve` returns valid index.
     /// let item_entry = unsafe {
-    ///     repo.entry_of(item_entry_index)
+    ///     repo.entry_of_unchecked(item_entry_index)
     /// };
     ///
     /// // Referred item is not yet initialized, so it cannot be dereferenced, but is it safe
@@ -341,37 +330,32 @@ impl<T> Repository<T> {
     /// // Since the item already initialized, from now on it is fine to dereference it.
     /// assert_eq!(repo.get(&item_entry).unwrap(), &10);
     /// ```
-    pub fn reserve(&mut self) -> EntryIndex {
+    pub fn reserve_entry(&mut self) -> EntryIndex {
         let index = self.next;
 
         self.commit(false);
 
-        match self.entries.get_mut(self.next) {
-            None => {
-                self.entries.push(RepositoryEntry::Reserved {
-                    revision: self.revision,
-                });
+        let Some(vacant) = self.entries.get_mut(self.next) else {
+            self.entries.push(RepoEntry::Reserved {
+                version: self.version,
+            });
 
-                self.next += 1;
-            }
+            self.next += 1;
 
-            Some(vacant) => {
-                debug_assert!(
-                    matches!(vacant, RepositoryEntry::Vacant(..)),
-                    "Occupied entry in the next position.",
-                );
+            return index;
+        };
 
-                self.next = match replace(
-                    vacant,
-                    RepositoryEntry::Reserved {
-                        revision: self.revision,
-                    },
-                ) {
-                    RepositoryEntry::Vacant(next) => next,
-                    _ => unsafe { unreachable_unchecked() },
-                }
-            }
-        }
+        self.next = match replace(
+            vacant,
+            RepoEntry::Reserved {
+                version: self.version,
+            },
+        ) {
+            RepoEntry::Vacant(next) => next,
+
+            // Safety: `next` always refers Vacant item.
+            _ => unsafe { debug_unreachable!("Wrong discriminant.") },
+        };
 
         index
     }
@@ -381,9 +365,9 @@ impl<T> Repository<T> {
     /// If referred item exists, returns the value. Otherwise returns [None].
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_entry = repo.insert(10);
     ///
@@ -396,38 +380,30 @@ impl<T> Repository<T> {
     /// ```
     #[inline]
     pub fn remove(&mut self, entry: &Entry) -> Option<T> {
-        match entry {
-            Entry::Repo { index, version } => {
-                let entry = self.entries.get_mut(*index)?;
+        let repo_entry = self.entries.get_mut(entry.index)?;
 
-                match entry {
-                    RepositoryEntry::Occupied { revision, .. } if revision == version => (),
+        match repo_entry {
+            RepoEntry::Occupied { version, .. } if version == &entry.version => (),
 
-                    _ => return None,
-                }
-
-                let occupied = replace(entry, RepositoryEntry::Vacant(self.next));
-
-                let data = match occupied {
-                    RepositoryEntry::Occupied { data, .. } => {
-                        self.modified = true;
-                        data
-                    }
-                    _ => unsafe { unreachable_unchecked() },
-                };
-
-                self.next = *index;
-
-                Some(data)
-            }
-
-            _ => None,
+            _ => return None,
         }
+
+        let occupied = replace(repo_entry, RepoEntry::Vacant(self.next));
+
+        let RepoEntry::Occupied { data, .. } = occupied else {
+            // Safety: `discriminant` checked above.
+            unsafe { debug_unreachable!("Wrong discriminant.") }
+        };
+
+        self.modified = true;
+        self.next = entry.index;
+
+        Some(data)
     }
 
     #[inline(always)]
     pub fn version(&self) -> EntryVersion {
-        self.revision
+        self.version
     }
 
     /// Raises repository internal version if the repository contain
@@ -437,14 +413,14 @@ impl<T> Repository<T> {
     /// as the versions are managed automatically.
     ///
     /// This function is supposed to be used together with "upgrade" function.
-    /// See [Upgrade function documentation](Repository::upgrade) for details.
+    /// See [Upgrade function documentation](Repo::upgrade) for details.
     ///
     /// Note that raising of the Repository version does not affect exist entries. It only
     /// affects a newly inserted items, or the items upgraded by the Upgrade function.
     #[inline(always)]
     pub fn commit(&mut self, force: bool) {
         if force || self.modified {
-            self.revision += 1;
+            self.version += 1;
             self.modified = false;
         }
     }
@@ -462,9 +438,9 @@ impl<T> Repository<T> {
     /// Returns `true` if referred item exists in this collection in the Occupied entry.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_entry = repo.insert(10);
     ///
@@ -475,13 +451,27 @@ impl<T> Repository<T> {
     /// assert!(!repo.contains(&item_entry));
     #[inline]
     pub fn contains(&self, entry: &Entry) -> bool {
-        match entry {
-            Entry::Repo { index, version } => match self.entries.get(*index) {
-                Some(RepositoryEntry::Occupied { revision, .. }) => version == revision,
-                _ => false,
-            },
+        let Some(RepoEntry::Occupied { version, .. }) = self.entries.get(entry.index) else {
+            return false;
+        };
 
-            _ => false,
+        *version == entry.version
+    }
+
+    #[inline(always)]
+    pub fn entry_of(&self, index: EntryIndex) -> Entry {
+        let Some(entry) = self.entries.get(index) else {
+            return Entry::nil();
+        };
+
+        let (RepoEntry::Occupied { version, .. } | RepoEntry::Reserved { version, .. }) = entry
+        else {
+            return Entry::nil();
+        };
+
+        Entry {
+            index,
+            version: *version,
         }
     }
 
@@ -490,9 +480,9 @@ impl<T> Repository<T> {
     /// Returns [None] if referred item does not exist in this collection in the Occupied entry.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_entry = repo.insert(10);
     ///
@@ -503,16 +493,15 @@ impl<T> Repository<T> {
     /// assert_eq!(repo.get(&item_entry), None);
     #[inline]
     pub fn get(&self, entry: &Entry) -> Option<&T> {
-        match entry {
-            Entry::Repo { index, version } => match self.entries.get(*index) {
-                Some(RepositoryEntry::Occupied { data, revision, .. }) if version == revision => {
-                    Some(data)
-                }
-                _ => None,
-            },
+        let Some(RepoEntry::Occupied { data, version }) = self.entries.get(entry.index) else {
+            return None;
+        };
 
-            _ => None,
+        if version != &entry.version {
+            return None;
         }
+
+        Some(data)
     }
 
     /// Tries to mutably dereference referred item.
@@ -520,9 +509,9 @@ impl<T> Repository<T> {
     /// Returns [None] if referred item does not exist in this collection in the Occupied entry.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_entry = repo.insert(10);
     ///
@@ -531,58 +520,54 @@ impl<T> Repository<T> {
     /// assert_eq!(repo.get(&item_entry), Some(&20));
     #[inline]
     pub fn get_mut(&mut self, entry: &Entry) -> Option<&mut T> {
-        match entry {
-            Entry::Repo { index, version } => match self.entries.get_mut(*index) {
-                Some(RepositoryEntry::Occupied { data, revision, .. }) if version == revision => {
-                    Some(data)
-                }
-                _ => None,
-            },
+        let Some(RepoEntry::Occupied { data, version }) = self.entries.get_mut(entry.index) else {
+            return None;
+        };
 
-            _ => None,
+        if version != &entry.version {
+            return None;
         }
+
+        Some(data)
     }
 
     #[inline(always)]
-    pub fn iter(&self) -> RepositoryIter<T> {
+    pub fn iter(&self) -> RepoIter<T> {
         self.entries.iter().filter_map(|entry| match entry {
-            RepositoryEntry::Occupied { data, .. } => Some(data),
+            RepoEntry::Occupied { data, .. } => Some(data),
             _ => None,
         })
     }
 
     #[inline(always)]
-    pub fn iter_mut(&mut self) -> RepositoryIterMut<T> {
+    pub fn iter_mut(&mut self) -> RepoIterMut<T> {
         self.entries.iter_mut().filter_map(|entry| match entry {
-            RepositoryEntry::Occupied { data, .. } => Some(data),
+            RepoEntry::Occupied { data, .. } => Some(data),
             _ => None,
         })
     }
 
     #[inline(always)]
-    pub fn entries(&self) -> RepositoryEntriesIter<T> {
+    pub fn entries(&self) -> RepoEntriesIter<T> {
         self.entries
             .iter()
             .enumerate()
             .filter_map(|(index, entry)| match entry {
-                RepositoryEntry::Occupied { revision, .. } => Some(Entry::Repo {
+                RepoEntry::Occupied { version, .. } => Some(Entry {
                     index,
-                    version: *revision,
+                    version: *version,
                 }),
                 _ => None,
             })
     }
 
     #[inline(always)]
-    pub fn into_entries(self) -> RepositoryEntriesIntoIter<T> {
+    pub fn into_entries(self) -> RepoEntriesIntoIter<T> {
         self.entries
             .into_iter()
             .enumerate()
             .filter_map(|(index, entry)| match entry {
-                RepositoryEntry::Occupied { revision, .. } => Some(Entry::Repo {
-                    index,
-                    version: revision,
-                }),
+                RepoEntry::Occupied { version, .. } => Some(Entry { index, version }),
                 _ => None,
             })
     }
@@ -591,18 +576,18 @@ impl<T> Repository<T> {
     ///
     /// This is a low-level API.
     ///
-    /// This index could be received, for example, from the [insert_index](Repository::insert_raw)
+    /// This index could be received, for example, from the [insert_index](Repo::insert_raw)
     /// function.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_index = repo.insert_raw(10);
     ///
     /// let item_entry = unsafe {
-    ///     repo.entry_of(item_index)
+    ///     repo.entry_of_unchecked(item_index)
     /// };
     ///
     /// assert_eq!(repo.get(&item_entry), Some(&10));
@@ -614,15 +599,15 @@ impl<T> Repository<T> {
     ///
     /// ```rust
     ///
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_a_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_index` returns valid index.
     /// let item_a_entry = unsafe {
-    ///     repo.entry_of(item_a_index)
+    ///     repo.entry_of_unchecked(item_a_index)
     /// };
     ///
     /// assert_eq!(repo.get(&item_a_entry), Some(&10));
@@ -642,7 +627,7 @@ impl<T> Repository<T> {
     ///
     /// // Making a reference from `item_a_index` would return a reference to Item B.
     /// let item_a_entry = unsafe {
-    ///     repo.entry_of(item_a_index)
+    ///     repo.entry_of_unchecked(item_a_index)
     /// };
     ///
     /// // A new `item_a_entry` actually refers Item B.
@@ -653,26 +638,24 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection either in Occupied, or in Reserved
     ///     state.
     #[inline(always)]
-    pub unsafe fn entry_of(&self, index: EntryIndex) -> Entry {
-        debug_assert!(index < self.entries.len(), "Index out of bounds.");
-
-        #[allow(unreachable_code)]
-        let entry = unsafe { self.entries.get_unchecked(index) };
-
-        let version = match entry {
-            RepositoryEntry::Occupied { revision, .. }
-            | RepositoryEntry::Reserved { revision, .. } => *revision,
-
-            // Safety: Upheld by the caller.
-            RepositoryEntry::Vacant(..) => unsafe {
-                debug_unreachable!(
-                    "Internal error. An attempt to make a reference from index \
-                    pointing to vacant entry."
-                );
-            },
+    pub unsafe fn entry_of_unchecked(&self, index: EntryIndex) -> Entry {
+        let Some(entry) = self.entries.get(index) else {
+            unsafe { debug_unreachable!("Index out of bounds.") }
         };
 
-        Entry::Repo { index, version }
+        let (RepoEntry::Occupied { version, .. } | RepoEntry::Reserved { version, .. }) = entry
+        else {
+            unsafe {
+                debug_unreachable!(
+                    "An attempt to make a reference from index pointing to vacant entry."
+                )
+            }
+        };
+
+        Entry {
+            index,
+            version: *version,
+        }
     }
 
     /// Immutably derefers collection's item by internal index.
@@ -680,9 +663,9 @@ impl<T> Repository<T> {
     /// This is a low-level API.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_index = repo.insert_raw(10);
     ///
@@ -694,16 +677,15 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied state.
     #[inline(always)]
     pub unsafe fn get_unchecked(&self, index: EntryIndex) -> &T {
-        debug_assert!(index < self.entries.len(), "Index out of bounds.");
+        let Some(entry) = self.entries.get(index) else {
+            unsafe { debug_unreachable!("Index out of bounds.") }
+        };
 
-        let entry = unsafe { self.entries.get_unchecked(index) };
+        let RepoEntry::Occupied { data, .. } = entry else {
+            unsafe { debug_unreachable!("An attempt to index into non-occupied entry.") }
+        };
 
-        match entry {
-            RepositoryEntry::Occupied { data, .. } => data,
-
-            // Safety: Upheld by the caller.
-            _ => unsafe { debug_unreachable!("An attempt to index into non-occupied entry.") },
-        }
+        data
     }
 
     /// Mutably derefers collection's item by internal index.
@@ -711,9 +693,9 @@ impl<T> Repository<T> {
     /// This is a low-level API.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_index = repo.insert_raw(10);
     ///
@@ -727,16 +709,15 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied state.
     #[inline(always)]
     pub unsafe fn get_unchecked_mut(&mut self, index: EntryIndex) -> &mut T {
-        debug_assert!(index < self.entries.len(), "Index out of bounds.");
+        let Some(entry) = self.entries.get_mut(index) else {
+            unsafe { debug_unreachable!("Index out of bounds.") }
+        };
 
-        let entry = unsafe { self.entries.get_unchecked_mut(index) };
+        let RepoEntry::Occupied { data, .. } = entry else {
+            unsafe { debug_unreachable!("An attempt to index into non-occupied entry.") }
+        };
 
-        match entry {
-            RepositoryEntry::Occupied { data, .. } => data,
-
-            // Safety: Upheld by the caller.
-            _ => unsafe { debug_unreachable!("An attempt to index into non-occupied entry.") },
-        }
+        data
     }
 
     /// Replaces Occupied item value by collection's internal index, or initializes
@@ -745,9 +726,9 @@ impl<T> Repository<T> {
     /// This is a low-level API.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_index = repo.insert_raw(10);
     ///
@@ -761,14 +742,14 @@ impl<T> Repository<T> {
     /// state to Occupied.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
-    /// let item_index = repo.reserve();
+    /// let item_index = repo.reserve_entry();
     ///
     /// // This is safe because `reserve` returns valid index.
-    /// let item_entry = unsafe { repo.entry_of(item_index) };
+    /// let item_entry = unsafe { repo.entry_of_unchecked(item_index) };
     ///
     /// // Referred item is not initialized yet(is not "Occupied).
     /// assert!(!repo.contains(&item_entry));
@@ -784,22 +765,19 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
     pub unsafe fn set_unchecked(&mut self, index: EntryIndex, data: T) {
-        debug_assert!(index < self.entries.len(), "Index out of bounds.");
-
-        let entry = unsafe { self.entries.get_unchecked_mut(index) };
-
-        let revision = match entry {
-            RepositoryEntry::Reserved { revision } | RepositoryEntry::Occupied { revision, .. } => {
-                *revision
-            }
-
-            // Safety: Upheld by the caller.
-            RepositoryEntry::Vacant(..) => unsafe {
-                debug_unreachable!("An attempt to write into vacant entry.")
-            },
+        let Some(entry) = self.entries.get_mut(index) else {
+            unsafe { debug_unreachable!("Index out of bounds.") }
         };
 
-        *entry = RepositoryEntry::Occupied { data, revision };
+        let (RepoEntry::Occupied { version, .. } | RepoEntry::Reserved { version, .. }) = entry
+        else {
+            unsafe { debug_unreachable!("An attempt to write into vacant entry.") }
+        };
+
+        *entry = RepoEntry::Occupied {
+            data,
+            version: *version,
+        };
     }
 
     /// Removes collection's Occupied or Reserved entry by internal index.
@@ -807,14 +785,14 @@ impl<T> Repository<T> {
     /// This is a low-level API.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_index = repo.insert_raw(10);
     ///
     /// // This is safe because `insert_index` returns valid index.
-    /// let item_entry = unsafe { repo.entry_of(item_index) };
+    /// let item_entry = unsafe { repo.entry_of_unchecked(item_index) };
     ///
     /// // This is safe because `insert_item` returns valid index.
     /// unsafe { repo.remove_unchecked(item_index); }
@@ -826,14 +804,14 @@ impl<T> Repository<T> {
     /// An API user can utilize this function to remove Reserved entry without initialization.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
-    /// let item_index = repo.reserve();
+    /// let item_index = repo.reserve_entry();
     ///
     /// // This is safe because `reserve` returns valid index.
-    /// let item_entry = unsafe { repo.entry_of(item_index) };
+    /// let item_entry = unsafe { repo.entry_of_unchecked(item_index) };
     ///
     /// // This is safe because `reserve` returns valid index, and the Item's Entry exists in this
     /// // collection in Reserved state.
@@ -847,30 +825,21 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
     pub unsafe fn remove_unchecked(&mut self, index: EntryIndex) -> Entry {
-        debug_assert!(index < self.entries.len(), "Index out of bounds.");
-
-        let entry = unsafe { self.entries.get_unchecked_mut(index) };
-
-        let occupied = replace(entry, RepositoryEntry::Vacant(self.next));
-
-        self.modified = true;
-
-        let entry = match occupied {
-            RepositoryEntry::Occupied { revision, .. }
-            | RepositoryEntry::Reserved { revision, .. } => Entry::Repo {
-                index,
-                version: revision,
-            },
-
-            // Safety: Upheld by the caller.
-            RepositoryEntry::Vacant { .. } => unsafe {
-                debug_unreachable!("An attempt to remove vacant entry.")
-            },
+        let Some(entry) = self.entries.get_mut(index) else {
+            unsafe { debug_unreachable!("Index out of bounds.") }
         };
 
+        let occupied = replace(entry, RepoEntry::Vacant(self.next));
+
+        let (RepoEntry::Occupied { version, .. } | RepoEntry::Reserved { version, .. }) = occupied
+        else {
+            unsafe { debug_unreachable!("An attempt to remove vacant entry.") }
+        };
+
+        self.modified = true;
         self.next = index;
 
-        entry
+        Entry { index, version }
     }
 
     /// Upgrades collection's Occupied or Reserved entry version without changing of their content.
@@ -882,9 +851,9 @@ impl<T> Repository<T> {
     /// references, a trivial way to do so is just to remove and then re-insert them:
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_a_entry = repo.insert(10);
     /// let item_b_entry = repo.insert(20);
@@ -908,19 +877,19 @@ impl<T> Repository<T> {
     /// not preserve entries indices(which is also important in certain situations).
     ///
     /// If an API user confident about indices integrity, an alternative way would be using a
-    /// [Commit](crate::arena::Repository::commit) function and series of Upgrade functions instead.
+    /// [Commit](crate::arena::Repo::commit) function and series of Upgrade functions instead.
     ///
     /// ```rust
-    /// use lady_deirdre::arena::Repository;
+    /// use lady_deirdre::arena::Repo;
     ///
-    /// let mut repo = Repository::<u8>::default();
+    /// let mut repo = Repo::<u8>::default();
     ///
     /// let item_a_index = repo.insert_raw(10);
     /// let item_b_index = repo.insert_raw(20);
     ///
     /// // This is safe because `insert_raw` returns valid index.
-    /// let item_a_entry = unsafe { repo.entry_of(item_a_index) };
-    /// let item_b_entry = unsafe { repo.entry_of(item_b_index) };
+    /// let item_a_entry = unsafe { repo.entry_of_unchecked(item_a_index) };
+    /// let item_b_entry = unsafe { repo.entry_of_unchecked(item_b_index) };
     ///
     /// assert!(repo.contains(&item_a_entry));
     /// assert!(repo.contains(&item_b_entry));
@@ -939,8 +908,8 @@ impl<T> Repository<T> {
     /// assert!(!repo.contains(&item_b_entry));
     ///
     /// // We can still create new weak references using these indices.
-    /// let item_a_entry_2 = unsafe { repo.entry_of(item_a_index) };
-    /// let item_b_entry_2 = unsafe { repo.entry_of(item_b_index) };
+    /// let item_a_entry_2 = unsafe { repo.entry_of_unchecked(item_a_index) };
+    /// let item_b_entry_2 = unsafe { repo.entry_of_unchecked(item_b_index) };
     ///
     /// assert!(repo.contains(&item_a_entry_2));
     /// assert!(repo.contains(&item_b_entry_2));
@@ -953,26 +922,22 @@ impl<T> Repository<T> {
     ///   - An entry indexed by `index` exists in this collection in Occupied or Reserved state.
     #[inline(always)]
     pub unsafe fn upgrade(&mut self, index: EntryIndex) {
-        debug_assert!(index < self.entries.len(), "Index out of bounds.");
-
-        let entry = unsafe { self.entries.get_unchecked_mut(index) };
-
-        match entry {
-            RepositoryEntry::Occupied { revision, .. } | RepositoryEntry::Reserved { revision } => {
-                *revision = self.revision;
-            }
-
-            // Safety: Upheld by the caller.
-            RepositoryEntry::Vacant { .. } => unsafe {
-                debug_unreachable!("An attempt to update revision of vacant entry.")
-            },
+        let Some(entry) = self.entries.get_mut(index) else {
+            unsafe { debug_unreachable!("Index out of bounds.") }
         };
+
+        let (RepoEntry::Occupied { version, .. } | RepoEntry::Reserved { version, .. }) = entry
+        else {
+            unsafe { debug_unreachable!("An attempt to upgrade revision of vacant entry.") }
+        };
+
+        *version = self.version;
     }
 }
 
 #[doc(hidden)]
-pub enum RepositoryEntry<T> {
+pub enum RepoEntry<T> {
     Vacant(EntryIndex),
-    Occupied { data: T, revision: EntryVersion },
-    Reserved { revision: EntryVersion },
+    Occupied { data: T, version: EntryVersion },
+    Reserved { version: EntryVersion },
 }

@@ -47,7 +47,7 @@ mod string;
 mod tree;
 
 pub(crate) use crate::units::storage::{
-    cache::ClusterCache,
+    cache::Cache,
     child::ChildCursor,
     refs::TreeRefs,
     tree::Tree,

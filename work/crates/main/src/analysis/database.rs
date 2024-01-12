@@ -37,13 +37,13 @@
 
 use crate::{
     analysis::{record::Record, table::UnitTable, Grammar, Revision},
-    arena::{Entry, Id, Repository},
+    arena::{Entry, Id, Repo},
     std::*,
     sync::SyncBuildHasher,
 };
 
 pub(super) struct Database<N: Grammar, S: SyncBuildHasher> {
-    pub(super) records: UnitTable<Repository<Record<N, S>>, S>,
+    pub(super) records: UnitTable<Repo<Record<N, S>>, S>,
     revision: AtomicU64,
 }
 

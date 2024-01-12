@@ -295,7 +295,7 @@ impl AttrRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            entry: Entry::Nil,
+            entry: Entry::nil(),
         }
     }
 

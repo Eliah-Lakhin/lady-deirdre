@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{EntryIndex, Id, Identifiable, Sequence},
+    arena::{Entry, EntryIndex, Id, Identifiable},
     lexis::{
         Length,
         Site,
@@ -282,11 +282,11 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
     #[inline]
     fn advance(&mut self) -> bool {
-        if self.next >= self.buffer.token_count() {
+        if self.next >= self.buffer.tokens() {
             return false;
         }
 
-        let next_site = unsafe { *self.buffer.sites.inner().get_unchecked(self.next) };
+        let next_site = unsafe { *self.buffer.sites.get_unchecked(self.next) };
 
         if next_site > self.end_site {
             return false;
@@ -299,35 +299,35 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
     #[inline(always)]
     fn skip(&mut self, distance: TokenCount) {
-        self.next = (self.next + distance).min(self.buffer.token_count());
+        self.next = (self.next + distance).min(self.buffer.tokens());
     }
 
     #[inline]
     fn token(&mut self, mut distance: TokenCount) -> Self::Token {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return <Self::Token as Token>::eoi();
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return <Self::Token as Token>::eoi();
         }
 
-        *unsafe { self.buffer.tokens.inner().get_unchecked(distance) }
+        *unsafe { self.buffer.tokens.get_unchecked(distance) }
     }
 
     #[inline]
     fn site(&mut self, mut distance: TokenCount) -> Option<Site> {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return None;
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return None;
@@ -340,38 +340,42 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
     fn length(&mut self, mut distance: TokenCount) -> Option<Length> {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return None;
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return None;
         }
 
-        Some(*unsafe { self.buffer.spans.inner().get_unchecked(distance) })
+        Some(*unsafe { self.buffer.spans.get_unchecked(distance) })
     }
 
     #[inline]
     fn string(&mut self, mut distance: TokenCount) -> Option<&'code str> {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return None;
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return None;
         }
 
-        let inner = self.buffer.indices.inner();
         let text = self.buffer.text.as_str();
 
-        let start = *unsafe { inner.get_unchecked(distance) };
-        let end = inner.get(distance + 1).copied().unwrap_or(text.len());
+        let start = *unsafe { self.buffer.indices.get_unchecked(distance) };
+        let end = self
+            .buffer
+            .indices
+            .get(distance + 1)
+            .copied()
+            .unwrap_or(text.len());
 
         Some(unsafe { text.get_unchecked(start..end) })
     }
@@ -380,11 +384,11 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
     fn token_ref(&mut self, mut distance: TokenCount) -> TokenRef {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return TokenRef::nil();
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return TokenRef::nil();
@@ -392,7 +396,10 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
         TokenRef {
             id: self.buffer.id(),
-            chunk_entry: Sequence::<Self::Token>::entry_of(distance),
+            entry: Entry {
+                index: distance,
+                version: 0,
+            },
         }
     }
 
@@ -412,17 +419,17 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
             let mut index = self.next;
 
             loop {
-                if index >= self.buffer.token_count() {
+                if index >= self.buffer.tokens() {
                     self.end_site_ref = SiteRef::end_of(self.buffer.id());
                     break;
                 }
 
-                let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(index) };
+                let peek_site = unsafe { *self.buffer.sites.get_unchecked(index) };
 
                 if peek_site > self.end_site {
                     self.end_site_ref = TokenRef {
                         id: self.buffer.id(),
-                        chunk_entry: Sequence::<Self::Token>::entry_of(index),
+                        entry: Entry { index, version: 0 },
                     }
                     .site_ref();
                     break;
@@ -440,9 +447,9 @@ impl<'code, T: Token> TokenBufferCursor<'code, T> {
     pub(super) fn new(buffer: &'code TokenBuffer<T>, span: SiteSpan) -> Self {
         let mut next = 0;
 
-        while next < buffer.token_count() {
-            let site = unsafe { *buffer.sites.inner().get_unchecked(next) };
-            let length = unsafe { *buffer.spans.inner().get_unchecked(next) };
+        while next < buffer.tokens() {
+            let site = unsafe { *buffer.sites.get_unchecked(next) };
+            let length = unsafe { *buffer.spans.get_unchecked(next) };
 
             if site + length < span.start {
                 next += 1;

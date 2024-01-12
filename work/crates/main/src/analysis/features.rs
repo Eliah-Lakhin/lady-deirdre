@@ -49,7 +49,7 @@ use crate::{
         Grammar,
         ScopeAttr,
     },
-    arena::{Entry, Id, Identifiable, Repository},
+    arena::{Entry, Id, Identifiable, Repo},
     std::*,
     sync::SyncBuildHasher,
     syntax::{Key, NodeRef},
@@ -83,7 +83,7 @@ pub trait AbstractFeature {
 pub struct FeatureInitializer<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) id: Id,
     pub(super) database: Weak<dyn AbstractDatabase>,
-    pub(super) records: &'a mut Repository<Record<N, S>>,
+    pub(super) records: &'a mut Repo<Record<N, S>>,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for FeatureInitializer<'a, N, S> {
@@ -108,7 +108,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> FeatureInitializer<'a, N, S> {
 
 pub struct FeatureInvalidator<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) id: Id,
-    pub(super) records: &'a mut Repository<Record<N, S>>,
+    pub(super) records: &'a mut Repo<Record<N, S>>,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for FeatureInvalidator<'a, N, S> {

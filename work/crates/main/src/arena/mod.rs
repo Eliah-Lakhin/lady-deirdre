@@ -39,19 +39,10 @@
 
 mod entry;
 mod id;
-mod repository;
-mod sequence;
+mod repo;
 
 pub use crate::arena::{
     entry::{Entry, EntryIndex, EntryVersion},
     id::{Id, Identifiable},
-    repository::{
-        Repository,
-        RepositoryEntriesIntoIter,
-        RepositoryEntriesIter,
-        RepositoryIntoIter,
-        RepositoryIter,
-        RepositoryIterMut,
-    },
-    sequence::Sequence,
+    repo::{Repo, RepoEntriesIntoIter, RepoEntriesIter, RepoIntoIter, RepoIter, RepoIterMut},
 };

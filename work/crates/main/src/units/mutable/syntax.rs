@@ -35,16 +35,14 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-#[cfg(debug_assertions)]
-use crate::syntax::ROOT_RULE;
 use crate::{
-    arena::{Entry, Id, Identifiable, Repository},
+    arena::{Entry, EntryIndex, Id, Identifiable},
     lexis::{Length, Site, SiteRef, Token, TokenCount, TokenCursor, TokenRef},
-    report::{debug_assert, debug_assert_eq},
+    report::{debug_assert, debug_unreachable},
     std::*,
-    syntax::{Cluster, ErrorRef, NoSyntax, Node, NodeRef, NodeRule, SyntaxSession},
+    syntax::{is_void_syntax, ErrorRef, Node, NodeRef, NodeRule, SyntaxSession, ROOT_RULE},
     units::{
-        storage::{ChildCursor, ClusterCache, Tree, TreeRefs},
+        storage::{Cache, ChildCursor, Tree, TreeRefs},
         Watch,
     },
 };
@@ -53,8 +51,8 @@ pub struct MutableSyntaxSession<'unit, N: Node, W: Watch> {
     tree: &'unit mut Tree<N>,
     refs: &'unit mut TreeRefs<N>,
     watch: &'unit mut W,
-    context: Vec<NodeRef>,
-    pending: Pending<N>,
+    context: Vec<Entry>,
+    pending: Pending,
     failing: bool,
     next_chunk_cursor: ChildCursor<N>,
     next_site: Site,
@@ -68,7 +66,7 @@ pub struct MutableSyntaxSession<'unit, N: Node, W: Watch> {
 impl<'unit, N: Node, W: Watch> Identifiable for MutableSyntaxSession<'unit, N, W> {
     #[inline(always)]
     fn id(&self) -> Id {
-        self.refs.id()
+        self.refs.id
     }
 }
 
@@ -82,31 +80,12 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
 
         self.next_site += unsafe { self.next_chunk_cursor.span() };
 
-        let has_cache = unsafe { self.next_chunk_cursor.cache().is_some() };
+        let has_cache = unsafe { self.next_chunk_cursor.cache() }.is_some();
 
         if has_cache {
-            match &self.pending.cluster_entry {
-                Entry::Repo { index, .. }
-                    if index == &unsafe { self.next_chunk_cursor.cache_index() } =>
-                {
-                    ()
-                }
+            let cache = unsafe { self.next_chunk_cursor.release_cache() };
 
-                _ => {
-                    let (cluster_entry_index, cluster_cache) =
-                        unsafe { self.next_chunk_cursor.take_cache() };
-
-                    let cluster_entry = unsafe {
-                        self.refs
-                            .clusters_mut()
-                            .remove_unchecked(cluster_entry_index)
-                    };
-
-                    cluster_cache
-                        .cluster
-                        .report(self.watch, self.id(), cluster_entry);
-                }
-            }
+            cache.free(self.refs, self.watch)
         }
 
         unsafe { self.next_chunk_cursor.next() };
@@ -261,11 +240,11 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
 
         let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.refs.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.refs.chunks.entry_of_unchecked(entry_index) };
 
         TokenRef {
             id: self.id(),
-            chunk_entry,
+            entry: chunk_entry,
         }
     }
 
@@ -287,11 +266,11 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
 
         let entry_index = unsafe { self.peek_chunk_cursor.chunk_entry_index() };
 
-        let chunk_entry = unsafe { self.refs.chunks().entry_of(entry_index) };
+        let chunk_entry = unsafe { self.refs.chunks.entry_of_unchecked(entry_index) };
 
         TokenRef {
             id: self.id(),
-            chunk_entry,
+            entry: chunk_entry,
         }
         .site_ref()
     }
@@ -309,49 +288,17 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
 
     fn descend(&mut self, rule: NodeRule) -> NodeRef {
         if self.pending.leftmost {
-            let index = self.pending.nodes.reserve();
-
-            let node_ref = NodeRef {
-                id: self.id(),
-                cluster_entry: self.pending.cluster_entry,
-                node_entry: unsafe { self.pending.nodes.entry_of(index) },
-            };
-
-            self.context.push(node_ref);
-
+            let _ = self.enter(rule);
             let node = N::parse(self, rule);
-
-            #[allow(unused)]
-            let last = self.context.pop();
-
-            #[cfg(debug_assertions)]
-            if last != Some(node_ref) {
-                panic!("Inheritance imbalance.");
-            }
-
-            unsafe { self.pending.nodes.set_unchecked(index, node) };
-
-            self.watch.report_node(&node_ref);
-
-            return node_ref;
+            return self.leave(node);
         }
 
         if self.next_chunk_cursor.is_dangling() {
             return NodeRef::nil();
         }
 
-        if let Some(cache) = unsafe { self.next_chunk_cursor.cache_mut() } {
-            if cache.successful && cache.rule == rule {
-                cache.cluster.primary.set_parent_ref(self.node_ref());
-
-                let cluster_entry_index = unsafe { self.next_chunk_cursor.cache_index() };
-
-                let result = NodeRef {
-                    id: self.id(),
-                    cluster_entry: unsafe { self.refs.clusters().entry_of(cluster_entry_index) },
-                    node_entry: Entry::Primary,
-                };
-
+        if let Some(cache) = unsafe { self.next_chunk_cursor.cache() } {
+            if cache.errors.is_empty() && cache.rule == rule {
                 let (end_site, end_chunk_cursor) =
                     unsafe { cache.jump_to_end(self.tree, self.refs) };
 
@@ -368,101 +315,96 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
                 self.peek_site = end_site;
                 self.peek_caches = 0;
 
+                {
+                    let parent_ref = self.node_ref();
+
+                    unsafe { self.refs.nodes.get_unchecked_mut(cache.primary_node) }
+                        .set_parent_ref(parent_ref);
+                }
+
+                let result = NodeRef {
+                    id: self.id(),
+                    entry: unsafe { self.refs.nodes.entry_of_unchecked(cache.primary_node) },
+                };
+
                 self.watch.report_node(&result);
 
                 return result;
             }
+
+            let _ = cache;
+
+            let cache = unsafe { self.next_chunk_cursor.release_cache() };
+
+            cache.free(self.refs, self.watch);
         };
 
-        let child_chunk_cursor = self.next_chunk_cursor;
+        let inner_start_cursor = self.next_chunk_cursor;
 
-        let cluster_entry_index;
-        let cluster_entry;
+        let entry_index = self.refs.nodes.reserve_entry();
+        let entry = unsafe { self.refs.nodes.entry_of_unchecked(entry_index) };
 
-        {
-            let clusters = self.refs.clusters_mut();
-
-            cluster_entry_index = clusters.insert_raw(child_chunk_cursor);
-            cluster_entry = unsafe { clusters.entry_of(cluster_entry_index) };
-        };
-
-        let parent = replace(
+        let outer = replace(
             &mut self.pending,
             Pending {
                 lookahead_end_site: self.next_site,
                 leftmost: true,
-                cluster_entry,
-                nodes: Repository::default(),
-                errors: Repository::default(),
-                successful: true,
+                primary_node: entry_index,
+                secondary_nodes: Vec::new(),
+                errors: Vec::new(),
             },
         );
 
         let node_ref = NodeRef {
             id: self.id(),
-            cluster_entry,
-            node_entry: Entry::Primary,
+            entry,
         };
-
-        self.context.push(node_ref);
 
         self.watch.report_node(&node_ref);
 
-        let primary = N::parse(self, rule);
+        self.context.push(entry);
+
+        let node = N::parse(self, rule);
 
         #[allow(unused)]
         let last = self.context.pop();
 
         #[cfg(debug_assertions)]
-        if last != Some(node_ref) {
-            panic!("Inheritance imbalance.");
+        if last != Some(entry) {
+            panic!("Nesting imbalance.");
         }
 
-        let child = replace(&mut self.pending, parent);
+        let inner = replace(&mut self.pending, outer);
 
         self.pending.lookahead_end_site = self
             .pending
             .lookahead_end_site
-            .max(child.lookahead_end_site);
+            .max(inner.lookahead_end_site);
 
-        let lookahead = child.lookahead_end_site - self.next_site;
+        let parse_end = self.parse_end();
+        let next_site = self.next_site;
 
-        let parsed_end = self.parsed_end();
+        let cache = unsafe { inner.into_cache(self.refs, rule, node, parse_end, next_site) };
 
-        #[allow(unused)]
-        let previous_entry_index = unsafe {
-            child_chunk_cursor.set_cache(
-                cluster_entry_index,
-                ClusterCache {
-                    cluster: Cluster {
-                        primary,
-                        nodes: child.nodes,
-                        errors: child.errors,
-                    },
-                    rule,
-                    parsed_end,
-                    lookahead,
-                    successful: child.successful,
-                },
-            )
-        };
-
-        debug_assert!(previous_entry_index.is_none(), "Unreleased cache entry.");
+        unsafe { inner_start_cursor.install_cache(cache) };
 
         node_ref
     }
 
     #[inline(always)]
-    fn enter_node(&mut self, _rule: NodeRule) -> NodeRef {
-        let index = self.pending.nodes.reserve();
+    fn enter(&mut self, _rule: NodeRule) -> NodeRef {
+        let entry_index = self.refs.nodes.reserve_entry();
+
+        self.pending.secondary_nodes.push(entry_index);
+
+        let entry = unsafe { self.refs.nodes.entry_of_unchecked(entry_index) };
+
+        self.context.push(entry);
 
         let node_ref = NodeRef {
             id: self.id(),
-            cluster_entry: self.pending.cluster_entry,
-            node_entry: unsafe { self.pending.nodes.entry_of(index) },
+            entry,
         };
-
-        self.context.push(node_ref);
 
         self.watch.report_node(&node_ref);
 
@@ -470,116 +412,135 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
     }
 
     #[inline(always)]
-    fn leave_node(&mut self, node: Self::Node) -> NodeRef {
+    fn leave(&mut self, node: Self::Node) -> NodeRef {
         #[cfg(debug_assertions)]
         if self.context.len() <= 2 {
-            panic!("Inheritance imbalance.");
+            panic!("Nesting imbalance.");
         }
 
-        let node_ref = match self.context.pop() {
-            None => panic!("Inheritance imbalance."),
-            Some(node_ref) => node_ref,
+        let Some(entry) = self.context.pop() else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Nesting imbalance.");
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                return NodeRef::nil();
+            }
         };
 
-        if node_ref.cluster_entry != self.pending.cluster_entry {
-            panic!("Inheritance imbalance.");
+        unsafe { self.refs.nodes.set_unchecked(entry.index, node) };
+
+        NodeRef {
+            id: self.id(),
+            entry,
         }
-
-        let index = match &node_ref.node_entry {
-            Entry::Repo { index, .. } => *index,
-            _ => panic!("Inheritance imbalance."),
-        };
-
-        unsafe { self.pending.nodes.set_unchecked(index, node) };
-
-        node_ref
     }
 
     #[inline(always)]
-    fn node(&mut self, node: Self::Node) -> NodeRef {
-        let node_entry = self.pending.nodes.insert(node);
+    fn lift(&mut self, node_ref: &NodeRef) {
+        if node_ref.id != self.id() {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Cannot lift a node that does not belong to this compilation session.");
+            }
 
-        let node_ref = NodeRef {
-            id: self.id(),
-            cluster_entry: self.pending.cluster_entry,
-            node_entry,
-        };
-
-        self.watch.report_node(&node_ref);
-
-        node_ref
-    }
-
-    fn lift_sibling(&mut self, sibling_ref: &NodeRef) {
-        #[cfg(debug_assertions)]
-        if sibling_ref.id != self.id() {
-            panic!("An attempt to lift external Node.");
-        }
-
-        let node_ref = self.node_ref();
-
-        if self.pending.cluster_entry == sibling_ref.cluster_entry {
-            if let Some(sibling) = self.pending.nodes.get_mut(&sibling_ref.node_entry) {
-                sibling.set_parent_ref(node_ref);
-
-                self.watch.report_node(sibling_ref);
-
+            #[cfg(not(debug_assertions))]
+            {
                 return;
             }
-
-            panic!("An attempt to lift non-sibling Node.");
         }
 
-        if let Entry::Primary = &sibling_ref.node_entry {
-            if let Some(cursor) = self.refs.clusters_mut().get_mut(&sibling_ref.cluster_entry) {
-                if let Some(cache) = unsafe { cursor.cache_mut() } {
-                    cache.cluster.primary.set_parent_ref(node_ref);
+        let parent_ref = self.node_ref();
 
-                    self.watch.report_node(sibling_ref);
-
-                    return;
-                }
+        let Some(node) = self.refs.nodes.get_mut(&node_ref.entry) else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Cannot lift a node that does not belong to this compilation session.");
             }
-        }
 
-        panic!("An attempt to lift non-sibling Node.");
+            #[cfg(not(debug_assertions))]
+            {
+                return;
+            }
+        };
+
+        node.set_parent_ref(parent_ref);
+
+        self.watch.report_node(node_ref);
     }
 
     #[inline(always)]
     fn node_ref(&self) -> NodeRef {
-        match self.context.last() {
-            Some(node_ref) => *node_ref,
-            None => panic!("Inheritance imbalance."),
+        let Some(entry) = self.context.last() else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Nesting imbalance.");
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                return NodeRef::nil();
+            }
+        };
+
+        if entry.is_nil() {
+            return NodeRef::nil();
+        }
+
+        NodeRef {
+            id: self.id(),
+            entry: *entry,
         }
     }
 
     #[inline(always)]
     fn parent_ref(&self) -> NodeRef {
-        match self.context.len().checked_sub(2) {
-            None => return NodeRef::nil(),
-            Some(depth) => *unsafe { self.context.get_unchecked(depth) },
+        let Some(depth) = self.context.len().checked_sub(2) else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Nesting imbalance.");
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                return NodeRef::nil();
+            }
+        };
+
+        let entry = unsafe { self.context.get_unchecked(depth) };
+
+        if entry.is_nil() {
+            return NodeRef::nil();
+        }
+
+        NodeRef {
+            id: self.id(),
+            entry: *entry,
         }
     }
 
     #[inline(always)]
     fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
-        self.pending.successful = false;
-
-        if !self.failing {
-            self.failing = true;
-
-            let error_ref = ErrorRef {
-                id: self.id(),
-                cluster_entry: self.pending.cluster_entry,
-                error_entry: self.pending.errors.insert(error.into()),
-            };
-
-            self.watch.report_error(&error_ref);
-
-            return error_ref;
+        if self.failing {
+            return ErrorRef::nil();
         }
 
-        ErrorRef::nil()
+        self.failing = true;
+
+        let entry_index = self.refs.errors.insert_raw(error.into());
+
+        self.pending.errors.push(entry_index);
+
+        let error_ref = ErrorRef {
+            id: self.id(),
+            entry: unsafe { self.refs.errors.entry_of_unchecked(entry_index) },
+        };
+
+        self.watch.report_error(&error_ref);
+
+        error_ref
     }
 }
 
@@ -587,65 +548,58 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
     // Safety:
     // 1. `head` belongs to the `tree` instance.
     // 2. All references of the `tree` belong to `refs` instance.
+    // 3. This function is never run with void syntax.
+    // 4. If `rule != ROOT_RULE` then `primary_node` points to Occupied node.
+    // 5. If `rule == ROOT_RULE` then `primary_node` points to Reserved or Occupied node.
     pub(super) unsafe fn run(
         tree: &'unit mut Tree<N>,
         refs: &'unit mut TreeRefs<N>,
         watch: &'unit mut W,
-        rule: NodeRule,
         start: Site,
         head: ChildCursor<N>,
-        cluster_entry: Entry,
-    ) -> (ClusterCache<N>, Site, Length) {
-        if TypeId::of::<N>() == TypeId::of::<NoSyntax<<N as Node>::Token>>() {
-            debug_assert_eq!(rule, ROOT_RULE, "An attempt to reparse void syntax.",);
-
-            return (
-                ClusterCache {
-                    cluster: Cluster {
-                        primary: unsafe { MaybeUninit::zeroed().assume_init() },
-                        nodes: Default::default(),
-                        errors: Default::default(),
-                    },
-                    rule,
-                    parsed_end: SiteRef::nil(),
-                    lookahead: 0,
-                    successful: true,
-                },
-                0,
-                0,
-            );
+        rule: NodeRule,
+        primary_node: EntryIndex,
+    ) -> (Cache, Site) {
+        if is_void_syntax::<N>() {
+            unsafe { debug_unreachable!("An attempt to reparse void syntax") }
         }
+
+        let context = {
+            let parent_entry;
+            let node_entry;
+
+            match rule == ROOT_RULE {
+                true => {
+                    parent_entry = Entry::nil();
+                    node_entry = Entry {
+                        index: 0,
+                        version: 1,
+                    };
+                }
+
+                false => {
+                    parent_entry = unsafe { refs.nodes.get_unchecked(primary_node) }
+                        .parent_ref()
+                        .entry;
+
+                    node_entry = unsafe { refs.nodes.entry_of_unchecked(primary_node) };
+                }
+            }
+
+            let mut context = Vec::new();
+
+            context.push(parent_entry);
+            context.push(node_entry);
+
+            context
+        };
 
         let pending = Pending {
             lookahead_end_site: start,
-            leftmost: true,
-            cluster_entry,
-            nodes: Repository::default(),
-            errors: Repository::default(),
-            successful: true,
-        };
-
-        let context = {
-            let parent_ref = match head.is_dangling() {
-                true => NodeRef::nil(),
-                false => match unsafe { head.cache() } {
-                    None => NodeRef::nil(),
-                    Some(cache) => cache.cluster.primary.parent_ref(),
-                },
-            };
-
-            let node_ref = NodeRef {
-                id: refs.id(),
-                cluster_entry,
-                node_entry: Entry::Primary,
-            };
-
-            let mut context = Vec::with_capacity(10);
-
-            context.push(parent_ref);
-            context.push(node_ref);
-
-            context
+            leftmost: rule != ROOT_RULE,
+            primary_node,
+            secondary_nodes: Vec::new(),
+            errors: Vec::new(),
         };
 
         let length = tree.code_length();
@@ -666,41 +620,28 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
             end_site: length,
         };
 
-        let primary = N::parse(&mut session, rule);
+        let node = N::parse(&mut session, rule);
+
+        let parse_end = session.parse_end();
+        let pending = session.pending;
         let parsed_end_site = session.next_site;
-        let parsed_end = session.parsed_end();
-        let lookahead = session.pending.lookahead_end_site - session.next_site;
-        let successful = session.pending.successful;
-        let nodes = session.pending.nodes;
-        let errors = session.pending.errors;
+        let refs = session.refs;
 
-        let cluster = Cluster {
-            primary,
-            nodes,
-            errors,
-        };
+        let cache = unsafe { pending.into_cache(refs, rule, node, parse_end, parsed_end_site) };
 
-        let cluster_cache = ClusterCache {
-            cluster,
-            rule,
-            parsed_end,
-            lookahead,
-            successful,
-        };
-
-        (cluster_cache, parsed_end_site, lookahead)
+        (cache, parsed_end_site)
     }
 
     #[inline(always)]
-    fn parsed_end(&self) -> SiteRef {
+    fn parse_end(&self) -> SiteRef {
         match self.next_chunk_cursor.is_dangling() {
             false => {
                 let chunk_entry_index = unsafe { self.next_chunk_cursor.chunk_entry_index() };
-                let chunk_entry = unsafe { self.refs.chunks().entry_of(chunk_entry_index) };
+                let chunk_entry = unsafe { self.refs.chunks.entry_of_unchecked(chunk_entry_index) };
 
                 TokenRef {
                     id: self.id(),
-                    chunk_entry,
+                    entry: chunk_entry,
                 }
                 .site_ref()
             }
@@ -776,11 +717,34 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
     }
 }
 
-struct Pending<N: Node> {
+struct Pending {
     lookahead_end_site: Site,
     leftmost: bool,
-    cluster_entry: Entry,
-    nodes: Repository<N>,
-    errors: Repository<N::Error>,
-    successful: bool,
+    primary_node: EntryIndex,
+    secondary_nodes: Vec<EntryIndex>,
+    errors: Vec<EntryIndex>,
+}
+
+impl Pending {
+    // Safety: `self.primary_node` points to occupied or reserved node.
+    #[inline(always)]
+    unsafe fn into_cache<N: Node>(
+        self,
+        refs: &mut TreeRefs<N>,
+        rule: NodeRule,
+        node: N,
+        parse_end: SiteRef,
+        parse_end_site: Site,
+    ) -> Cache {
+        unsafe { refs.nodes.set_unchecked(self.primary_node, node) };
+
+        Cache {
+            rule,
+            parse_end,
+            lookahead: self.lookahead_end_site - parse_end_site,
+            primary_node: self.primary_node,
+            secondary_nodes: self.secondary_nodes,
+            errors: self.errors,
+        }
+    }
 }

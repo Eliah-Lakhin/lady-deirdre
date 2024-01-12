@@ -36,13 +36,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Entry, Id, Identifiable},
+    arena::{Entry, EntryIndex, Id, Identifiable},
     format::SnippetFormatter,
     lexis::{
         Length,
         LineIndex,
         Site,
-        SiteRefInner,
+        SiteRef,
         SiteSpan,
         SourceCode,
         ToSpan,
@@ -51,19 +51,18 @@ use crate::{
         TokenCount,
         CHUNK_SIZE,
     },
-    report::{debug_assert, debug_assert_eq, debug_unreachable},
+    report::{debug_assert, debug_assert_eq, debug_unreachable, system_panic},
     std::*,
-    syntax::{Cluster, ClusterRef, NoSyntax, Node, NodeRef, SyntaxTree, NON_RULE, ROOT_RULE},
+    syntax::{is_void_syntax, NoSyntax, Node, NodeRef, SyntaxTree, NON_RULE, ROOT_RULE},
     units::{
         mutable::{
-            chars::MutableCharIter,
             cursor::MutableCursor,
+            iters::{MutableCharIter, MutableErrorIter, MutableNodeIter},
             lexis::{MutableLexisSession, SessionOutput},
             syntax::MutableSyntaxSession,
             watch::VoidWatch,
         },
-        storage::{ChildCursor, ClusterCache, Tree, TreeRefs},
-        unit::NodeCoverage,
+        storage::{Cache, ChildCursor, Tree, TreeRefs},
         CompilationUnit,
         Watch,
     },
@@ -171,7 +170,7 @@ use crate::{
 /// assert_eq!(doc.length(), 11);
 ///
 /// // A number of tokens in the Document(including whitespace tokens).
-/// assert_eq!(doc.token_count(), 5);
+/// assert_eq!(doc.tokens(), 5);
 ///
 /// // A substring from the Document source code.
 /// assert_eq!(doc.substring(1..6), "oo ba");
@@ -293,27 +292,13 @@ use crate::{
 ///     "1:2 (3 chars): Unexpected input in Brackets.",
 /// );
 ///
-/// // Syntax Tree is a mutable structure.
-/// // Adding artificial empty braces Node to the Root.
-/// {
-///     let new_node = SimpleNode::Braces { inner: vec![] };
-///     let new_node_ref = root_ref.cluster_ref().link_node(&mut doc, new_node);
-///
-///     match root_ref.deref_mut(&mut doc).unwrap() {
-///         SimpleNode::Root { inner } => { inner.push(new_node_ref) }
-///         _ => unreachable!()
-///     }
-/// }
-///
-/// assert_eq!(doc.substring(..), "[x} [y] (z)]foo ([bar] {baz})");
-/// assert_eq!(fmt(&doc, &root_ref).as_str(), "[[], ()], ([], {}), {}");
 /// ```
 pub struct MutableUnit<N: Node> {
-    root_cluster: Cluster<N>,
+    root: Option<Cache>,
     tree: Tree<N>,
-    token_count: TokenCount,
-    pub(super) refs: TreeRefs<N>,
+    refs: TreeRefs<N>,
     lines: LineIndex,
+    tokens: TokenCount,
 }
 
 // Safety: Tree instance stores data on the heap, and the References instance
@@ -359,7 +344,7 @@ impl<N: Node> Display for MutableUnit<N> {
 impl<N: Node> Identifiable for MutableUnit<N> {
     #[inline(always)]
     fn id(&self) -> Id {
-        self.refs.id()
+        self.refs.id
     }
 }
 
@@ -367,6 +352,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     type Token = N::Token;
 
     type Cursor<'code> = MutableCursor<'code, N>;
+
     type CharIterator<'code> = MutableCharIter<'code, N>;
 
     fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
@@ -381,12 +367,12 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 
     #[inline(always)]
     fn has_chunk(&self, chunk_entry: &Entry) -> bool {
-        self.refs.chunks().contains(chunk_entry)
+        self.refs.chunks.contains(chunk_entry)
     }
 
     #[inline(always)]
     fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
-        let chunk_cursor = self.refs.chunks().get(chunk_entry)?;
+        let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
         debug_assert!(
             !chunk_cursor.is_dangling(),
@@ -398,14 +384,14 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 
     #[inline(always)]
     fn get_site(&self, chunk_entry: &Entry) -> Option<Site> {
-        let chunk_cursor = self.refs.chunks().get(chunk_entry)?;
+        let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
         Some(unsafe { self.tree.site_of(chunk_cursor) })
     }
 
     #[inline(always)]
     fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
-        let chunk_cursor = self.refs.chunks().get(chunk_entry)?;
+        let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
         debug_assert!(
             !chunk_cursor.is_dangling(),
@@ -417,7 +403,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 
     #[inline(always)]
     fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
-        let chunk_cursor = self.refs.chunks().get(chunk_entry)?;
+        let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
         debug_assert!(
             !chunk_cursor.is_dangling(),
@@ -450,8 +436,8 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     }
 
     #[inline(always)]
-    fn token_count(&self) -> TokenCount {
-        self.token_count
+    fn tokens(&self) -> TokenCount {
+        self.tokens
     }
 
     #[inline(always)]
@@ -463,109 +449,73 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 impl<N: Node> SyntaxTree for MutableUnit<N> {
     type Node = N;
 
-    #[inline(always)]
-    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
-        match cluster_entry {
-            Entry::Primary => true,
+    type NodeIterator<'tree> = MutableNodeIter<'tree, N>;
 
-            Entry::Repo { .. } => self.refs.clusters().contains(cluster_entry),
-
-            _ => false,
-        }
-    }
+    type ErrorIterator<'tree> = MutableErrorIter<'tree, N>;
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
-        match cluster_entry {
-            Entry::Primary => Some(&self.root_cluster),
-
-            Entry::Repo { .. } => {
-                let chunk_cursor = self.refs.clusters().get(cluster_entry)?;
-
-                let cluster_cache = unsafe { chunk_cursor.cache()? };
-
-                Some(&cluster_cache.cluster)
-            }
-
-            _ => None,
-        }
-    }
-
-    #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
-        match cluster_entry {
-            Entry::Primary => Some(&mut self.root_cluster),
-
-            Entry::Repo { .. } => {
-                let mut chunk_cursor = *self.refs.clusters().get(cluster_entry)?;
-
-                let cluster_cache = unsafe { chunk_cursor.cache_mut()? };
-
-                Some(&mut cluster_cache.cluster)
-            }
-
-            _ => None,
-        }
-    }
-
-    #[inline(always)]
-    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry {
-        if let Some(mut chunk_cursor) = self.refs.clusters().get(cluster_entry).copied() {
-            while !chunk_cursor.is_dangling() {
-                unsafe { chunk_cursor.back() }
-
-                if chunk_cursor.is_dangling() {
-                    return Entry::Primary;
-                }
-
-                if unsafe { chunk_cursor.cache() }.is_some() {
-                    let entry_index = unsafe { chunk_cursor.cache_index() };
-
-                    return unsafe { self.refs.clusters().entry_of(entry_index) };
-                }
-            }
-        }
-
-        Entry::Nil
-    }
-
-    #[inline(always)]
-    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry {
-        let mut chunk_cursor = match cluster_entry {
-            Entry::Primary => self.tree.first(),
-
-            Entry::Repo { .. } => match self.refs.clusters().get(cluster_entry).copied() {
-                None => return Entry::Nil,
-                Some(child_cursor) => child_cursor,
-            },
-
-            _ => return Entry::Nil,
+    fn root_node_ref(&self) -> NodeRef {
+        let Some(root) = &self.root else {
+            unsafe { debug_unreachable!("Root cache unset.") };
         };
 
-        while !chunk_cursor.is_dangling() {
-            unsafe { chunk_cursor.next() };
-
-            if chunk_cursor.is_dangling() {
-                break;
-            }
-
-            if unsafe { chunk_cursor.cache() }.is_some() {
-                let entry_index = unsafe { chunk_cursor.cache_index() };
-
-                return unsafe { self.refs.clusters().entry_of(entry_index) };
-            }
+        #[cfg(debug_assertions)]
+        if root.primary_node != 0 {
+            system_panic!("Root node moved.");
         }
 
-        Entry::Nil
+        let entry = unsafe { self.refs.nodes.entry_of_unchecked(root.primary_node) };
+
+        #[cfg(debug_assertions)]
+        if entry.version != 1 {
+            system_panic!("Root node moved.");
+        }
+
+        NodeRef {
+            id: self.id(),
+            entry,
+        }
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
-        let chunk_cursor = self.refs.clusters_mut().remove(cluster_entry)?;
+    fn node_refs(&self) -> Self::NodeIterator<'_> {
+        MutableNodeIter {
+            id: self.id(),
+            inner: self.refs.nodes.entries(),
+        }
+    }
 
-        let (_, cache) = unsafe { chunk_cursor.take_cache() };
+    #[inline(always)]
+    fn error_refs(&self) -> Self::ErrorIterator<'_> {
+        MutableErrorIter {
+            id: self.id(),
+            inner: self.refs.errors.entries(),
+        }
+    }
 
-        Some(cache.cluster)
+    #[inline(always)]
+    fn has_node(&self, entry: &Entry) -> bool {
+        self.refs.nodes.contains(entry)
+    }
+
+    #[inline(always)]
+    fn get_node(&self, entry: &Entry) -> Option<&Self::Node> {
+        self.refs.nodes.get(entry)
+    }
+
+    #[inline(always)]
+    fn get_node_mut(&mut self, entry: &Entry) -> Option<&mut Self::Node> {
+        self.refs.nodes.get_mut(entry)
+    }
+
+    #[inline(always)]
+    fn has_error(&self, entry: &Entry) -> bool {
+        self.refs.errors.contains(entry)
+    }
+
+    #[inline(always)]
+    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+        self.refs.errors.get(entry)
     }
 }
 
@@ -575,14 +525,14 @@ impl<N: Node> Default for MutableUnit<N> {
         let mut tree = Tree::default();
         let mut refs = TreeRefs::new(Id::new());
 
-        let root_cluster = Self::initial_parse(&mut tree, &mut refs);
+        let root = Self::initial_parse(&mut tree, &mut refs);
 
         Self {
-            root_cluster,
+            root: Some(root),
             tree,
-            token_count: 0,
             refs,
             lines: LineIndex::new(),
+            tokens: 0,
         }
     }
 }
@@ -601,7 +551,7 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
     }
 
     fn into_token_buffer(self) -> TokenBuffer<N::Token> {
-        let mut buffer = TokenBuffer::with_capacity(self.token_count);
+        let mut buffer = TokenBuffer::with_capacity(self.tokens, self.length());
 
         let mut chunk_cursor = self.tree.first();
 
@@ -629,22 +579,6 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
     fn into_mutable_unit(self) -> MutableUnit<N> {
         self
     }
-
-    #[inline(always)]
-    fn cover(&self, span: impl ToSpan) -> NodeRef {
-        let span = match span.to_site_span(self) {
-            None => panic!("Specified span is invalid."),
-
-            Some(span) => span,
-        };
-
-        let node_ref = self.cluster_cover(&span).primary_node_ref();
-
-        match NodeCoverage::cover(self, &node_ref, &span) {
-            NodeCoverage::Fit(result) => result,
-            _ => node_ref,
-        }
-    }
 }
 
 impl<N: Node> MutableUnit<N> {
@@ -652,17 +586,17 @@ impl<N: Node> MutableUnit<N> {
     pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         let mut buffer = text.into();
 
-        let token_count = buffer.token_count();
-        let spans = take(&mut buffer.spans).into_vec().into_iter();
-        let indices = take(&mut buffer.indices).into_vec().into_iter();
-        let tokens = take(&mut buffer.tokens).into_vec().into_iter();
+        let count = buffer.tokens();
+        let spans = take(&mut buffer.spans).into_iter();
+        let indices = take(&mut buffer.indices).into_iter();
+        let tokens = take(&mut buffer.tokens).into_iter();
         let lines = take(&mut buffer.lines);
-        let mut refs = TreeRefs::with_capacity(Id::new(), token_count);
+        let mut refs = TreeRefs::with_capacity(Id::new(), count);
 
         let mut tree = unsafe {
             Tree::from_chunks(
                 &mut refs,
-                token_count,
+                count,
                 spans,
                 indices,
                 tokens,
@@ -670,14 +604,14 @@ impl<N: Node> MutableUnit<N> {
             )
         };
 
-        let root_cluster = MutableUnit::initial_parse(&mut tree, &mut refs);
+        let root = MutableUnit::initial_parse(&mut tree, &mut refs);
 
         Self {
-            root_cluster,
+            root: Some(root),
             tree,
-            token_count,
             refs,
             lines,
+            tokens: count,
         }
     }
 
@@ -759,17 +693,12 @@ impl<N: Node> MutableUnit<N> {
             "LineIndex and Tree resynchronization.",
         );
 
-        if TypeId::of::<N>() == TypeId::of::<NoSyntax<<N as Node>::Token>>() {
+        if is_void_syntax::<N>() {
             return;
         }
 
-        let cluster_entry = self.update_syntax(watch, cover);
-
-        watch.report_node(&NodeRef {
-            id: self.id(),
-            cluster_entry,
-            node_entry: Entry::Primary,
-        });
+        //todo consider removing Self::update_syntax return as it is currently unused
+        let _entry = self.update_syntax(watch, cover);
     }
 
     #[inline(always)]
@@ -777,44 +706,9 @@ impl<N: Node> MutableUnit<N> {
         &self.tree
     }
 
-    fn cluster_cover(&self, span: &SiteSpan) -> ClusterRef {
-        let mut chunk_cursor = match span.start == 0 && span.end == self.tree.code_length() {
-            true => ChildCursor::dangling(),
-
-            false => {
-                let mut start = span.start;
-
-                let mut chunk_cursor = self.tree.lookup(&mut start);
-
-                if start == 0 && !chunk_cursor.is_dangling() {
-                    unsafe { chunk_cursor.back() }
-                }
-
-                chunk_cursor
-            }
-        };
-
-        while !chunk_cursor.is_dangling() {
-            if let Some(cache) = unsafe { chunk_cursor.cache() } {
-                if let Some(end) = unsafe { cache.end_site(self) } {
-                    if end >= span.end {
-                        let cluster_index = unsafe { chunk_cursor.cache_index() };
-
-                        return ClusterRef {
-                            id: self.id(),
-                            cluster_entry: unsafe { self.refs.clusters().entry_of(cluster_index) },
-                        };
-                    }
-                }
-            }
-
-            unsafe { chunk_cursor.back() };
-        }
-
-        ClusterRef {
-            id: self.id(),
-            cluster_entry: Entry::Primary,
-        }
+    #[inline(always)]
+    pub(super) fn refs(&self) -> &TreeRefs<N> {
+        &self.refs
     }
 
     fn update_lexis(&mut self, watch: &mut impl Watch, mut span: SiteSpan, text: &str) -> Cover<N> {
@@ -1034,7 +928,7 @@ impl<N: Node> MutableUnit<N> {
 
             unsafe { self.tree.join(&mut self.refs, tail_tree) };
 
-            self.token_count += token_count;
+            self.tokens += token_count;
 
             let chunk_cursor = {
                 let mut point = span.start;
@@ -1070,8 +964,8 @@ impl<N: Node> MutableUnit<N> {
                     )
                 };
 
-                self.token_count += insert_count;
-                self.token_count -= remove_count;
+                self.tokens += insert_count;
+                self.tokens -= remove_count;
 
                 return Cover {
                     chunk_cursor,
@@ -1118,8 +1012,8 @@ impl<N: Node> MutableUnit<N> {
         unsafe { self.tree.join(&mut self.refs, middle) };
         unsafe { self.tree.join(&mut self.refs, right) };
 
-        self.token_count += insert_count;
-        self.token_count -= remove_count;
+        self.tokens += insert_count;
+        self.tokens -= remove_count;
 
         head = {
             let mut point = span.start;
@@ -1137,7 +1031,7 @@ impl<N: Node> MutableUnit<N> {
         }
     }
 
-    fn update_syntax(&mut self, watch: &mut impl Watch, mut cover: Cover<N>) -> Entry {
+    fn update_syntax(&mut self, watch: &mut impl Watch, mut cover: Cover<N>) -> EntryIndex {
         #[allow(unused_variables)]
         let mut cover_lookahead = 0;
 
@@ -1147,10 +1041,17 @@ impl<N: Node> MutableUnit<N> {
 
             match cover.chunk_cursor.is_dangling() {
                 false => match unsafe { cover.chunk_cursor.is_first() } {
-                    true => {
-                        shift = 0;
-                        rule = ROOT_RULE;
-                    }
+                    true => match unsafe { cover.chunk_cursor.cache().is_some() } {
+                        false => {
+                            shift = 0;
+                            rule = ROOT_RULE;
+                        }
+
+                        true => {
+                            shift = 0;
+                            rule = NON_RULE
+                        }
+                    },
 
                     false => {
                         unsafe { cover.chunk_cursor.back() };
@@ -1197,11 +1098,12 @@ impl<N: Node> MutableUnit<N> {
                                 }
                             }
 
-                            Some(cache_cluster) => {
-                                let parse_end_site = unsafe { cache_cluster.end_site(self) };
+                            Some(cache) => {
+                                let parse_end_site =
+                                    unsafe { cache.end_site(&self.tree, &self.refs) };
 
                                 if let Some(parse_end_site) = parse_end_site {
-                                    if parse_end_site + cache_cluster.lookahead < cover.span.start {
+                                    if parse_end_site + cache.lookahead < cover.span.start {
                                         unsafe { cover.chunk_cursor.back() };
 
                                         match cover.chunk_cursor.is_dangling() {
@@ -1220,11 +1122,13 @@ impl<N: Node> MutableUnit<N> {
                                     if parse_end_site >= cover.span.end {
                                         cover.span.start -= shift;
                                         cover.span.end = parse_end_site;
+
                                         #[allow(unused_assignments)]
                                         {
-                                            cover_lookahead = cache_cluster.lookahead;
+                                            cover_lookahead = cache.lookahead;
                                         }
-                                        rule = cache_cluster.rule;
+
+                                        rule = cache.rule;
                                         break;
                                     }
                                 }
@@ -1232,123 +1136,114 @@ impl<N: Node> MutableUnit<N> {
                         }
                     }
 
-                    let (cluster_entry_index, cluster_cache) =
-                        unsafe { cover.chunk_cursor.take_cache() };
+                    let cache = unsafe { cover.chunk_cursor.release_cache() };
 
-                    let cluster_entry = unsafe {
-                        self.refs
-                            .clusters_mut()
-                            .remove_unchecked(cluster_entry_index)
-                    };
-
-                    cluster_cache
-                        .cluster
-                        .report(watch, self.id(), cluster_entry);
+                    cache.free(&mut self.refs, watch);
                 }
             }
 
-            match rule == ROOT_RULE {
-                false => {
-                    let cluster_entry = unsafe {
-                        let cluster_entry_index = cover.chunk_cursor.cache_index();
+            if rule == ROOT_RULE {
+                let head = self.tree.first();
 
-                        self.refs.clusters_mut().entry_of(cluster_entry_index)
-                    };
+                let Some(root_cache) = take(&mut self.root) else {
+                    unsafe { debug_unreachable!("Missing root cache.") }
+                };
 
-                    let (cluster_cache, parsed_end_site, _lookahead) = unsafe {
-                        MutableSyntaxSession::run(
-                            &mut self.tree,
-                            &mut self.refs,
-                            watch,
-                            rule,
-                            cover.span.start,
-                            cover.chunk_cursor,
-                            cluster_entry,
-                        )
-                    };
+                let (rule, primary_node) = root_cache.free_inner(&mut self.refs, watch);
 
-                    unsafe { cover.chunk_cursor.update_cache(cluster_cache) }
-                        .cluster
-                        .report(watch, self.id(), cluster_entry);
-
-                    //todo check lookahead too
-                    if cover.span.end == parsed_end_site {
-                        return cluster_entry;
-                    }
-
-                    cover.span.end = cover.span.end.max(parsed_end_site);
+                #[cfg(debug_assertions)]
+                if rule != ROOT_RULE {
+                    system_panic!("Root cache refers non-root rule.");
                 }
 
-                true => {
-                    let head = self.tree.first();
-
-                    let (cluster_cache, mut parsed_end_site, _lookahead) = unsafe {
-                        MutableSyntaxSession::run(
-                            &mut self.tree,
-                            &mut self.refs,
-                            watch,
-                            ROOT_RULE,
-                            0,
-                            head,
-                            Entry::Primary,
-                        )
-                    };
-
-                    replace(&mut self.root_cluster, cluster_cache.cluster).report(
+                let (root_cache, mut parse_end_site) = unsafe {
+                    MutableSyntaxSession::run(
+                        &mut self.tree,
+                        &mut self.refs,
                         watch,
-                        self.id(),
-                        Entry::Primary,
-                    );
+                        0,
+                        head,
+                        rule,
+                        primary_node,
+                    )
+                };
 
-                    let mut tail = self.tree.lookup(&mut parsed_end_site);
+                self.root = Some(root_cache);
 
-                    debug_assert_eq!(parsed_end_site, 0, "Incorrect span alignment.");
+                if self.tree.code_length() > 0 {
+                    let mut tail = self.tree.lookup(&mut parse_end_site);
+
+                    debug_assert_eq!(parse_end_site, 0, "Incorrect span alignment.");
 
                     while !tail.is_dangling() {
                         let has_cache = unsafe { tail.cache().is_some() };
 
                         if has_cache {
-                            let (cluster_entry_index, cluster_cache) = unsafe { tail.take_cache() };
-
-                            let cluster_entry = unsafe {
-                                self.refs
-                                    .clusters_mut()
-                                    .remove_unchecked(cluster_entry_index)
-                            };
-
-                            cluster_cache
-                                .cluster
-                                .report(watch, self.id(), cluster_entry);
+                            unsafe { tail.release_cache() }.free(&mut self.refs, watch);
                         }
 
                         unsafe { tail.next() }
                     }
-
-                    return Entry::Primary;
                 }
+
+                return primary_node;
             }
+
+            let cache = unsafe { cover.chunk_cursor.release_cache() };
+
+            let (rule, primary_node) = cache.free_inner(&mut self.refs, watch);
+
+            let (cache, parse_end_site) = unsafe {
+                MutableSyntaxSession::run(
+                    &mut self.tree,
+                    &mut self.refs,
+                    watch,
+                    cover.span.start,
+                    cover.chunk_cursor,
+                    rule,
+                    primary_node,
+                )
+            };
+
+            unsafe { cover.chunk_cursor.install_cache(cache) }
+
+            //todo check lookahead too
+            if cover.span.end == parse_end_site {
+                return primary_node;
+            }
+
+            cover.span.end = cover.span.end.max(parse_end_site);
         }
     }
 
     // Safety:
     // 1. All references of the `tree` belong to `refs` instance.
     #[inline(always)]
-    fn initial_parse<'unit>(tree: &'unit mut Tree<N>, refs: &'unit mut TreeRefs<N>) -> Cluster<N> {
+    fn initial_parse<'unit>(tree: &'unit mut Tree<N>, refs: &'unit mut TreeRefs<N>) -> Cache {
+        if is_void_syntax::<N>() {
+            let primary_node = refs.nodes.insert_raw(unsafe {
+                transmute_copy::<NoSyntax<<N as Node>::Token>, N>(&NoSyntax::default())
+            });
+
+            return Cache {
+                rule: ROOT_RULE,
+                parse_end: SiteRef::nil(),
+                lookahead: 0,
+                primary_node,
+                secondary_nodes: Vec::new(),
+                errors: Vec::new(),
+            };
+        }
+
         let head = tree.first();
 
-        let (cluster_cache, _parsed_end_site, _lookahead) = unsafe {
-            MutableSyntaxSession::run(
-                tree,
-                refs,
-                &mut VoidWatch,
-                ROOT_RULE,
-                0,
-                head,
-                Entry::Primary,
-            )
+        let primary_node = refs.nodes.reserve_entry();
+
+        let (root_cache, _parsed_end_site) = unsafe {
+            MutableSyntaxSession::run(tree, refs, &mut VoidWatch, 0, head, ROOT_RULE, primary_node)
         };
 
-        cluster_cache.cluster
+        root_cache
     }
 }
 
@@ -1380,53 +1275,6 @@ impl<T: Token> TokenBuffer<T> {
 struct Cover<N: Node> {
     chunk_cursor: ChildCursor<N>,
     span: SiteSpan,
-}
-
-impl<N: Node> ClusterCache<N> {
-    // Safety:
-    // 1. ClusterCache belongs to specified `document` instance.
-    #[inline(always)]
-    pub(super) unsafe fn jump_to_end(
-        &self,
-        tree: &Tree<N>,
-        refs: &TreeRefs<N>,
-    ) -> (Site, ChildCursor<N>) {
-        match self.parsed_end.inner() {
-            SiteRefInner::ChunkStart(token_ref) => {
-                let chunk_entry_index = match &token_ref.chunk_entry {
-                    Entry::Repo { index, .. } => *index,
-
-                    // Safety: Document chunks stored in Repository.
-                    _ => unsafe {
-                        debug_unreachable!("Incorrect cluster cache end site Ref type.")
-                    },
-                };
-
-                let chunk_cursor = unsafe { refs.chunks().get_unchecked(chunk_entry_index) };
-
-                let site = unsafe { tree.site_of(chunk_cursor) };
-
-                (site, *chunk_cursor)
-            }
-
-            SiteRefInner::CodeEnd(_) => (tree.code_length(), ChildCursor::dangling()),
-        }
-    }
-
-    // Safety:
-    // 1. ClusterCache belongs to specified `document` instance.
-    #[inline(always)]
-    unsafe fn end_site(&self, unit: &MutableUnit<N>) -> Option<Site> {
-        match self.parsed_end.inner() {
-            SiteRefInner::ChunkStart(token_ref) => {
-                let chunk_cursor = unit.refs.chunks().get(&token_ref.chunk_entry)?;
-
-                Some(unsafe { unit.tree.site_of(chunk_cursor) })
-            }
-
-            SiteRefInner::CodeEnd(_) => Some(unit.tree.code_length()),
-        }
-    }
 }
 
 #[inline]

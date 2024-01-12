@@ -36,16 +36,20 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Entry, Id, Identifiable, Repository},
+    arena::{Entry, EntryIndex, Id, Identifiable},
     lexis::TokenCursor,
+    report::system_panic,
     std::*,
     syntax::{
         observer::VoidObserver,
-        session::SequentialSyntaxSession,
-        Cluster,
+        session::ImmutableSyntaxSession,
+        ErrorRef,
         Node,
+        NodeRef,
         Observer,
+        SyntaxSession,
         SyntaxTree,
+        ROOT_RULE,
     },
 };
 
@@ -67,11 +71,11 @@ use crate::{
 /// ```rust
 /// use lady_deirdre::{
 ///     lexis::{TokenBuffer, SimpleToken, SourceCode, Token},
-///     syntax::{SyntaxBuffer, SimpleNode, SyntaxTree, NodeRef, Node},
+///     syntax::{ImmutableSyntaxTree, SimpleNode, SyntaxTree, NodeRef, Node},
 /// };
 ///
 /// let token_buffer = TokenBuffer::parse("foo({bar}[baz])");
-/// let syntax_buffer = SyntaxBuffer::parse(token_buffer.cursor(..));
+/// let syntax_buffer = ImmutableSyntaxTree::parse(token_buffer.cursor(..));
 ///
 /// fn format(tree: &impl SyntaxTree<Node = SimpleNode>, node: &NodeRef) -> String {
 ///     let node = node.deref(tree).unwrap();
@@ -93,21 +97,22 @@ use crate::{
 ///
 /// assert_eq!("({}[])", format(&syntax_buffer, &syntax_buffer.root_node_ref()));
 /// ```
-pub struct SyntaxBuffer<N: Node> {
+pub struct ImmutableSyntaxTree<N: Node> {
     id: Id,
-    cluster: Cluster<N>,
+    nodes: Vec<Option<N>>,
+    errors: Vec<N::Error>,
 }
 
-impl<N: Node> PartialEq for SyntaxBuffer<N> {
+impl<N: Node> PartialEq for ImmutableSyntaxTree<N> {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
         self.id.eq(&other.id)
     }
 }
 
-impl<N: Node> Eq for SyntaxBuffer<N> {}
+impl<N: Node> Eq for ImmutableSyntaxTree<N> {}
 
-impl<N: Node> Debug for SyntaxBuffer<N> {
+impl<N: Node> Debug for ImmutableSyntaxTree<N> {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
@@ -117,69 +122,110 @@ impl<N: Node> Debug for SyntaxBuffer<N> {
     }
 }
 
-impl<N: Node> Drop for SyntaxBuffer<N> {
+impl<N: Node> Drop for ImmutableSyntaxTree<N> {
     fn drop(&mut self) {
         self.id.clear_name();
     }
 }
 
-impl<N: Node> Identifiable for SyntaxBuffer<N> {
+impl<N: Node> Identifiable for ImmutableSyntaxTree<N> {
     #[inline(always)]
     fn id(&self) -> Id {
         self.id
     }
 }
 
-impl<N: Node> SyntaxTree for SyntaxBuffer<N> {
+impl<N: Node> SyntaxTree for ImmutableSyntaxTree<N> {
     type Node = N;
 
+    type NodeIterator<'tree> = NodeIter;
+
+    type ErrorIterator<'tree> = ErrorIter;
+
     #[inline(always)]
-    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
-        match cluster_entry {
-            Entry::Primary => true,
-            _ => false,
+    fn root_node_ref(&self) -> NodeRef {
+        #[cfg(debug_assertions)]
+        if self.nodes.is_empty() {
+            system_panic!("Empty syntax tree.");
+        }
+
+        NodeRef {
+            id: self.id,
+            entry: Entry {
+                index: 0,
+                version: 0,
+            },
         }
     }
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
-        match cluster_entry {
-            Entry::Primary => Some(&self.cluster),
-
-            _ => None,
+    fn node_refs(&self) -> Self::NodeIterator<'_> {
+        NodeIter {
+            id: self.id,
+            inner: 0..self.nodes.len(),
         }
     }
 
     #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
-        match cluster_entry {
-            Entry::Primary => Some(&mut self.cluster),
-
-            _ => None,
+    fn error_refs(&self) -> Self::ErrorIterator<'_> {
+        ErrorIter {
+            id: self.id,
+            inner: 0..self.errors.len(),
         }
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, _cluster_entry: &Entry) -> Entry {
-        Entry::Nil
+    fn has_node(&self, entry: &Entry) -> bool {
+        if entry.version > 0 {
+            return false;
+        }
+
+        entry.index < self.nodes.len()
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, _cluster_entry: &Entry) -> Entry {
-        Entry::Nil
+    fn get_node(&self, entry: &Entry) -> Option<&Self::Node> {
+        if entry.version > 0 {
+            return None;
+        }
+
+        self.nodes.get(entry.index)?.as_ref()
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, _cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
-        None
+    fn get_node_mut(&mut self, entry: &Entry) -> Option<&mut Self::Node> {
+        if entry.version > 0 {
+            return None;
+        }
+
+        self.nodes.get_mut(entry.index)?.as_mut()
+    }
+
+    #[inline(always)]
+    fn has_error(&self, entry: &Entry) -> bool {
+        if entry.version > 0 {
+            return false;
+        }
+
+        entry.index < self.errors.len()
+    }
+
+    #[inline(always)]
+    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+        if entry.version > 0 {
+            return None;
+        }
+
+        self.errors.get(entry.index)
     }
 }
 
-impl<N: Node> SyntaxBuffer<N> {
+impl<N: Node> ImmutableSyntaxTree<N> {
     #[inline(always)]
     pub fn parse<'code>(token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>) -> Self {
         Self::with_id(Id::new(), token_cursor)
     }
+
     #[inline(always)]
     pub fn parse_with_observer<'code>(
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
@@ -201,26 +247,65 @@ impl<N: Node> SyntaxBuffer<N> {
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
         observer: &'observer mut impl Observer<Node = N>,
     ) -> Self {
-        let mut session = SequentialSyntaxSession {
+        let mut session = ImmutableSyntaxSession {
             id,
-            context: Vec::with_capacity(10),
-            primary: None,
-            nodes: Repository::with_capacity(1),
-            errors: Repository::default(),
+            context: Vec::new(),
+            nodes: Vec::new(),
+            errors: Vec::new(),
             failing: false,
             token_cursor,
             observer,
             _phantom: PhantomData,
         };
 
-        session.enter_root();
+        let _ = session.descend(ROOT_RULE);
 
-        let cluster = Cluster {
-            primary: unsafe { session.primary.unwrap_unchecked() },
+        Self {
+            id,
             nodes: session.nodes,
             errors: session.errors,
-        };
-
-        Self { id, cluster }
+        }
     }
 }
+
+pub struct NodeIter {
+    id: Id,
+    inner: Range<EntryIndex>,
+}
+
+impl Iterator for NodeIter {
+    type Item = NodeRef;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = self.inner.next()?;
+
+        Some(NodeRef {
+            id: self.id,
+            entry: Entry { index, version: 0 },
+        })
+    }
+}
+
+impl FusedIterator for NodeIter {}
+
+pub struct ErrorIter {
+    id: Id,
+    inner: Range<EntryIndex>,
+}
+
+impl Iterator for ErrorIter {
+    type Item = ErrorRef;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        let index = self.inner.next()?;
+
+        Some(ErrorRef {
+            id: self.id,
+            entry: Entry { index, version: 0 },
+        })
+    }
+}
+
+impl FusedIterator for ErrorIter {}

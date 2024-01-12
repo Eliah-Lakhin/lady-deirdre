@@ -40,16 +40,7 @@ use crate::{
     format::{Delimited, PrintString, Priority, SnippetFormatter},
     lexis::{Length, SiteRefSpan, SourceCode, ToSite, ToSpan, Token, TokenRule, TokenSet},
     std::*,
-    syntax::{
-        AbstractNode,
-        ClusterRef,
-        Node,
-        NodeRule,
-        NodeSet,
-        RecoveryResult,
-        SyntaxTree,
-        ROOT_RULE,
-    },
+    syntax::{AbstractNode, Node, NodeRule, NodeSet, RecoveryResult, SyntaxTree, ROOT_RULE},
     units::CompilationUnit,
 };
 
@@ -624,27 +615,9 @@ impl ParseError {
 ///
 /// let mut doc = Document::<SimpleNode>::from("foo bar");
 ///
-/// let new_custom_error_ref = doc.root_node_ref().cluster_ref().link_error(
-///     &mut doc,
-///     ParseError {
-///         span: SiteRef::nil()..SiteRef::nil(),
-///         context: ROOT_RULE,
-///         recovery: RecoveryResult::UnexpectedEOI,
-///         expected_tokens: &EMPTY_TOKEN_SET,
-///         expected_nodes: &EMPTY_NODE_SET,
-///     },
-/// );
-///
-/// assert_eq!(
-///     new_custom_error_ref.deref(&doc).unwrap().display(&doc).to_string(),
-///     "?: Unexpected end of input.",
-/// );
-///
 /// // This change touches "root" node of the syntax tree(the only node of the tree), as such
 /// // referred error will not survive.
 /// doc.write(0..0, "123");
-///
-/// assert!(!new_custom_error_ref.is_valid_ref(&doc));
 /// ```
 ///
 /// An API user normally does not need to inspect ErrorRef inner fields manually or to construct
@@ -658,13 +631,9 @@ pub struct ErrorRef {
     /// this weakly referred error object belongs to.
     pub id: Id,
 
-    /// An internal weak reference of the error object's [Cluster](crate::syntax::Cluster) of the
-    /// [SyntaxTree](crate::syntax::SyntaxTree) instance.
-    pub cluster_entry: Entry,
-
     /// An internal weak reference of the error object in the
     /// [`Cluster::errors`](crate::syntax::Cluster::errors) repository.
-    pub error_entry: Entry,
+    pub entry: Entry,
 }
 
 impl Debug for ErrorRef {
@@ -672,8 +641,8 @@ impl Debug for ErrorRef {
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
-                "ErrorRef(id: {:?}, cluster_entry: {:?}, error_entry: {:?})",
-                self.id, self.cluster_entry, self.error_entry,
+                "ErrorRef(id: {:?}, entry: {:?})",
+                self.id, self.entry,
             )),
             true => formatter.write_str("ErrorRef(Nil)"),
         }
@@ -695,8 +664,7 @@ impl ErrorRef {
     pub const fn nil() -> Self {
         Self {
             id: Id::nil(),
-            cluster_entry: Entry::Nil,
-            error_entry: Entry::Nil,
+            entry: Entry::nil(),
         }
     }
 
@@ -710,7 +678,7 @@ impl ErrorRef {
     /// instance use [is_valid_ref](crate::syntax::ErrorRef::is_valid_ref) function instead.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.cluster_entry.is_nil() || self.error_entry.is_nil()
+        self.id.is_nil() || self.entry.is_nil()
     }
 
     /// Immutably dereferences weakly referred error object of specified
@@ -731,70 +699,7 @@ impl ErrorRef {
             return None;
         }
 
-        match tree.get_cluster(&self.cluster_entry) {
-            None => None,
-            Some(cluster) => cluster.errors.get(&self.error_entry),
-        }
-    }
-
-    /// Mutably dereferences weakly referred error object of specified
-    /// [SyntaxTree](crate::syntax::SyntaxTree).
-    ///
-    /// Returns [None] if this ErrorRef is not valid reference for specified `tree` instance.
-    ///
-    /// Use [is_valid_ref](crate::syntax::ErrorRef::is_valid_ref) to check ErrorRef validity.
-    ///
-    /// This function uses
-    /// [`SyntaxTree::get_cluster_mut`](crate::syntax::SyntaxTree::get_cluster_mut) function under
-    /// the hood.
-    #[inline(always)]
-    pub fn deref_mut<'tree, N: Node>(
-        &self,
-        tree: &'tree mut impl SyntaxTree<Node = N>,
-    ) -> Option<&'tree mut <N as Node>::Error> {
-        if self.id != tree.id() {
-            return None;
-        }
-
-        match tree.get_cluster_mut(&self.cluster_entry) {
-            None => None,
-            Some(data) => data.errors.get_mut(&self.error_entry),
-        }
-    }
-
-    /// Creates a weak reference of the [Cluster](crate::syntax::Cluster) of referred error object.
-    #[inline(always)]
-    pub fn cluster(&self) -> ClusterRef {
-        ClusterRef {
-            id: self.id,
-            cluster_entry: self.cluster_entry,
-        }
-    }
-
-    /// Removes an instance of the error object from the [SyntaxTree](crate::syntax::SyntaxTree)
-    /// that is weakly referred by this reference.
-    ///
-    /// Returns [Some] value of the error object if this weak reference is a valid reference of
-    /// existing error object inside `tree` instance. Otherwise returns [None].
-    ///
-    /// Use [is_valid_ref](crate::syntax::ErrorRef::is_valid_ref) to check ErrorRef validity.
-    ///
-    /// This function uses
-    /// [`SyntaxTree::get_cluster_mut`](crate::syntax::SyntaxTree::get_cluster_mut) function under
-    /// the hood.
-    #[inline(always)]
-    pub fn unlink<N: Node>(
-        &self,
-        tree: &mut impl SyntaxTree<Node = N>,
-    ) -> Option<<N as Node>::Error> {
-        if self.id != tree.id() {
-            return None;
-        }
-
-        match tree.get_cluster_mut(&self.cluster_entry) {
-            None => None,
-            Some(data) => data.errors.remove(&self.error_entry),
-        }
+        tree.get_error(&self.entry)
     }
 
     /// Returns `true` if and only if weakly referred error object belongs to specified
@@ -812,9 +717,6 @@ impl ErrorRef {
             return false;
         }
 
-        match tree.get_cluster(&self.cluster_entry) {
-            None => false,
-            Some(cluster) => cluster.errors.contains(&self.error_entry),
-        }
+        tree.has_error(&self.entry)
     }
 }

@@ -36,10 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Entry, EntryIndex, Id, Identifiable, Repository},
+    arena::{Entry, EntryIndex, Id, Identifiable},
     lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
+    report::debug_unreachable,
     std::*,
-    syntax::{ErrorRef, Node, NodeRef, NodeRule, Observer, ROOT_RULE},
+    syntax::{ErrorRef, Node, NodeRef, NodeRule, Observer},
 };
 
 /// An interface to the source code syntax parsing/re-parsing session.
@@ -91,13 +92,11 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     /// avoid of calling of this function with the [ROOT_RULE](crate::syntax::ROOT_RULE) value.
     fn descend(&mut self, rule: NodeRule) -> NodeRef;
 
-    fn enter_node(&mut self, rule: NodeRule) -> NodeRef;
+    fn enter(&mut self, rule: NodeRule) -> NodeRef;
 
-    fn leave_node(&mut self, node: Self::Node) -> NodeRef;
+    fn leave(&mut self, node: Self::Node) -> NodeRef;
 
-    fn node(&mut self, node: Self::Node) -> NodeRef;
-
-    fn lift_sibling(&mut self, sibling_ref: &NodeRef);
+    fn lift(&mut self, node_ref: &NodeRef);
 
     fn node_ref(&self) -> NodeRef;
 
@@ -113,7 +112,7 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
     fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef;
 }
 
-pub(super) struct SequentialSyntaxSession<
+pub(super) struct ImmutableSyntaxSession<
     'code,
     'observer,
     N: Node,
@@ -122,16 +121,15 @@ pub(super) struct SequentialSyntaxSession<
 > {
     pub(super) id: Id,
     pub(super) context: Vec<EntryIndex>,
-    pub(super) primary: Option<N>,
-    pub(super) nodes: Repository<N>,
-    pub(super) errors: Repository<N::Error>,
+    pub(super) nodes: Vec<Option<N>>,
+    pub(super) errors: Vec<N::Error>,
     pub(super) failing: bool,
     pub(super) token_cursor: C,
     pub(super) observer: &'observer mut O,
     pub(super) _phantom: PhantomData<&'code ()>,
 }
 
-impl<'code, 'observer, N, C, O> Identifiable for SequentialSyntaxSession<'code, 'observer, N, C, O>
+impl<'code, 'observer, N, C, O> Identifiable for ImmutableSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
@@ -144,7 +142,7 @@ where
 }
 
 impl<'code, 'observer, N, C, O> TokenCursor<'code>
-    for SequentialSyntaxSession<'code, 'observer, N, C, O>
+    for ImmutableSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
@@ -207,7 +205,7 @@ where
 }
 
 impl<'code, 'observer, N, C, O> SyntaxSession<'code>
-    for SequentialSyntaxSession<'code, 'observer, N, C, O>
+    for ImmutableSyntaxSession<'code, 'observer, N, C, O>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
@@ -216,164 +214,144 @@ where
     type Node = N;
 
     fn descend(&mut self, rule: NodeRule) -> NodeRef {
-        let index = self.nodes.reserve();
+        let _ = self.enter(rule);
 
-        self.context.push(index);
-
-        self.observer.enter_rule(rule);
         let node = N::parse(self, rule);
-        self.observer.leave_rule(rule, &node);
 
-        #[allow(unused)]
-        let last = self.context.pop();
-
-        #[cfg(debug_assertions)]
-        if last != Some(index) {
-            panic!("Inheritance imbalance.");
-        }
-
-        unsafe { self.nodes.set_unchecked(index, node) };
-
-        NodeRef {
-            id: self.id,
-            cluster_entry: Entry::Primary,
-            node_entry: unsafe { self.nodes.entry_of(index) },
-        }
+        self.leave(node)
     }
 
     #[inline]
-    fn enter_node(&mut self, rule: NodeRule) -> NodeRef {
+    fn enter(&mut self, rule: NodeRule) -> NodeRef {
         self.observer.enter_rule(rule);
-        let index = self.nodes.reserve();
+
+        let index = self.nodes.len();
+
+        self.nodes.push(None);
 
         self.context.push(index);
 
         NodeRef {
             id: self.id,
-            cluster_entry: Entry::Primary,
-            node_entry: unsafe { self.nodes.entry_of(index) },
+            entry: Entry { index, version: 0 },
         }
     }
 
     #[inline]
-    fn leave_node(&mut self, node: Self::Node) -> NodeRef {
+    fn leave(&mut self, node: Self::Node) -> NodeRef {
         self.observer.leave_rule(node.rule(), &node);
 
-        let index = match self.context.pop() {
-            None => panic!("Inheritance imbalance."),
-            Some(index) => index,
+        let Some(index) = self.context.pop() else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Nesting imbalance.");
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                return NodeRef::nil();
+            }
         };
 
-        unsafe { self.nodes.set_unchecked(index, node) };
+        let Some(item) = self.nodes.get_mut(index) else {
+            unsafe { debug_unreachable!("Bad context index.") }
+        };
 
-        NodeRef {
-            id: self.id,
-            cluster_entry: Entry::Primary,
-            node_entry: unsafe { self.nodes.entry_of(index) },
+        if replace(item, Some(node)).is_some() {
+            unsafe { debug_unreachable!("Bad context index.") }
         }
-    }
 
-    #[inline(always)]
-    fn node(&mut self, node: Self::Node) -> NodeRef {
         NodeRef {
             id: self.id,
-            cluster_entry: Entry::Primary,
-            node_entry: self.nodes.insert(node),
+            entry: Entry { index, version: 0 },
         }
     }
 
     #[inline]
-    fn lift_sibling(&mut self, sibling_ref: &NodeRef) {
-        #[cfg(debug_assertions)]
-        if sibling_ref.id != self.id {
-            panic!("An attempt to lift external Node.");
+    fn lift(&mut self, node_ref: &NodeRef) {
+        if self.id != node_ref.id {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Cannot lift a node that does not belong to this compilation session.");
+            }
+
+            #[cfg(not(debug_assertions))]
+            {
+                return;
+            }
         }
 
-        #[cfg(debug_assertions)]
-        if sibling_ref.cluster_entry != Entry::Primary {
-            panic!("An attempt to lift non-sibling Node.");
-        }
+        let parent_ref = self.node_ref();
 
-        let node_ref = self.node_ref();
+        let Some(Some(node)) = self.nodes.get_mut(node_ref.entry.index) else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Cannot lift a node that does not belong to this compilation session.");
+            }
 
-        if let Some(node) = self.nodes.get_mut(&sibling_ref.node_entry) {
-            node.set_parent_ref(node_ref);
-            return;
-        }
+            #[cfg(not(debug_assertions))]
+            {
+                return;
+            }
+        };
 
-        panic!("An attempt to lift non-sibling Node.");
+        node.set_parent_ref(parent_ref);
     }
 
     #[inline(always)]
     fn node_ref(&self) -> NodeRef {
-        match self.context.last() {
-            None => NodeRef {
-                id: self.id,
-                cluster_entry: Entry::Primary,
-                node_entry: Entry::Primary,
-            },
+        let Some(index) = self.context.last() else {
+            #[cfg(debug_assertions)]
+            {
+                panic!("Nesting imbalance.");
+            }
 
-            Some(index) => NodeRef {
-                id: self.id,
-                cluster_entry: Entry::Primary,
-                node_entry: unsafe { self.nodes.entry_of(*index) },
+            #[cfg(not(debug_assertions))]
+            {
+                return NodeRef::nil();
+            }
+        };
+
+        NodeRef {
+            id: self.id,
+            entry: Entry {
+                index: *index,
+                version: 0,
             },
         }
     }
 
     #[inline(always)]
     fn parent_ref(&self) -> NodeRef {
-        match self.context.len() {
-            0 => NodeRef::nil(),
-            1 => NodeRef {
-                id: self.id,
-                cluster_entry: Entry::Primary,
-                node_entry: Entry::Primary,
-            },
-            _ => {
-                let index = *unsafe { self.context.get_unchecked(self.context.len() - 2) };
+        let Some(depth) = self.context.len().checked_sub(2) else {
+            return NodeRef::nil();
+        };
 
-                NodeRef {
-                    id: self.id,
-                    cluster_entry: Entry::Primary,
-                    node_entry: unsafe { self.nodes.entry_of(index) },
-                }
-            }
+        let index = *unsafe { self.context.get_unchecked(depth) };
+
+        NodeRef {
+            id: self.id,
+            entry: Entry { index, version: 0 },
         }
     }
 
     #[inline(always)]
     fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
-        if !self.failing {
-            self.observer.parse_error();
-
-            self.failing = true;
-
-            return ErrorRef {
-                id: self.id,
-                cluster_entry: Entry::Primary,
-                error_entry: self.errors.insert(error.into()),
-            };
+        if self.failing {
+            return ErrorRef::nil();
         }
 
-        return ErrorRef::nil();
-    }
-}
+        self.observer.parse_error();
 
-impl<'code, 'observer, N, C, O> SequentialSyntaxSession<'code, 'observer, N, C, O>
-where
-    N: Node,
-    C: TokenCursor<'code, Token = <N as Node>::Token>,
-    O: Observer<Node = N>,
-{
-    pub(super) fn enter_root(&mut self) {
-        let node = N::parse(self, ROOT_RULE);
+        self.failing = true;
 
-        #[cfg(debug_assertions)]
-        if !self.context.is_empty() {
-            panic!("Inheritance imbalance.");
-        }
+        let index = self.errors.len();
 
-        self.primary = Some(node);
+        self.errors.push(error.into());
+
+        return ErrorRef {
+            id: self.id,
+            entry: Entry { index, version: 0 },
+        };
     }
 }

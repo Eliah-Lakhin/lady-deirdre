@@ -495,7 +495,7 @@ fn test_json_incremental() {
     doc.write(1..1, "}");
     assert_eq!(doc.substring(..), r#"{}"#);
     assert_eq!(doc.to_json_string(), r#"{}"#);
-    assert_eq!(doc.debug_print(), r#"2(2({}))"#);
+    assert_eq!(doc.debug_print(), r#"1(2({}))"#);
 
     unsafe { VERSION = 3 }
 
@@ -503,7 +503,7 @@ fn test_json_incremental() {
     assert_eq!(doc.substring(..), r#"{"foo"}"#);
     assert_eq!(doc.debug_errors(), "1:7: Missing ':' in Entry.");
     assert_eq!(doc.to_json_string(), r#"{"foo": ?}"#);
-    assert_eq!(doc.debug_print(), r#"3(3({3("foo": ?)}))"#);
+    assert_eq!(doc.debug_print(), r#"1(3({3("foo": ?)}))"#);
 
     unsafe { VERSION = 4 }
 
@@ -522,7 +522,7 @@ fn test_json_incremental() {
     );
     assert_eq!(
         doc.debug_print(),
-        r#"3(3({4("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
+        r#"1(3({4("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
     );
 
     unsafe { VERSION = 5 }
@@ -539,7 +539,7 @@ fn test_json_incremental() {
     );
     assert_eq!(
         doc.debug_print(),
-        r#"3(3({5("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
+        r#"1(3({5("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
     );
 
     unsafe { VERSION = 6 }
@@ -555,7 +555,7 @@ fn test_json_incremental() {
     );
     assert_eq!(
         doc.debug_print(),
-        r#"3(3({6("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
+        r#"1(3({6("foo": 4([4(1), 4(3), 4(true), 4(false), 4(null), 4({4("a": 4("xyz")), 4("b": 4(null))})]))}))"#
     );
 
     unsafe { VERSION = 7 }
@@ -569,7 +569,7 @@ fn test_json_incremental() {
     assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(
         doc.debug_print(),
-        r#"7(7({7("foo": 4({4("a": 4("xyz")), 4("b": 4(null))}))}))"#
+        r#"1(7({7("foo": 4({4("a": 4("xyz")), 4("b": 4(null))}))}))"#
     );
 
     unsafe { VERSION = 8 }
@@ -580,7 +580,7 @@ fn test_json_incremental() {
     assert_eq!(doc.to_json_string(), r#"{"foo": {"a": "xyz", "b": null}}"#);
     assert_eq!(
         doc.debug_print(),
-        r#"8(8({8("foo": 8({4("a": 4("xyz")), 4("b": 4(null))}))}))"#
+        r#"1(8({8("foo": 8({4("a": 4("xyz")), 4("b": 4(null))}))}))"#
     );
 
     unsafe { VERSION = 9 }
@@ -597,6 +597,6 @@ fn test_json_incremental() {
     );
     assert_eq!(
         doc.debug_print(),
-        r#"8(8({8("foo": 9({9("a": 9(111)), 9("c": 4("xyz")), 4("b": 4(null))}))}))"#
+        r#"1(8({8("foo": 9({9("a": 9(111)), 9("c": 4("xyz")), 4("b": 4(null))}))}))"#
     );
 }

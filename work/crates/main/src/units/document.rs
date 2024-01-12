@@ -51,7 +51,7 @@ use crate::{
         TokenRef,
     },
     std::*,
-    syntax::{Cluster, Node, NodeRef, SyntaxTree},
+    syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
     units::{CompilationUnit, ImmutableUnit, MutableUnit, VoidWatch, Watch},
 };
 
@@ -120,10 +120,10 @@ impl<N: Node, S: AsRef<str>> From<S> for Document<N> {
 
 impl<N: Node> SourceCode for Document<N> {
     type Token = N::Token;
+
     type Cursor<'document> = DocumentCursor<'document, N>;
-    type CharIterator<'document> = DocumentCharIter<'document, N>
-    where
-        Self: 'document;
+
+    type CharIterator<'document> = DocumentCharIter<'document, N>;
 
     #[inline(always)]
     fn chars(&self, span: impl ToSpan) -> Self::CharIterator<'_> {
@@ -134,42 +134,42 @@ impl<N: Node> SourceCode for Document<N> {
     }
 
     #[inline(always)]
-    fn has_chunk(&self, chunk_entry: &Entry) -> bool {
+    fn has_chunk(&self, entry: &Entry) -> bool {
         match self {
-            Self::Mutable(unit) => unit.has_chunk(chunk_entry),
-            Self::Immutable(unit) => unit.has_chunk(chunk_entry),
+            Self::Mutable(unit) => unit.has_chunk(entry),
+            Self::Immutable(unit) => unit.has_chunk(entry),
         }
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
+    fn get_token(&self, entry: &Entry) -> Option<Self::Token> {
         match self {
-            Self::Mutable(unit) => unit.get_token(chunk_entry),
-            Self::Immutable(unit) => unit.get_token(chunk_entry),
+            Self::Mutable(unit) => unit.get_token(entry),
+            Self::Immutable(unit) => unit.get_token(entry),
         }
     }
 
     #[inline(always)]
-    fn get_site(&self, chunk_entry: &Entry) -> Option<Site> {
+    fn get_site(&self, entry: &Entry) -> Option<Site> {
         match self {
-            Self::Mutable(unit) => unit.get_site(chunk_entry),
-            Self::Immutable(unit) => unit.get_site(chunk_entry),
+            Self::Mutable(unit) => unit.get_site(entry),
+            Self::Immutable(unit) => unit.get_site(entry),
         }
     }
 
     #[inline(always)]
-    fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
+    fn get_string(&self, entry: &Entry) -> Option<&str> {
         match self {
-            Self::Mutable(unit) => unit.get_string(chunk_entry),
-            Self::Immutable(unit) => unit.get_string(chunk_entry),
+            Self::Mutable(unit) => unit.get_string(entry),
+            Self::Immutable(unit) => unit.get_string(entry),
         }
     }
 
     #[inline(always)]
-    fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
+    fn get_length(&self, entry: &Entry) -> Option<Length> {
         match self {
-            Self::Mutable(unit) => unit.get_length(chunk_entry),
-            Self::Immutable(unit) => unit.get_length(chunk_entry),
+            Self::Mutable(unit) => unit.get_length(entry),
+            Self::Immutable(unit) => unit.get_length(entry),
         }
     }
 
@@ -190,10 +190,10 @@ impl<N: Node> SourceCode for Document<N> {
     }
 
     #[inline(always)]
-    fn token_count(&self) -> TokenCount {
+    fn tokens(&self) -> TokenCount {
         match self {
-            Self::Mutable(unit) => unit.token_count(),
-            Self::Immutable(unit) => unit.token_count(),
+            Self::Mutable(unit) => unit.tokens(),
+            Self::Immutable(unit) => unit.tokens(),
         }
     }
 
@@ -209,51 +209,71 @@ impl<N: Node> SourceCode for Document<N> {
 impl<N: Node> SyntaxTree for Document<N> {
     type Node = N;
 
+    type NodeIterator<'document> = DocumentNodeIter<'document, N>;
+
+    type ErrorIterator<'document> = DocumentErrorIter<'document, N>;
+
     #[inline(always)]
-    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
+    fn root_node_ref(&self) -> NodeRef {
         match self {
-            Self::Mutable(unit) => unit.has_cluster(cluster_entry),
-            Self::Immutable(unit) => unit.has_cluster(cluster_entry),
+            Self::Mutable(unit) => unit.root_node_ref(),
+            Self::Immutable(unit) => unit.root_node_ref(),
         }
     }
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
+    fn node_refs(&self) -> Self::NodeIterator<'_> {
         match self {
-            Self::Mutable(unit) => unit.get_cluster(cluster_entry),
-            Self::Immutable(unit) => unit.get_cluster(cluster_entry),
+            Self::Mutable(unit) => DocumentNodeIter::Mutable(unit.node_refs()),
+            Self::Immutable(unit) => DocumentNodeIter::Immutable(unit.node_refs()),
         }
     }
 
     #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
+    fn error_refs(&self) -> Self::ErrorIterator<'_> {
         match self {
-            Self::Mutable(unit) => unit.get_cluster_mut(cluster_entry),
-            Self::Immutable(unit) => unit.get_cluster_mut(cluster_entry),
+            Self::Mutable(unit) => DocumentErrorIter::Mutable(unit.error_refs()),
+            Self::Immutable(unit) => DocumentErrorIter::Immutable(unit.error_refs()),
         }
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry {
+    fn has_node(&self, entry: &Entry) -> bool {
         match self {
-            Self::Mutable(unit) => unit.get_previous_cluster(cluster_entry),
-            Self::Immutable(unit) => unit.get_previous_cluster(cluster_entry),
+            Self::Mutable(unit) => unit.has_node(entry),
+            Self::Immutable(unit) => unit.has_node(entry),
         }
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry {
+    fn get_node(&self, entry: &Entry) -> Option<&Self::Node> {
         match self {
-            Self::Mutable(unit) => unit.get_next_cluster(cluster_entry),
-            Self::Immutable(unit) => unit.get_next_cluster(cluster_entry),
+            Self::Mutable(unit) => unit.get_node(entry),
+            Self::Immutable(unit) => unit.get_node(entry),
         }
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
+    fn get_node_mut(&mut self, entry: &Entry) -> Option<&mut Self::Node> {
         match self {
-            Self::Mutable(unit) => unit.remove_cluster(cluster_entry),
-            Self::Immutable(unit) => unit.remove_cluster(cluster_entry),
+            Self::Mutable(unit) => unit.get_node_mut(entry),
+            Self::Immutable(unit) => unit.get_node_mut(entry),
+        }
+    }
+
+    #[inline(always)]
+    fn has_error(&self, entry: &Entry) -> bool {
+        match self {
+            Self::Mutable(unit) => unit.has_error(entry),
+            Self::Immutable(unit) => unit.has_error(entry),
+        }
+    }
+
+    #[inline(always)]
+    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+        match self {
+            Self::Mutable(unit) => unit.get_error(entry),
+            Self::Immutable(unit) => unit.get_error(entry),
         }
     }
 }
@@ -496,3 +516,41 @@ impl<'document, N: Node> Iterator for DocumentCharIter<'document, N> {
 }
 
 impl<'document, N: Node> FusedIterator for DocumentCharIter<'document, N> {}
+
+pub enum DocumentNodeIter<'document, N: Node> {
+    Mutable(<MutableUnit<N> as SyntaxTree>::NodeIterator<'document>),
+    Immutable(<ImmutableUnit<N> as SyntaxTree>::NodeIterator<'document>),
+}
+
+impl<'document, N: Node> Iterator for DocumentNodeIter<'document, N> {
+    type Item = NodeRef;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Mutable(iterator) => iterator.next(),
+            Self::Immutable(iterator) => iterator.next(),
+        }
+    }
+}
+
+impl<'document, N: Node> FusedIterator for DocumentNodeIter<'document, N> {}
+
+pub enum DocumentErrorIter<'document, N: Node> {
+    Mutable(<MutableUnit<N> as SyntaxTree>::ErrorIterator<'document>),
+    Immutable(<ImmutableUnit<N> as SyntaxTree>::ErrorIterator<'document>),
+}
+
+impl<'document, N: Node> Iterator for DocumentErrorIter<'document, N> {
+    type Item = ErrorRef;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Mutable(iterator) => iterator.next(),
+            Self::Immutable(iterator) => iterator.next(),
+        }
+    }
+}
+
+impl<'document, N: Node> FusedIterator for DocumentErrorIter<'document, N> {}

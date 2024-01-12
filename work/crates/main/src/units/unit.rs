@@ -51,7 +51,7 @@ use crate::{
         TokenCursor,
     },
     std::*,
-    syntax::{Capture, Cluster, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
+    syntax::{Capture, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
     units::{Document, ImmutableUnit, MutableUnit},
 };
 
@@ -150,28 +150,28 @@ impl<F: Lexis> SourceCode for F {
     }
 
     #[inline(always)]
-    fn has_chunk(&self, chunk_entry: &Entry) -> bool {
-        self.lexis().has_chunk(chunk_entry)
+    fn has_chunk(&self, entry: &Entry) -> bool {
+        self.lexis().has_chunk(entry)
     }
 
     #[inline(always)]
-    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
-        self.lexis().get_token(chunk_entry)
+    fn get_token(&self, entry: &Entry) -> Option<Self::Token> {
+        self.lexis().get_token(entry)
     }
 
     #[inline(always)]
-    fn get_site(&self, chunk_entry: &Entry) -> Option<Site> {
-        self.lexis().get_site(chunk_entry)
+    fn get_site(&self, entry: &Entry) -> Option<Site> {
+        self.lexis().get_site(entry)
     }
 
     #[inline(always)]
-    fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
-        self.lexis().get_string(chunk_entry)
+    fn get_string(&self, entry: &Entry) -> Option<&str> {
+        self.lexis().get_string(entry)
     }
 
     #[inline(always)]
-    fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
-        self.lexis().get_length(chunk_entry)
+    fn get_length(&self, entry: &Entry) -> Option<Length> {
+        self.lexis().get_length(entry)
     }
 
     #[inline(always)]
@@ -185,8 +185,8 @@ impl<F: Lexis> SourceCode for F {
     }
 
     #[inline(always)]
-    fn token_count(&self) -> TokenCount {
-        self.lexis().token_count()
+    fn tokens(&self) -> TokenCount {
+        self.lexis().tokens()
     }
 
     #[inline(always)]
@@ -206,34 +206,48 @@ pub trait Syntax: Identifiable {
 impl<F: Syntax> SyntaxTree for F {
     type Node = <F::Syntax as SyntaxTree>::Node;
 
+    type NodeIterator<'tree> = <F::Syntax as SyntaxTree>::NodeIterator<'tree> where Self: 'tree;
+
+    type ErrorIterator<'tree> = <F::Syntax as SyntaxTree>::ErrorIterator<'tree> where Self: 'tree;
+
     #[inline(always)]
-    fn has_cluster(&self, cluster_entry: &Entry) -> bool {
-        self.syntax().has_cluster(cluster_entry)
+    fn root_node_ref(&self) -> NodeRef {
+        self.syntax().root_node_ref()
     }
 
     #[inline(always)]
-    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>> {
-        self.syntax().get_cluster(cluster_entry)
+    fn node_refs(&self) -> Self::NodeIterator<'_> {
+        self.syntax().node_refs()
     }
 
     #[inline(always)]
-    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>> {
-        self.syntax_mut().get_cluster_mut(cluster_entry)
+    fn error_refs(&self) -> Self::ErrorIterator<'_> {
+        self.syntax().error_refs()
     }
 
     #[inline(always)]
-    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry {
-        self.syntax().get_previous_cluster(cluster_entry)
+    fn has_node(&self, entry: &Entry) -> bool {
+        self.syntax().has_node(entry)
     }
 
     #[inline(always)]
-    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry {
-        self.syntax().get_next_cluster(cluster_entry)
+    fn get_node(&self, entry: &Entry) -> Option<&Self::Node> {
+        self.syntax().get_node(entry)
     }
 
     #[inline(always)]
-    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>> {
-        self.syntax_mut().remove_cluster(cluster_entry)
+    fn get_node_mut(&mut self, entry: &Entry) -> Option<&mut Self::Node> {
+        self.syntax_mut().get_node_mut(entry)
+    }
+
+    #[inline(always)]
+    fn has_error(&self, entry: &Entry) -> bool {
+        self.syntax().has_error(entry)
+    }
+
+    #[inline(always)]
+    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+        self.syntax().get_error(entry)
     }
 }
 
@@ -275,8 +289,8 @@ where
 
                 let name = chunk.token.name().unwrap_or("TokenRef");
 
-                let mut debug_struct = formatter
-                    .debug_struct(&format!("${name}(chunk_entry: {:?})", variant.chunk_entry));
+                let mut debug_struct =
+                    formatter.debug_struct(&format!("${name}(chunk_entry: {:?})", variant.entry));
 
                 debug_struct.field("string", &chunk.string);
                 debug_struct.field("length", &chunk.length);
@@ -303,10 +317,8 @@ where
 
                 let alternate = formatter.alternate();
 
-                let mut debug_struct = formatter.debug_struct(&format!(
-                    "{name}(cluster_entry: {:?}, node_entry: {:?})",
-                    variant.cluster_entry, variant.node_entry,
-                ));
+                let mut debug_struct =
+                    formatter.debug_struct(&format!("{name}(entry: {:?})", variant.entry));
 
                 for key in node.capture_keys() {
                     let Some(capture) = node.capture(*key) else {

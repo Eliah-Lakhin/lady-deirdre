@@ -53,7 +53,7 @@ use crate::{
 ///      type.
 ///   2. Provides general source code meta information such as text's
 ///      [character count](crate::lexis::SourceCode::length),
-///      [token count](crate::lexis::SourceCode::token_count), etc.
+///      [token count](crate::lexis::SourceCode::tokens), etc.
 ///   3. Provides low-level interface to resolve higher-level weak references(such as
 ///      [TokenRef](crate::lexis::TokenRef) or [SiteRef](crate::lexis::SiteRef)).
 ///   4. Provides low-level access to the the source code Tokens through the low-level
@@ -189,7 +189,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef) and
     /// [SiteRef](crate::lexis::SiteRef) weak references under the hood. An API user normally don't
     /// need to call this function directly.
-    fn has_chunk(&self, chunk_entry: &Entry) -> bool;
+    fn has_chunk(&self, entry: &Entry) -> bool;
 
     /// Immutably dereferences a [Token](crate::lexis::Token) instance by specified low-level
     /// `chunk_entry` weak reference.
@@ -199,7 +199,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token>;
+    fn get_token(&self, entry: &Entry) -> Option<Self::Token>;
 
     /// Returns absolute character index of the [Token](crate::lexis::Token) substring inside this
     /// source code text by specified low-level `chunk_entry` weak reference.
@@ -209,7 +209,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef) and
     /// [SiteRef](crate::lexis::SiteRef) weak reference under the hood. An API user normally does
     /// not need to call this function directly.
-    fn get_site(&self, chunk_entry: &Entry) -> Option<Site>;
+    fn get_site(&self, entry: &Entry) -> Option<Site>;
 
     /// Returns a substring of the [Token](crate::lexis::Token) inside this source code text by
     /// specified low-level `chunk_entry` weak reference.
@@ -219,7 +219,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_string(&self, chunk_entry: &Entry) -> Option<&str>;
+    fn get_string(&self, entry: &Entry) -> Option<&str>;
 
     /// Returns character count of the [Token](crate::lexis::Token) substring inside this
     /// source code text by specified low-level `chunk_entry` weak reference.
@@ -229,7 +229,7 @@ pub trait SourceCode: Identifiable {
     /// This is a low-level API used by the higher-level [TokenRef](crate::lexis::TokenRef)
     /// weak reference under the hood. An API user normally does not need to call this function
     /// directly.
-    fn get_length(&self, chunk_entry: &Entry) -> Option<Length>;
+    fn get_length(&self, entry: &Entry) -> Option<Length>;
 
     /// Returns a [TokenCursor](crate::lexis::TokenCursor) instance to traverse tokens and
     /// their metadata that "touch" specified `span`.
@@ -296,7 +296,7 @@ pub trait SourceCode: Identifiable {
     fn length(&self) -> Length;
 
     /// Returns a total number of tokens inside the source code lexical structure.
-    fn token_count(&self) -> TokenCount;
+    fn tokens(&self) -> TokenCount;
 
     fn lines(&self) -> &LineIndex;
 

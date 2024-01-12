@@ -36,10 +36,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    arena::{Id, RepoEntriesIter},
     lexis::{Length, SiteSpan},
     report::debug_unreachable,
     std::*,
-    syntax::Node,
+    syntax::{ErrorRef, Node, NodeRef},
     units::{storage::ChildCursor, MutableUnit},
 };
 
@@ -117,3 +118,39 @@ impl<'unit, N: Node> MutableCharIter<'unit, N> {
         }
     }
 }
+
+pub struct MutableNodeIter<'unit, N: Node> {
+    pub(super) id: Id,
+    pub(super) inner: RepoEntriesIter<'unit, N>,
+}
+
+impl<'unit, N: Node> Iterator for MutableNodeIter<'unit, N> {
+    type Item = NodeRef;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        let entry = self.inner.next()?;
+
+        Some(NodeRef { id: self.id, entry })
+    }
+}
+
+impl<'unit, N: Node> FusedIterator for MutableNodeIter<'unit, N> {}
+
+pub struct MutableErrorIter<'unit, N: Node> {
+    pub(super) id: Id,
+    pub(super) inner: RepoEntriesIter<'unit, <N as Node>::Error>,
+}
+
+impl<'unit, N: Node> Iterator for MutableErrorIter<'unit, N> {
+    type Item = ErrorRef;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        let entry = self.inner.next()?;
+
+        Some(ErrorRef { id: self.id, entry })
+    }
+}
+
+impl<'unit, N: Node> FusedIterator for MutableErrorIter<'unit, N> {}

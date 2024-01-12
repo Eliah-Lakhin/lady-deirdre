@@ -168,7 +168,7 @@ impl<N: Node> Tree<N> {
                     unsafe { page.string.set_byte_index(index, byte_index - first_byte) };
                     unsafe { page.tokens.get_unchecked_mut(index).write(token) };
                     unsafe { *page.chunks.get_unchecked_mut(index) = entry_index };
-                    unsafe { page.clusters.get_unchecked_mut(index).write(None) };
+                    unsafe { page.caches.get_unchecked_mut(index).write(None) };
                 }
 
                 None => unsafe { debug_unreachable!("Missing last page.") },

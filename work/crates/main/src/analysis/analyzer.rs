@@ -47,7 +47,7 @@ use crate::{
         Grammar,
         MutationTask,
     },
-    arena::{Identifiable, Repository},
+    arena::{Identifiable, Repo},
     std::*,
     sync::{Latch, Shared, SyncBuildHasher},
     syntax::{ErrorRef, NodeRef, SyntaxTree},
@@ -133,7 +133,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
         let id = document.id();
 
         let node_refs = document.node_refs().collect::<Vec<_>>();
-        let mut records = Repository::with_capacity(node_refs.len());
+        let mut records = Repo::with_capacity(node_refs.len());
         let mut scopes = HashSet::with_capacity_and_hasher(node_refs.len(), S::default());
 
         if !node_refs.is_empty() {

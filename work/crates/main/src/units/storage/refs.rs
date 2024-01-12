@@ -36,22 +36,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, Repository},
+    arena::{Id, Repo},
     syntax::Node,
     units::storage::child::ChildCursor,
 };
 
 pub(crate) struct TreeRefs<N: Node> {
-    pub(super) id: Id,
-    pub(super) chunks: Repository<ChildCursor<N>>,
-    pub(super) clusters: Repository<ChildCursor<N>>,
-}
-
-impl<N: Node> Identifiable for TreeRefs<N> {
-    #[inline(always)]
-    fn id(&self) -> Id {
-        self.id
-    }
+    pub(crate) id: Id,
+    pub(crate) chunks: Repo<ChildCursor<N>>,
+    pub(crate) nodes: Repo<N>,
+    pub(crate) errors: Repo<N::Error>,
 }
 
 impl<N: Node> TreeRefs<N> {
@@ -59,32 +53,21 @@ impl<N: Node> TreeRefs<N> {
     pub(crate) fn new(id: Id) -> Self {
         Self {
             id,
-            chunks: Repository::new(),
-            clusters: Repository::new(),
+            chunks: Repo::new(),
+            nodes: Repo::new(),
+            errors: Repo::new(),
         }
     }
 
     #[inline(always)]
-    pub(crate) fn with_capacity(id: Id, capacity: usize) -> Self {
+    pub(crate) fn with_capacity(id: Id, mut capacity: usize) -> Self {
+        capacity = (capacity + 1).next_power_of_two();
+
         Self {
             id,
-            chunks: Repository::with_capacity(capacity),
-            clusters: Repository::new(),
+            chunks: Repo::with_capacity(capacity),
+            nodes: Repo::new(),
+            errors: Repo::new(),
         }
-    }
-
-    #[inline(always)]
-    pub(crate) fn chunks(&self) -> &Repository<ChildCursor<N>> {
-        &self.chunks
-    }
-
-    #[inline(always)]
-    pub(crate) fn clusters(&self) -> &Repository<ChildCursor<N>> {
-        &self.clusters
-    }
-
-    #[inline(always)]
-    pub(crate) fn clusters_mut(&mut self) -> &mut Repository<ChildCursor<N>> {
-        &mut self.clusters
     }
 }

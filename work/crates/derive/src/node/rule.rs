@@ -602,9 +602,9 @@ impl Rule {
                         )),
 
                         true => quote_spanned!(span=> {
-                            #core::syntax::SyntaxSession::enter_node(session, #index);
+                            #core::syntax::SyntaxSession::enter(session, #index);
                             let node = #ident(session);
-                            #core::syntax::SyntaxSession::leave_node(session, node)
+                            #core::syntax::SyntaxSession::leave(session, node)
                         }),
                     };
 

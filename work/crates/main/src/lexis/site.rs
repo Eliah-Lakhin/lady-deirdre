@@ -157,7 +157,7 @@ unsafe impl ToSite for SiteRef {
     #[inline(always)]
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
         match &self.0 {
-            SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.chunk_entry),
+            SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.entry),
 
             SiteRefInner::CodeEnd(id) => match id == &code.id() {
                 false => None,

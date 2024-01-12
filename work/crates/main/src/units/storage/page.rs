@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{EntryIndex, Sequence},
+    arena::EntryIndex,
     lexis::{ByteIndex, Length},
     mem::{array_copy_to, array_shift},
     report::{debug_assert, debug_unreachable},
@@ -45,12 +45,12 @@ use crate::{
     units::{
         storage::{
             branch::BranchRef,
-            cache::CacheEntry,
             child::{ChildCount, ChildCursor, ChildIndex},
             item::{Item, ItemRef, ItemRefVariant, Split},
             nesting::PageLayer,
             refs::TreeRefs,
             string::PageString,
+            Cache,
             PAGE_B,
             PAGE_CAP,
         },
@@ -67,7 +67,7 @@ pub(super) struct Page<N: Node> {
     pub(super) string: PageString,
     pub(super) tokens: [MaybeUninit<N::Token>; PAGE_CAP],
     pub(super) chunks: [EntryIndex; PAGE_CAP],
-    pub(super) clusters: [MaybeUninit<Option<Box<CacheEntry<N>>>>; PAGE_CAP],
+    pub(super) caches: [MaybeUninit<Option<Box<Cache>>>; PAGE_CAP],
 }
 
 impl<N: Node> Item for Page<N> {
@@ -111,7 +111,7 @@ impl<N: Node> Item for Page<N> {
 
         unsafe { array_copy_to(&self.chunks, &mut to.chunks, source, destination, count) };
 
-        unsafe { array_copy_to(&self.clusters, &mut to.clusters, source, destination, count) };
+        unsafe { array_copy_to(&self.caches, &mut to.caches, source, destination, count) };
     }
 
     #[inline(always)]
@@ -130,7 +130,7 @@ impl<N: Node> Item for Page<N> {
             unsafe { array_shift(&mut self.spans, from, from + count, self.occupied - from) };
             unsafe { array_shift(&mut self.tokens, from, from + count, self.occupied - from) };
             unsafe { array_shift(&mut self.chunks, from, from + count, self.occupied - from) };
-            unsafe { array_shift(&mut self.clusters, from, from + count, self.occupied - from) };
+            unsafe { array_shift(&mut self.caches, from, from + count, self.occupied - from) };
         }
 
         unsafe { self.string.inflate(self.occupied, from, count) };
@@ -179,7 +179,7 @@ impl<N: Node> Item for Page<N> {
             };
             unsafe {
                 array_shift(
-                    &mut self.clusters,
+                    &mut self.caches,
                     from + count,
                     from,
                     self.occupied - from - count,
@@ -215,7 +215,7 @@ impl<N: Node> Page<N> {
             string: PageString::default(),
             tokens: unsafe { MaybeUninit::uninit().assume_init() },
             chunks: Default::default(),
-            clusters: unsafe { MaybeUninit::uninit().assume_init() },
+            caches: unsafe { MaybeUninit::uninit().assume_init() },
         };
 
         let pointer = unsafe { NonNull::new_unchecked(Box::into_raw(Box::new(page))) };
@@ -225,9 +225,9 @@ impl<N: Node> Page<N> {
 
     pub(super) fn take_lexis(
         &mut self,
-        spans: &mut Sequence<Length>,
-        tokens: &mut Sequence<N::Token>,
-        indices: &mut Sequence<ByteIndex>,
+        spans: &mut Vec<Length>,
+        tokens: &mut Vec<N::Token>,
+        indices: &mut Vec<ByteIndex>,
         text: &mut String,
     ) {
         for index in 0..self.occupied {
@@ -246,7 +246,7 @@ impl<N: Node> Page<N> {
                 indices.push(text.len() + byte_index);
             }
 
-            let _ = take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
+            let _ = take(unsafe { self.caches.get_unchecked_mut(index).assume_init_mut() });
         }
 
         let string = unsafe { from_utf8_unchecked(self.string.bytes()) };
@@ -272,17 +272,10 @@ impl<N: Node> Page<N> {
 
             let _ = unsafe { refs.chunks.remove_unchecked(chunk_index) };
 
-            let cache_entry =
-                take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
+            let cache = take(unsafe { self.caches.get_unchecked_mut(index).assume_init_mut() });
 
-            if let Some(cache_entry) = cache_entry {
-                let cluster_entry =
-                    unsafe { refs.clusters.remove_unchecked(cache_entry.entry_index) };
-
-                cache_entry
-                    .cache
-                    .cluster
-                    .report(watch, refs.id, cluster_entry);
+            if let Some(cache) = cache {
+                cache.free(refs, watch);
             }
         }
 
@@ -295,7 +288,7 @@ impl<N: Node> Page<N> {
 
             unsafe { token.assume_init_drop() };
 
-            let _ = take(unsafe { self.clusters.get_unchecked_mut(index).assume_init_mut() });
+            let _ = take(unsafe { self.caches.get_unchecked_mut(index).assume_init_mut() });
         }
     }
 }
@@ -416,16 +409,6 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
                 chunk_ref.item = self_variant;
                 chunk_ref.index = index;
-            }
-
-            let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
-
-            if let Some(cache_entry) = cache_entry {
-                let cluster_ref =
-                    unsafe { refs.clusters.get_unchecked_mut(cache_entry.entry_index) };
-
-                cluster_ref.item = self_variant;
-                cluster_ref.index = index;
             }
         }
 
@@ -593,8 +576,7 @@ impl<N: Node> PageRef<N> {
             let span = unsafe { page.spans.get_unchecked_mut(index) };
             let token = unsafe { page.tokens.get_unchecked_mut(index).assume_init_mut() };
             let chunk_index = unsafe { *page.chunks.get_unchecked(index) };
-            let cache_entry =
-                take(unsafe { page.clusters.get_unchecked_mut(index).assume_init_mut() });
+            let cache = take(unsafe { page.caches.get_unchecked_mut(index).assume_init_mut() });
 
             dec += *span;
             inc += new_span;
@@ -604,14 +586,8 @@ impl<N: Node> PageRef<N> {
 
             unsafe { refs.chunks.upgrade(chunk_index) };
 
-            if let Some(cache_entry) = cache_entry {
-                let cluster_entry =
-                    unsafe { refs.clusters.remove_unchecked(cache_entry.entry_index) };
-
-                cache_entry
-                    .cache
-                    .cluster
-                    .report(watch, refs.id, cluster_entry);
+            if let Some(cache) = cache {
+                cache.free(refs, watch);
             }
         }
 
@@ -655,17 +631,10 @@ impl<N: Node> PageRef<N> {
 
             let _ = unsafe { refs.chunks.remove_unchecked(chunk_index) };
 
-            let cache_entry =
-                take(unsafe { page.clusters.get_unchecked_mut(index).assume_init_mut() });
+            let cache = take(unsafe { page.caches.get_unchecked_mut(index).assume_init_mut() });
 
-            if let Some(cache_entry) = cache_entry {
-                let cluster_entry =
-                    unsafe { refs.clusters.remove_unchecked(cache_entry.entry_index) };
-
-                cache_entry
-                    .cache
-                    .cluster
-                    .report(watch, refs.id, cluster_entry);
+            if let Some(cache) = cache {
+                cache.free(refs, watch);
             }
 
             length += span;
@@ -698,7 +667,7 @@ impl<N: Node> PageRef<N> {
             };
             unsafe {
                 array_shift(
-                    &mut page.clusters,
+                    &mut page.caches,
                     from + count,
                     from,
                     page.occupied - from - count,
@@ -711,15 +680,6 @@ impl<N: Node> PageRef<N> {
                     let chunk_ref = unsafe { refs.chunks.get_unchecked_mut(chunk_index) };
 
                     chunk_ref.index = index;
-                }
-
-                let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
-
-                if let Some(cache_entry) = cache_entry {
-                    let cluster_ref =
-                        unsafe { refs.clusters.get_unchecked_mut(cache_entry.entry_index) };
-
-                    cluster_ref.index = index;
                 }
             }
         }
@@ -807,7 +767,7 @@ impl<N: Node> PageRef<N> {
             }
 
             unsafe {
-                page.clusters.get_unchecked_mut(index).write(None);
+                page.caches.get_unchecked_mut(index).write(None);
             }
         }
 
@@ -817,15 +777,6 @@ impl<N: Node> PageRef<N> {
                 let chunk_ref = unsafe { refs.chunks.get_unchecked_mut(chunk_index) };
 
                 chunk_ref.index = index;
-            }
-
-            let cache_entry = unsafe { page.clusters.get_unchecked(index).assume_init_ref() };
-
-            if let Some(cache_entry) = cache_entry {
-                let cluster_ref =
-                    unsafe { refs.clusters.get_unchecked_mut(cache_entry.entry_index) };
-
-                cluster_ref.index = index;
             }
         }
 

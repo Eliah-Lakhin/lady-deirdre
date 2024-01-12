@@ -88,7 +88,7 @@ pub(crate) use core::{
     line,
     marker::{Copy, PhantomData, Send, Sized, Sync},
     matches,
-    mem::{replace, take, transmute, MaybeUninit},
+    mem::{replace, take, transmute, transmute_copy, MaybeUninit},
     ops::{
         AddAssign,
         Deref,
@@ -174,7 +174,7 @@ pub(crate) use std::{
     line,
     marker::{Copy, PhantomData, Send, Sized, Sync},
     matches,
-    mem::{drop, replace, size_of, take, transmute, ManuallyDrop, MaybeUninit},
+    mem::{drop, replace, size_of, take, transmute, transmute_copy, ManuallyDrop, MaybeUninit},
     ops::{
         AddAssign,
         Deref,

@@ -36,16 +36,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Entry, Identifiable, RepositoryEntriesIter, RepositoryIter},
+    arena::{Entry, Identifiable},
     lexis::TokenRef,
     std::*,
-    syntax::{AbstractNode, Cluster, ClusterRef, ErrorRef, Node, NodeRef, RefKind},
+    syntax::{AbstractNode, ErrorRef, Node, NodeRef, RefKind},
 };
 
 /// A low-level interface to access and inspect syntax structure of the compilation unit.
 ///
 /// SyntaxTree by convenient should be implemented for the compilation unit management object such
-/// as [Document](crate::Document) and [SyntaxBuffer](crate::syntax::SyntaxBuffer) objects that
+/// as [Document](crate::Document) and [SyntaxBuffer](crate::syntax::ImmutableSyntaxTree) objects that
 /// supposed to manage code's syntax grammar structure.
 ///
 /// This trait:
@@ -74,6 +74,14 @@ pub trait SyntaxTree: Identifiable {
     /// See [Node](crate::syntax::Node) for details.
     type Node: Node;
 
+    type NodeIterator<'tree>: Iterator<Item = NodeRef> + FusedIterator + 'tree
+    where
+        Self: 'tree;
+
+    type ErrorIterator<'tree>: Iterator<Item = ErrorRef> + FusedIterator + 'tree
+    where
+        Self: 'tree;
+
     #[inline(always)]
     fn root(&self) -> &Self::Node
     where
@@ -85,22 +93,7 @@ pub trait SyntaxTree: Identifiable {
         }
     }
 
-    #[inline(always)]
-    fn root_node_ref(&self) -> NodeRef {
-        NodeRef {
-            id: self.id(),
-            cluster_entry: Entry::Primary,
-            node_entry: Entry::Primary,
-        }
-    }
-
-    #[inline(always)]
-    fn root_cluster_ref(&self) -> ClusterRef {
-        ClusterRef {
-            id: self.id(),
-            cluster_entry: Entry::Primary,
-        }
-    }
+    fn root_node_ref(&self) -> NodeRef;
 
     #[inline(always)]
     fn nodes(&self) -> NodeIter<'_, Self>
@@ -109,58 +102,24 @@ pub trait SyntaxTree: Identifiable {
     {
         NodeIter {
             tree: self,
-            inner: NodeIteratorInner::Root,
+            inner: self.node_refs(),
         }
     }
 
-    #[inline(always)]
-    fn node_refs(&self) -> NodeRefsIter<'_, Self>
-    where
-        Self: Sized,
-    {
-        NodeRefsIter {
-            tree: self,
-            inner: NodeRefsIteratorInner::Root,
-        }
-    }
+    fn node_refs(&self) -> Self::NodeIterator<'_>;
 
     #[inline(always)]
     fn errors(&self) -> ErrorIter<'_, Self>
     where
         Self: Sized,
     {
-        let cluster_ref = self.root_cluster_ref();
-
-        let cluster = match cluster_ref.deref(self) {
-            Some(cluster) => cluster,
-            None => panic!("Root cluster dereference failure."),
-        };
-
         ErrorIter {
             tree: self,
-            cluster_ref,
-            current: cluster.errors.iter(),
+            inner: self.error_refs(),
         }
     }
 
-    #[inline(always)]
-    fn error_refs(&self) -> ErrorRefsIter<'_, Self>
-    where
-        Self: Sized,
-    {
-        let cluster_ref = self.root_cluster_ref();
-
-        let cluster = match cluster_ref.deref(self) {
-            Some(cluster) => cluster,
-            None => panic!("Root cluster dereference failure."),
-        };
-
-        ErrorRefsIter {
-            tree: self,
-            cluster_ref,
-            current: cluster.errors.entries(),
-        }
-    }
+    fn error_refs(&self) -> Self::ErrorIterator<'_>;
 
     #[inline(always)]
     fn traverse_tree(&self, visitor: &mut impl Visitor)
@@ -191,228 +150,64 @@ pub trait SyntaxTree: Identifiable {
         visitor.leave_node(top)
     }
 
-    /// Returns `true` if the [`Node Cluster`](crate::syntax::ClusterRef) referred by specified
-    /// low-level `cluster_ref` weak reference exists in this syntax tree instance.
-    ///
-    /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
-    /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
-    /// under the hood. An API user normally don't need to call this function directly.
-    fn has_cluster(&self, cluster_entry: &Entry) -> bool;
+    fn has_node(&self, entry: &Entry) -> bool;
 
-    /// Immutably dereferences a [Cluster](crate::syntax::Cluster) instance by specified low-level
-    /// `cluster_ref` weak reference.
-    ///
-    /// Returns [None] if referred Cluster does not exist in this instance.
-    ///
-    /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
-    /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
-    /// under the hood. An API user normally don't need to call this function directly.
-    fn get_cluster(&self, cluster_entry: &Entry) -> Option<&Cluster<Self::Node>>;
+    fn get_node(&self, entry: &Entry) -> Option<&Self::Node>;
 
-    /// Mutably dereferences a [Cluster](crate::syntax::Cluster) instance by specified low-level
-    /// `cluster_ref` weak reference.
-    ///
-    /// Returns [None] if referred Cluster does not exist in this instance.
-    ///
-    /// This is a low-level API used by the higher-level [ClusterRef](crate::syntax::ClusterRef),
-    /// [NodeRef](crate::syntax::NodeRef) and [ErrorRef](crate::syntax::ErrorRef) weak references
-    /// under the hood. An API user normally don't need to call this function directly.
-    fn get_cluster_mut(&mut self, cluster_entry: &Entry) -> Option<&mut Cluster<Self::Node>>;
+    fn get_node_mut(&mut self, entry: &Entry) -> Option<&mut Self::Node>;
 
-    fn get_previous_cluster(&self, cluster_entry: &Entry) -> Entry;
+    fn has_error(&self, entry: &Entry) -> bool;
 
-    fn get_next_cluster(&self, cluster_entry: &Entry) -> Entry;
-
-    fn remove_cluster(&mut self, cluster_entry: &Entry) -> Option<Cluster<Self::Node>>;
+    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error>;
 }
 
 pub struct NodeIter<'tree, T: SyntaxTree> {
     tree: &'tree T,
-    inner: NodeIteratorInner<'tree, T>,
+    inner: <T as SyntaxTree>::NodeIterator<'tree>,
 }
 
 impl<'tree, T: SyntaxTree> Iterator for NodeIter<'tree, T> {
-    type Item = &'tree T::Node;
+    type Item = &'tree <T as SyntaxTree>::Node;
 
-    #[inline]
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.inner {
-            NodeIteratorInner::Root => {
-                let cluster_ref = self.tree.root_cluster_ref();
+        loop {
+            let next = self.inner.next()?;
 
-                let cluster = match cluster_ref.deref(self.tree) {
-                    Some(cluster) => cluster,
-                    None => panic!("Root cluster dereference failure."),
-                };
+            let Some(node) = self.tree.get_node(&next.entry) else {
+                continue;
+            };
 
-                self.inner = NodeIteratorInner::NonRoot {
-                    cluster_ref: self.tree.root_cluster_ref(),
-                    current: cluster.nodes.iter(),
-                };
-
-                Some(&cluster.primary)
-            }
-
-            NodeIteratorInner::NonRoot {
-                cluster_ref,
-                current,
-            } => {
-                if let Some(node) = current.next() {
-                    return Some(node);
-                }
-
-                let cluster_ref = cluster_ref.next(self.tree);
-
-                let cluster = cluster_ref.deref(self.tree)?;
-
-                self.inner = NodeIteratorInner::NonRoot {
-                    cluster_ref,
-                    current: cluster.nodes.iter(),
-                };
-
-                Some(&cluster.primary)
-            }
+            return Some(node);
         }
     }
 }
 
 impl<'tree, T: SyntaxTree> FusedIterator for NodeIter<'tree, T> {}
 
-enum NodeIteratorInner<'tree, T: SyntaxTree> {
-    Root,
-
-    NonRoot {
-        cluster_ref: ClusterRef,
-        current: RepositoryIter<'tree, T::Node>,
-    },
-}
-
-pub struct NodeRefsIter<'tree, T: SyntaxTree> {
-    tree: &'tree T,
-    inner: NodeRefsIteratorInner<'tree, T>,
-}
-
-impl<'tree, T: SyntaxTree> Iterator for NodeRefsIter<'tree, T> {
-    type Item = NodeRef;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.inner {
-            NodeRefsIteratorInner::Root => {
-                let cluster_ref = self.tree.root_cluster_ref();
-
-                let cluster = match cluster_ref.deref(self.tree) {
-                    Some(cluster) => cluster,
-                    None => panic!("Root cluster dereference failure."),
-                };
-
-                self.inner = NodeRefsIteratorInner::NonRoot {
-                    cluster_ref: self.tree.root_cluster_ref(),
-                    current: cluster.nodes.entries(),
-                };
-
-                Some(self.tree.root_node_ref())
-            }
-
-            NodeRefsIteratorInner::NonRoot {
-                cluster_ref,
-                current,
-            } => {
-                if let Some(node_entry) = current.next() {
-                    return Some(NodeRef {
-                        id: self.tree.id(),
-                        cluster_entry: cluster_ref.cluster_entry,
-                        node_entry,
-                    });
-                }
-
-                let cluster_ref = cluster_ref.next(self.tree);
-
-                let cluster = cluster_ref.deref(self.tree)?;
-
-                self.inner = NodeRefsIteratorInner::NonRoot {
-                    cluster_ref,
-                    current: cluster.nodes.entries(),
-                };
-
-                Some(NodeRef {
-                    id: self.tree.id(),
-                    cluster_entry: cluster_ref.cluster_entry,
-                    node_entry: Entry::Primary,
-                })
-            }
-        }
-    }
-}
-
-impl<'tree, T: SyntaxTree> FusedIterator for NodeRefsIter<'tree, T> {}
-
-enum NodeRefsIteratorInner<'tree, T: SyntaxTree> {
-    Root,
-
-    NonRoot {
-        cluster_ref: ClusterRef,
-        current: RepositoryEntriesIter<'tree, T::Node>,
-    },
-}
-
 pub struct ErrorIter<'tree, T: SyntaxTree> {
     tree: &'tree T,
-    cluster_ref: ClusterRef,
-    current: RepositoryIter<'tree, <T::Node as Node>::Error>,
+    inner: <T as SyntaxTree>::ErrorIterator<'tree>,
 }
 
 impl<'tree, T: SyntaxTree> Iterator for ErrorIter<'tree, T> {
-    type Item = &'tree <T::Node as Node>::Error;
+    type Item = &'tree <<T as SyntaxTree>::Node as Node>::Error;
 
-    #[inline]
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(error) = self.current.next() {
-                return Some(error);
-            }
+            let next = self.inner.next()?;
 
-            self.cluster_ref = self.cluster_ref.next(self.tree);
+            let Some(error) = self.tree.get_error(&next.entry) else {
+                continue;
+            };
 
-            let cluster = self.cluster_ref.deref(self.tree)?;
-
-            self.current = cluster.errors.iter();
+            return Some(error);
         }
     }
 }
 
 impl<'tree, T: SyntaxTree> FusedIterator for ErrorIter<'tree, T> {}
-
-pub struct ErrorRefsIter<'tree, T: SyntaxTree> {
-    tree: &'tree T,
-    cluster_ref: ClusterRef,
-    current: RepositoryEntriesIter<'tree, <T::Node as Node>::Error>,
-}
-
-impl<'tree, T: SyntaxTree> Iterator for ErrorRefsIter<'tree, T> {
-    type Item = ErrorRef;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(error_entry) = self.current.next() {
-                return Some(ErrorRef {
-                    id: self.tree.id(),
-                    cluster_entry: self.cluster_ref.cluster_entry,
-                    error_entry,
-                });
-            }
-
-            self.cluster_ref = self.cluster_ref.next(self.tree);
-
-            let cluster = self.cluster_ref.deref(self.tree)?;
-
-            self.current = cluster.errors.entries();
-        }
-    }
-}
-
-impl<'tree, T: SyntaxTree> FusedIterator for ErrorRefsIter<'tree, T> {}
 
 pub trait Visitor {
     fn visit_token(&mut self, token_ref: &TokenRef);

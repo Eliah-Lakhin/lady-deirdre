@@ -169,14 +169,14 @@ pub unsafe trait LexisSession {
     unsafe fn submit(&mut self);
 }
 
-pub(super) struct SequentialLexisSession<'code, T: Token> {
+pub(super) struct BufferLexisSession<'code, T: Token> {
     pub(super) buffer: &'code mut TokenBuffer<T>,
     pub(super) begin: Cursor,
     pub(super) end: Cursor,
     pub(super) current: Cursor,
 }
 
-unsafe impl<'code, T: Token> LexisSession for SequentialLexisSession<'code, T> {
+unsafe impl<'code, T: Token> LexisSession for BufferLexisSession<'code, T> {
     #[inline(always)]
     fn advance(&mut self) -> u8 {
         self.current.advance(self.buffer)
@@ -211,7 +211,7 @@ unsafe impl<'code, T: Token> LexisSession for SequentialLexisSession<'code, T> {
     }
 }
 
-impl<'code, T: Token> SequentialLexisSession<'code, T> {
+impl<'code, T: Token> BufferLexisSession<'code, T> {
     #[inline]
     pub(super) fn run(buffer: &'code mut TokenBuffer<T>, byte: ByteIndex, site: Site)
     where

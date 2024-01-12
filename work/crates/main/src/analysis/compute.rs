@@ -47,7 +47,7 @@ use crate::{
         Grammar,
         Revision,
     },
-    arena::{Id, Repository},
+    arena::{Id, Repo},
     report::debug_unreachable,
     std::*,
     sync::{Latch, Shared, SyncBuildHasher},
@@ -184,7 +184,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
 pub struct AttrReadGuard<'a, C: Computable, S: SyncBuildHasher = RandomState> {
     pub(super) data: &'a C,
     pub(super) cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-    pub(super) records_guard: UnitTableReadGuard<'a, Repository<Record<C::Node, S>>, S>,
+    pub(super) records_guard: UnitTableReadGuard<'a, Repo<Record<C::Node, S>>, S>,
 }
 
 impl<'a, C: Computable + Debug, S: SyncBuildHasher> Debug for AttrReadGuard<'a, C, S> {
@@ -266,12 +266,8 @@ impl AttrRef {
                     //         The reference will ve valid for as long as the Analyzer is held.
                     let records_guard = unsafe {
                         transmute::<
-                            UnitTableReadGuard<Repository<Record<<C as Computable>::Node, S>>, S>,
-                            UnitTableReadGuard<
-                                'a,
-                                Repository<Record<<C as Computable>::Node, S>>,
-                                S,
-                            >,
+                            UnitTableReadGuard<Repo<Record<<C as Computable>::Node, S>>, S>,
+                            UnitTableReadGuard<'a, Repo<Record<<C as Computable>::Node, S>>, S>,
                         >(records_guard)
                     };
 
