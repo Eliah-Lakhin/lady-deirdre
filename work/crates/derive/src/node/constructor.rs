@@ -398,7 +398,7 @@ impl Constructor {
                             let ty = &param.ty;
 
                             let value = quote_spanned!(*value_span=>
-                                <#ty as #core::analysis::Feature>::new_uninitialized(
+                                <#ty as #core::analysis::Feature>::new(
                                     #core::syntax::SyntaxSession::node_ref(session),
                                 )
                             );

@@ -36,6 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 //todo consider replacing HashMap with AHashMap
+//todo consider removing constructor attribute to reduce complexity
 
 #![doc = include_str!("../readme.md")]
 //TODO check warnings regularly
@@ -80,13 +81,14 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     Node,
     attributes(
         token,
+        classifier,
         error,
         define,
         trivia,
         recovery,
         rule,
         root,
-        index,
+        index, //todo rename
         constructor,
         secondary,
         parser,
@@ -109,7 +111,7 @@ pub fn node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 // todo link documentation
-#[proc_macro_derive(Feature, attributes(node, invalidate, scope, dump))]
+#[proc_macro_derive(Feature, attributes(node, scoped, dump))]
 pub fn feature(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as FeatureInput);
 
@@ -122,7 +124,7 @@ fn output_stream(declarative: bool, stream: TokenStream) -> proc_macro::TokenStr
     match declarative {
         true => match TokenStream::from_str(&stream.to_string()) {
             Ok(stream) => stream.into(),
-            Err(error) => system_panic!("Spans erase failure. {error}",),
+            Err(error) => system_panic!("Spans erasure failure. {error}",),
         },
         false => stream.into(),
     }

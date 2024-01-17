@@ -36,10 +36,23 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    analysis::{AnalysisResult, Attr, AttrContext, Computable, Grammar},
+    analysis::{
+        database::{CacheDeps, Memo, Record, RecordCache},
+        AnalysisError,
+        AnalysisResult,
+        Attr,
+        AttrContext,
+        AttrRef,
+        Computable,
+        Grammar,
+        Revision,
+    },
+    arena::Repo,
+    report::debug_unreachable,
     std::*,
-    sync::SyncBuildHasher,
+    sync::{Latch, Shared, SyncBuildHasher},
     syntax::NodeRef,
+    units::Document,
 };
 
 pub type ScopeAttr<N> = Attr<Scope<N>>;
@@ -95,15 +108,15 @@ impl<N: Grammar> Computable for Scope<N> {
         Self: Sized,
     {
         let node_ref = context.node_ref();
-        let document = context.read_doc(node_ref.id)?;
+        let doc_read = context.read_doc(node_ref.id)?;
 
-        let Some(node) = node_ref.deref(document.deref()) else {
+        let Some(node) = node_ref.deref(doc_read.deref()) else {
             return Ok(Self::default());
         };
 
         let parent_ref = node.parent_ref();
 
-        let Some(parent) = parent_ref.deref(document.deref()) else {
+        let Some(parent) = parent_ref.deref(doc_read.deref()) else {
             return Ok(Self::default());
         };
 
@@ -114,6 +127,199 @@ impl<N: Grammar> Computable for Scope<N> {
             });
         }
 
-        Ok(*parent.scope_attr()?.read(context)?.deref())
+        let parent_scope_attr = parent.scope_attr()?;
+
+        Ok(*parent_scope_attr.read(context)?.deref())
+    }
+}
+
+impl<N: Grammar> ScopeAttr<N> {
+    // Safety: `attr_ref` refers ScopeAttr.
+    pub(super) unsafe fn snapshot_manually<S: SyncBuildHasher>(
+        attr_ref: &AttrRef,
+        handle: &Latch,
+        doc: &Document<N>,
+        records: &Repo<Record<N, S>>,
+        revision: Revision,
+    ) -> AnalysisResult<NodeRef> {
+        let Some(record) = records.get(&attr_ref.entry) else {
+            return Err(AnalysisError::UninitAttribute);
+        };
+
+        loop {
+            let record_read_guard = record.read();
+
+            if record_read_guard.verified_at >= revision {
+                if let Some(cache) = &record_read_guard.cache {
+                    // Safety: Upheld by the caller.
+                    let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
+
+                    return Ok(scope.scope_ref);
+                }
+
+                // Records with `verified_at > 0` always have cache.
+                unsafe { debug_unreachable!("Verified scope attribute without cache.") };
+            }
+
+            drop(record_read_guard);
+
+            let mut record_write_guard = record.write(handle)?;
+
+            let record_inner = record_write_guard.deref_mut();
+
+            let Some(cache) = &mut record_inner.cache else {
+                let (dep, scope_ref) =
+                    Self::compute_manually(&record_inner.node_ref, handle, doc, records, revision)?;
+
+                let mut deps = CacheDeps::default();
+
+                if let Some(dep) = dep {
+                    let _ = deps.attrs.insert(dep);
+                }
+
+                record_inner.cache = Some(RecordCache {
+                    dirty: false,
+                    updated_at: revision,
+                    memo: Box::new(Scope {
+                        scope_ref,
+                        _grammar: PhantomData::<N>,
+                    }) as Box<dyn Memo>,
+                    deps: Shared::new(deps),
+                });
+
+                record_inner.verified_at = revision;
+
+                return Ok(scope_ref);
+            };
+
+            if record_inner.verified_at >= revision {
+                // Safety: Upheld by the caller.
+                let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
+
+                return Ok(scope.scope_ref);
+            }
+
+            if !cache.dirty {
+                if let Some(attr_ref) = cache.deps.as_ref().attrs.iter().next() {
+                    let mut deps_verified = true;
+
+                    loop {
+                        let Some(dep_record) = records.get(&attr_ref.entry) else {
+                            cache.dirty = true;
+                            break;
+                        };
+
+                        let dep_record_read_guard = dep_record.read();
+
+                        let Some(dep_cache) = &dep_record_read_guard.cache else {
+                            cache.dirty = true;
+                            break;
+                        };
+
+                        if dep_cache.dirty {
+                            cache.dirty = true;
+                            break;
+                        }
+
+                        if dep_cache.updated_at > record_inner.verified_at {
+                            cache.dirty = true;
+                            break;
+                        }
+
+                        deps_verified =
+                            deps_verified && dep_record_read_guard.verified_at >= revision;
+
+                        break;
+                    }
+
+                    if !cache.dirty {
+                        if deps_verified {
+                            record_inner.verified_at = revision;
+
+                            // Safety: Upheld by the caller.
+                            let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
+
+                            return Ok(scope.scope_ref);
+                        }
+
+                        let attr_ref = *attr_ref;
+
+                        drop(record_write_guard);
+
+                        // Safety: ScopeAttr can only depend on another ScopeAttr.
+                        let _ = unsafe {
+                            Self::snapshot_manually(&attr_ref, handle, doc, records, revision)
+                        };
+
+                        continue;
+                    }
+                }
+            }
+
+            if !cache.dirty {
+                record_inner.verified_at = revision;
+
+                // Safety: Upheld by the caller.
+                let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
+
+                return Ok(scope.scope_ref);
+            }
+
+            let (dep, scope_ref) =
+                Self::compute_manually(&record_inner.node_ref, handle, doc, records, revision)?;
+
+            // Safety: Upheld by the caller.
+            let old_scope = unsafe { cache.downcast_unchecked_mut::<Scope<N>>() };
+
+            if &old_scope.scope_ref != &scope_ref {
+                old_scope.scope_ref = scope_ref;
+                cache.updated_at = revision;
+            }
+
+            let mut deps = CacheDeps::default();
+
+            if let Some(dep) = dep {
+                let _ = deps.attrs.insert(dep);
+            }
+
+            cache.deps = Shared::new(deps);
+
+            record_inner.verified_at = revision;
+
+            return Ok(scope_ref);
+        }
+    }
+
+    #[inline]
+    fn compute_manually<S: SyncBuildHasher>(
+        node_ref: &NodeRef,
+        handle: &Latch,
+        doc: &Document<N>,
+        records: &Repo<Record<N, S>>,
+        revision: Revision,
+    ) -> AnalysisResult<(Option<AttrRef>, NodeRef)> {
+        let Some(node) = node_ref.deref(doc) else {
+            return Ok((None, NodeRef::default()));
+        };
+
+        let parent_ref = node.parent_ref();
+
+        let Some(parent) = parent_ref.deref(doc) else {
+            return Ok((None, NodeRef::default()));
+        };
+
+        if parent.is_scope() {
+            return Ok((None, parent_ref));
+        }
+
+        let parent_scope_attr = parent.scope_attr()?;
+        let parent_scope_attr_ref = parent_scope_attr.as_ref();
+
+        // Safety: `parent_scope_attr_ref` belongs to `parent_scope_attr`.
+        let scope_ref = unsafe {
+            Self::snapshot_manually(parent_scope_attr_ref, handle, doc, records, revision)?
+        };
+
+        Ok((Some(*parent_scope_attr.as_ref()), scope_ref))
     }
 }

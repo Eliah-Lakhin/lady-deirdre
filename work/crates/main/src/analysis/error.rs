@@ -49,8 +49,8 @@ pub enum AnalysisError {
     UninitAttribute,
     MissingAttribute,
     UninitSemantics,
+    MissingSemantics,
     TypeMismatch,
-    MissingScope,
     MissingFeature,
     CycleDetected,
 }
@@ -66,9 +66,9 @@ impl Display for AnalysisError {
             Self::UninitAttribute => "An attempt to access uninitialized attribute object.",
             Self::MissingAttribute => "Referred attribute does not exist in the analyzer.",
             Self::UninitSemantics => "An attempt to access uninitialized semantics object.",
+            Self::MissingSemantics => "Node variant does not have semantics.",
             Self::TypeMismatch => "Incorrect attribute type.",
-            Self::MissingScope => "One of the semantics object does not have scope attribute.",
-            Self::MissingFeature => "One of the semantics objects does not have scope feature.",
+            Self::MissingFeature => "An attempt to access semantic feature that does not exist.",
             Self::CycleDetected => "Attribute graph contains a cycle.",
         };
 

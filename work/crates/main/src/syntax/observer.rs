@@ -100,7 +100,7 @@ impl<N: Node> DebugObserver<N> {
 }
 
 #[repr(transparent)]
-pub(super) struct VoidObserver<N: Node>(PhantomData<N>);
+pub struct VoidObserver<N: Node>(PhantomData<N>);
 
 impl<N: Node> Default for VoidObserver<N> {
     #[inline(always)]

@@ -61,6 +61,3 @@ pub mod syntax;
 pub mod units;
 
 extern crate self as lady_deirdre;
-
-#[cfg(not(feature = "std"))]
-extern crate alloc;

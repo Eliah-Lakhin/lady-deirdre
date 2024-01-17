@@ -37,24 +37,25 @@
 
 use crate::{
     analysis::{
-        record::{Cache, Cell, Record},
-        table::UnitTableReadGuard,
+        database::{CacheDeps, Record, RecordCache, RecordInner},
         AnalysisError,
         AnalysisResult,
         Analyzer,
         AttrRef,
+        Classifier,
         DocumentReadGuard,
+        Event,
         Grammar,
         Revision,
+        DOC_REMOVED_EVENT,
+        DOC_UPDATED_EVENT,
     },
     arena::{Id, Repo},
     report::debug_unreachable,
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher},
-    syntax::{ErrorRef, NodeRef, NIL_NODE_REF},
+    sync::{Latch, Shared, SyncBuildHasher, TableReadGuard},
+    syntax::{NodeRef, NIL_NODE_REF},
 };
-
-const DEPS_CAPACITY: usize = 30;
 
 pub trait Computable: Send + Sync + 'static {
     type Node: Grammar;
@@ -71,7 +72,7 @@ pub struct AttrContext<'a, N: Grammar, S: SyncBuildHasher> {
     revision: Revision,
     handle: &'a Latch,
     node_ref: &'a NodeRef,
-    deps: HashSet<AttrRef, S>,
+    deps: CacheDeps<N, S>,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
@@ -82,7 +83,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
             revision,
             handle,
             node_ref: &NIL_NODE_REF,
-            deps: HashSet::with_capacity_and_hasher(1, S::default()),
+            deps: CacheDeps::default(),
         }
     }
 
@@ -92,45 +93,61 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
     }
 
     #[inline(always)]
-    pub fn read_doc(&self, id: Id) -> AnalysisResult<DocumentReadGuard<'a, N, S>> {
-        let Some(guard) = self.analyzer.docs.get(id) else {
+    pub fn contains_doc(&mut self, id: Id) -> bool {
+        let result = self.analyzer.docs.contains_key(&id);
+
+        if result && id != self.node_ref.id {
+            self.subscribe(Id::nil(), DOC_REMOVED_EVENT);
+        }
+
+        result
+    }
+
+    #[inline(always)]
+    pub fn read_doc(&mut self, id: Id) -> AnalysisResult<DocumentReadGuard<'a, N, S>> {
+        let Some(guard) = self.analyzer.docs.get(&id) else {
             return Err(AnalysisError::MissingDocument);
         };
+
+        if id != self.node_ref.id {
+            self.subscribe(id, DOC_REMOVED_EVENT);
+        }
 
         Ok(DocumentReadGuard::from(guard))
     }
 
     #[inline(always)]
-    pub fn try_read_doc(&self, id: Id) -> Option<DocumentReadGuard<N, S>> {
-        Some(DocumentReadGuard::from(self.analyzer.docs.try_get(id)?))
-    }
+    pub fn read_class(
+        &mut self,
+        id: Id,
+        class: &<N::Classifier as Classifier>::Class,
+    ) -> AnalysisResult<Shared<HashSet<NodeRef, S>>> {
+        let _ = self.deps.classes.insert((id, class.clone()));
 
-    #[inline(always)]
-    pub fn snapshot_scopes(&self, id: Id) -> AnalysisResult<Shared<HashSet<NodeRef, S>>> {
-        let Some(guard) = self.analyzer.docs.get(id) else {
+        let Some(guard) = self.analyzer.docs.get(&id) else {
             return Err(AnalysisError::MissingDocument);
         };
 
-        Ok(guard.scope_accumulator.clone())
-    }
-
-    #[inline(always)]
-    pub fn snapshot_errors(&self, id: Id) -> AnalysisResult<Shared<HashSet<ErrorRef, S>>> {
-        let Some(guard) = self.analyzer.docs.get(id) else {
-            return Err(AnalysisError::MissingDocument);
+        let Some(class_to_nodes) = guard.classes_to_nodes.get(class) else {
+            self.subscribe(id, DOC_UPDATED_EVENT);
+            return Ok(Shared::default());
         };
 
-        Ok(guard.error_accumulator.clone())
+        if id != self.node_ref.id {
+            self.subscribe(id, DOC_REMOVED_EVENT);
+        }
+
+        Ok(class_to_nodes.nodes.clone())
     }
 
     #[inline(always)]
-    pub fn contains_doc(&self, id: Id) -> bool {
-        self.analyzer.docs.contains(id)
+    pub fn subscribe(&mut self, id: Id, event: Event) {
+        let _ = self.deps.events.insert((id, event));
     }
 
     #[inline(always)]
     pub fn proceed(&self) -> AnalysisResult<()> {
-        if self.handle().get_relaxed() {
+        if self.handle.get_relaxed() {
             return Err(AnalysisError::Interrupted);
         }
 
@@ -144,38 +161,18 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
             revision: self.revision,
             handle: self.handle,
             node_ref,
-            deps: HashSet::with_capacity_and_hasher(DEPS_CAPACITY, S::default()),
+            deps: CacheDeps::default(),
         }
     }
 
     #[inline(always)]
-    pub(super) fn handle(&self) -> &'a Latch {
-        self.handle
-    }
-
-    #[inline(always)]
-    pub(super) fn revision(&self) -> Revision {
-        self.revision
-    }
-
-    #[inline(always)]
-    pub(super) fn analyzer(&self) -> &'a Analyzer<N, S> {
-        self.analyzer
-    }
-
-    #[inline(always)]
     pub(super) fn track(&mut self, dep: &AttrRef) {
-        let _ = self.deps.insert(*dep);
+        let _ = self.deps.attrs.insert(*dep);
     }
 
     #[inline(always)]
-    pub(super) fn reset_deps(&mut self) {
-        self.deps.clear();
-    }
-
-    #[inline(always)]
-    pub(super) fn into_deps(self) -> HashSet<AttrRef, S> {
-        self.deps
+    pub(super) fn into_deps(self) -> Shared<CacheDeps<N, S>> {
+        Shared::new(self.deps)
     }
 }
 
@@ -183,8 +180,8 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AttrContext<'a, N, S> {
 #[allow(dead_code)]
 pub struct AttrReadGuard<'a, C: Computable, S: SyncBuildHasher = RandomState> {
     pub(super) data: &'a C,
-    pub(super) cell_guard: RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-    pub(super) records_guard: UnitTableReadGuard<'a, Repo<Record<C::Node, S>>, S>,
+    pub(super) cell_guard: RwLockReadGuard<'a, RecordInner<<C as Computable>::Node, S>>,
+    pub(super) records_guard: TableReadGuard<'a, Id, Repo<Record<C::Node, S>>, S>,
 }
 
 impl<'a, C: Computable + Debug, S: SyncBuildHasher> Debug for AttrReadGuard<'a, C, S> {
@@ -228,7 +225,7 @@ impl AttrRef {
         context: &mut AttrContext<'a, C::Node, S>,
     ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
         loop {
-            let Some(records_guard) = context.analyzer().database.records.get(self.id) else {
+            let Some(records_guard) = context.analyzer.db.records.get(&self.id) else {
                 return Err(AnalysisError::MissingDocument);
             };
 
@@ -236,10 +233,10 @@ impl AttrRef {
                 return Err(AnalysisError::MissingAttribute);
             };
 
-            let cell_guard = record.read();
+            let record_read_guard = record.read();
 
-            if cell_guard.verified_at >= context.revision() {
-                if let Some(cache) = &cell_guard.cache {
+            if record_read_guard.verified_at >= context.revision {
+                if let Some(cache) = &record_read_guard.cache {
                     let data = match CHECK {
                         true => cache.downcast::<C>()?,
 
@@ -257,17 +254,17 @@ impl AttrRef {
                     //         The guard will ve valid for as long as the parent guard is held.
                     let cell_guard = unsafe {
                         transmute::<
-                            RwLockReadGuard<Cell<<C as Computable>::Node, S>>,
-                            RwLockReadGuard<'a, Cell<<C as Computable>::Node, S>>,
-                        >(cell_guard)
+                            RwLockReadGuard<RecordInner<<C as Computable>::Node, S>>,
+                            RwLockReadGuard<'a, RecordInner<<C as Computable>::Node, S>>,
+                        >(record_read_guard)
                     };
 
                     // Safety: Prolongs lifetime to Analyzer's lifetime.
                     //         The reference will ve valid for as long as the Analyzer is held.
                     let records_guard = unsafe {
                         transmute::<
-                            UnitTableReadGuard<Repo<Record<<C as Computable>::Node, S>>, S>,
-                            UnitTableReadGuard<'a, Repo<Record<<C as Computable>::Node, S>>, S>,
+                            TableReadGuard<Id, Repo<Record<<C as Computable>::Node, S>>, S>,
+                            TableReadGuard<'a, Id, Repo<Record<<C as Computable>::Node, S>>, S>,
                         >(records_guard)
                     };
 
@@ -279,7 +276,7 @@ impl AttrRef {
                 }
             }
 
-            drop(cell_guard);
+            drop(record_read_guard);
             drop(records_guard);
 
             self.validate(context)?;
@@ -291,7 +288,7 @@ impl AttrRef {
         context: &AttrContext<N, S>,
     ) -> AnalysisResult<()> {
         loop {
-            let Some(records) = context.analyzer().database.records.get(self.id) else {
+            let Some(records) = context.analyzer.db.records.get(&self.id) else {
                 return Err(AnalysisError::MissingDocument);
             };
 
@@ -302,74 +299,108 @@ impl AttrRef {
             {
                 let record_read_guard = record.read();
 
-                if record_read_guard.verified_at >= context.revision() {
+                if record_read_guard.verified_at >= context.revision {
                     return Ok(());
                 }
             }
 
-            let mut record_write_guard = record.write(context.handle())?;
-            let cell = record_write_guard.deref_mut();
+            let mut record_write_guard = record.write(context.handle)?;
 
-            let Some(cache) = &mut cell.cache else {
-                let mut forked = context.fork(&cell.node_ref);
-                let memo = cell.function.invoke(&mut forked)?;
-                let deps = Shared::new(forked.into_deps());
+            let record_inner = record_write_guard.deref_mut();
 
-                cell.cache = Some(Cache {
+            let Some(cache) = &mut record_inner.cache else {
+                let mut forked = context.fork(&record_inner.node_ref);
+                let memo = record_inner.function.invoke(&mut forked)?;
+                let deps = forked.into_deps();
+
+                record_inner.cache = Some(RecordCache {
                     dirty: false,
-                    updated_at: context.revision(),
+                    updated_at: context.revision,
                     memo,
                     deps,
                 });
 
-                cell.verified_at = context.revision();
+                record_inner.verified_at = context.revision;
 
                 return Ok(());
             };
 
-            if cell.verified_at >= context.revision() {
+            if record_inner.verified_at >= context.revision {
                 return Ok(());
             }
 
-            if !cache.dirty {
-                let mut valid = true;
+            if !cache.dirty && !cache.deps.as_ref().events.is_empty() {
+                for (id, event) in &cache.deps.as_ref().events {
+                    let Some(guard) = context.analyzer.events.get(id) else {
+                        continue;
+                    };
+
+                    let Some(updated_at) = guard.get(event) else {
+                        continue;
+                    };
+
+                    if *updated_at > record_inner.verified_at {
+                        cache.dirty = true;
+                        break;
+                    }
+                }
+            }
+
+            if !cache.dirty && !cache.deps.as_ref().classes.is_empty() {
+                for (id, class) in &cache.deps.as_ref().classes {
+                    let Some(guard) = context.analyzer.docs.get(id) else {
+                        continue;
+                    };
+
+                    let Some(class_to_nodes) = guard.classes_to_nodes.get(class) else {
+                        continue;
+                    };
+
+                    if class_to_nodes.revision > record_inner.verified_at {
+                        cache.dirty = true;
+                        break;
+                    }
+                }
+            }
+
+            if !cache.dirty && !cache.deps.as_ref().attrs.is_empty() {
                 let mut deps_verified = true;
 
-                for dep in cache.deps.as_ref() {
-                    let Some(dep_records) = context.analyzer().database.records.get(dep.id) else {
-                        valid = false;
+                for attr_ref in &cache.deps.as_ref().attrs {
+                    let Some(dep_records) = context.analyzer.db.records.get(&attr_ref.id) else {
+                        cache.dirty = true;
                         break;
                     };
 
-                    let Some(dep_record) = dep_records.get(&dep.entry) else {
-                        valid = false;
+                    let Some(dep_record) = dep_records.get(&attr_ref.entry) else {
+                        cache.dirty = true;
                         break;
                     };
 
                     let dep_record_read_guard = dep_record.read();
 
                     let Some(dep_cache) = &dep_record_read_guard.cache else {
-                        valid = false;
+                        cache.dirty = true;
                         break;
                     };
 
                     if dep_cache.dirty {
-                        valid = false;
+                        cache.dirty = true;
                         break;
                     }
 
-                    if dep_cache.updated_at > cell.verified_at {
-                        valid = false;
+                    if dep_cache.updated_at > record_inner.verified_at {
+                        cache.dirty = true;
                         break;
                     }
 
                     deps_verified =
-                        deps_verified && dep_record_read_guard.verified_at >= context.revision();
+                        deps_verified && dep_record_read_guard.verified_at >= context.revision;
                 }
 
-                if valid {
+                if !cache.dirty {
                     if deps_verified {
-                        cell.verified_at = context.revision();
+                        record_inner.verified_at = context.revision;
                         return Ok(());
                     }
 
@@ -380,17 +411,22 @@ impl AttrRef {
                     drop(record_write_guard);
 
                     //todo dependencies shuffling probably should improve parallelism between tasks
-                    for dep in deps.as_ref() {
-                        dep.validate(context)?;
+                    for attr_ref in &deps.as_ref().attrs {
+                        attr_ref.validate(context)?;
                     }
 
                     continue;
                 }
             }
 
-            let mut forked = context.fork(&cell.node_ref);
-            let new_memo = cell.function.invoke(&mut forked)?;
-            let new_deps = Shared::new(forked.into_deps());
+            if !cache.dirty {
+                record_inner.verified_at = context.revision;
+                return Ok(());
+            }
+
+            let mut forked = context.fork(&record_inner.node_ref);
+            let new_memo = record_inner.function.invoke(&mut forked)?;
+            let new_deps = forked.into_deps();
 
             // Safety: New and previous values produced by the same Cell function.
             let same = unsafe { cache.memo.memo_eq(new_memo.as_ref()) };
@@ -400,10 +436,10 @@ impl AttrRef {
             cache.deps = new_deps;
 
             if !same {
-                cache.updated_at = context.revision();
+                cache.updated_at = context.revision;
             }
 
-            cell.verified_at = context.revision();
+            record_inner.verified_at = context.revision;
 
             return Ok(());
         }

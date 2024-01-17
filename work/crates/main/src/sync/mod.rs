@@ -35,7 +35,6 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod accumulator;
 mod latch;
 mod lazy;
 mod markers;
@@ -43,7 +42,6 @@ mod shared;
 mod table;
 
 pub use crate::sync::{
-    accumulator::Accumulator,
     latch::Latch,
     lazy::Lazy,
     markers::SyncBuildHasher,

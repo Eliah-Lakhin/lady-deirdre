@@ -123,18 +123,30 @@ impl<K: Hash + Eq, V, S: BuildHasher> Table<K, V, S> {
         Self::with_capacity_and_hasher(capacity, S::default())
     }
 
+    #[inline(always)]
     pub fn with_capacity_and_hasher(capacity: usize, hasher: S) -> Self
     where
         S: Clone,
     {
-        let shards_amount = shards_amount();
+        Self::with_capacity_and_hasher_and_shards(capacity, hasher, shards_amount())
+    }
 
-        let shard_capacity =
-            ((capacity + shards_amount - 1) & !(shards_amount - 1)) / shards_amount;
+    pub fn with_capacity_and_hasher_and_shards(capacity: usize, hasher: S, shards: usize) -> Self
+    where
+        S: Clone,
+    {
+        if !shards.is_power_of_two() {
+            panic!("Table shards amount {shards} is not a power of two.");
+        }
 
-        let shift = size_of::<usize>() * 8 - shards_amount.trailing_zeros() as usize;
+        let shard_capacity = ((capacity + shards - 1) & !(shards - 1)) / shards;
 
-        let shards = (0..shards_amount)
+        let shift = match shards > 1 {
+            true => size_of::<usize>() * 8 - shards.trailing_zeros() as usize,
+            false => 0,
+        };
+
+        let shards = (0..shards)
             .map(|_| {
                 RwLock::new(HashMap::with_capacity_and_hasher(
                     shard_capacity,
@@ -357,6 +369,10 @@ impl<K: Hash + Eq, V, S: BuildHasher> Table<K, V, S> {
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
+        if self.shards.len() == 1 {
+            return 0;
+        }
+
         let mut hasher = self.hasher.build_hasher();
 
         key.hash(&mut hasher);
@@ -695,6 +711,6 @@ fn shards_amount() -> usize {
 
     #[cfg(target_family = "wasm")]
     {
-        2
+        1
     }
 }

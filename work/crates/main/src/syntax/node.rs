@@ -183,7 +183,7 @@ pub trait Node: AbstractNode + Sized {
     ///     },
     ///     lexis::{SimpleToken, TokenCursor, TokenSet, EMPTY_TOKEN_SET},
     ///     units::Document,
-    ///     analysis::{FeatureInitializer, FeatureInvalidator},
+    ///     analysis::{Initializer, Invalidator},
     ///     sync::SyncBuildHasher,
     /// };
     /// use lady_deirdre::syntax::{AbstractNode, Capture, Key};

@@ -43,7 +43,7 @@ use std::{
 
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
-use syn::LitByte;
+use syn::{LitByte, LitStr};
 
 use crate::{
     token::{automata::Terminal, chars::Class, TokenInput},
@@ -632,5 +632,260 @@ impl Statements {
     #[inline(always)]
     fn append(&mut self, mut other: Self) {
         self.list.append(&mut other.list)
+    }
+}
+
+impl TokenInput {
+    fn compile_parse_fn(&self) -> TokenStream {
+        let span = self.ident.span();
+        let core = span.face_core();
+        let panic = span.face_panic();
+
+        let mismatch = &self.mismatch;
+        let start = self.automata.start();
+
+        let buffer = match self
+            .variants
+            .iter()
+            .any(|variant| variant.constructor.is_some())
+        {
+            false => None,
+            true => {
+                let string = span.face_string();
+
+                Some(quote_spanned!(span =>
+                    #[allow(unused_mut)]
+                    let mut buffer = #string::new();
+                ))
+            }
+        };
+
+        let transitions = Output::compile(self, buffer.is_some());
+
+        quote_spanned!(span=>
+            fn parse(session: &mut impl #core::lexis::LexisSession) -> Self {
+                #[allow(unused_mut)]
+                let mut state = #start;
+
+                #[allow(unused_mut)]
+                let mut token = Self::#mismatch;
+
+                #buffer
+
+                loop {
+                    let byte = #core::lexis::LexisSession::advance(session);
+
+                    if byte == 0xFF {
+                        break;
+                    }
+
+                    match state {
+                        #(
+                        #transitions
+                        )*
+
+                        #[cfg(not(debug_assertions))]
+                        _ => (),
+
+                        #[cfg(debug_assertions)]
+                        state => #panic("Invalid state {state}."),
+                    }
+                }
+
+                token
+            }
+        )
+    }
+
+    fn compile_eoi_fn(&self) -> TokenStream {
+        let eoi = &self.eoi;
+        let span = eoi.span();
+
+        quote_spanned!(span=>
+            #[inline(always)]
+            fn eoi() -> Self {
+                Self::#eoi
+            }
+        )
+    }
+
+    fn compile_mismatch_fn(&self) -> TokenStream {
+        let mismatch = &self.mismatch;
+        let span = mismatch.span();
+
+        quote_spanned!(span=>
+            #[inline(always)]
+            fn mismatch() -> Self {
+                Self::#mismatch
+            }
+        )
+    }
+
+    fn compile_rule_fn(&self) -> TokenStream {
+        let span = self.ident.span();
+        let core = span.face_core();
+
+        quote_spanned!(span=>
+            #[inline(always)]
+            fn rule(self) -> #core::lexis::TokenRule {
+                self as u8
+            }
+        )
+    }
+
+    fn compile_blank_fn(&self) -> TokenStream {
+        let ident = &self.ident;
+        let span = ident.span();
+        let core = span.face_core();
+
+        let this = match self.generics.params.is_empty() {
+            true => ident.to_token_stream(),
+
+            false => {
+                let (_, ty_generics, _) = self.generics.split_for_impl();
+
+                quote_spanned!(span=> #ident::#ty_generics)
+            }
+        };
+
+        let variants = self
+            .variants
+            .iter()
+            .filter_map(|variant| {
+                let span = match variant.blank {
+                    Some(span) => span,
+                    None => return None,
+                };
+
+                let ident = &variant.ident;
+
+                Some(quote_spanned!(span=> #this::#ident as u8))
+            })
+            .collect::<Vec<_>>();
+
+        let body = match variants.is_empty() {
+            true => quote_spanned!(span=> &#core::lexis::EMPTY_TOKEN_SET),
+
+            false => quote_spanned!(span=>
+                static BLANKS: #core::lexis::TokenSet
+                    = #core::lexis::TokenSet::inclusive(&[
+                        #(#variants,)*
+                    ]);
+
+                &BLANKS
+            ),
+        };
+
+        quote_spanned!(span=>
+            #[inline(always)]
+            fn blanks() -> &'static #core::lexis::TokenSet {
+                #body
+            }
+        )
+    }
+
+    fn compile_name_fn(&self) -> TokenStream {
+        let span = self.ident.span();
+        let core = span.face_core();
+        let option = span.face_option();
+
+        let names = self.variants.iter().map(|variant| {
+            let ident = &variant.ident;
+            let span = ident.span();
+            let option = span.face_option();
+            let name = LitStr::new(ident.to_string().as_str(), span);
+
+            quote_spanned!(span=>
+                if Self::#ident as u8 == rule {
+                    return #option::Some(#name);
+                }
+            )
+        });
+
+        quote_spanned!(span=>
+            fn rule_name(rule: #core::lexis::TokenRule) -> #option<&'static str> {
+                #(#names)*
+
+                None
+            }
+        )
+    }
+
+    fn compile_description_fn(&self) -> TokenStream {
+        let span = self.ident.span();
+        let core = span.face_core();
+        let option = span.face_option();
+
+        let descriptions = self.variants.iter().map(|variant| {
+            let ident = &variant.ident;
+            let span = ident.span();
+            let option = span.face_option();
+
+            let short = variant.description.short();
+            let verbose = variant.description.verbose();
+
+            match short == verbose {
+                true => quote_spanned!(span=>
+                    if Self::#ident as u8 == rule {
+                        return #option::Some(#short);
+                    }
+                ),
+
+                false => quote_spanned!(span=>
+                    if Self::#ident as u8 == rule {
+                        return match verbose {
+                            false => #option::Some(#short),
+                            true => #option::Some(#verbose),
+                        }
+                    }
+                ),
+            }
+        });
+
+        quote_spanned!(span=>
+            #[allow(unused_variables)]
+            fn rule_description(rule: #core::lexis::TokenRule, verbose: bool) -> #option<&'static str> {
+                #(#descriptions)*
+
+                None
+            }
+        )
+    }
+}
+
+impl ToTokens for TokenInput {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        if let Dump::Dry(..) = self.dump {
+            return;
+        }
+
+        let ident = &self.ident;
+        let span = ident.span();
+        let core = span.face_core();
+
+        let (impl_generics, ty_generics, where_clause) = self.generics.split_for_impl();
+
+        let parse = self.compile_parse_fn();
+        let eoi = self.compile_eoi_fn();
+        let mismatch = self.compile_mismatch_fn();
+        let rule = self.compile_rule_fn();
+        let blanks = self.compile_blank_fn();
+        let name = self.compile_name_fn();
+        let description = self.compile_description_fn();
+
+        quote_spanned!(span=>
+            impl #impl_generics #core::lexis::Token for #ident #ty_generics
+            #where_clause
+            {
+                #parse
+                #eoi
+                #mismatch
+                #rule
+                #name
+                #description
+                #blanks
+            }
+        )
+        .to_tokens(tokens)
     }
 }

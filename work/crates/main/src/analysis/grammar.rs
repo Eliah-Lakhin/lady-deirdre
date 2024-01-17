@@ -35,26 +35,223 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+extern crate lady_deirdre_derive;
+
+pub use lady_deirdre_derive::Feature;
+
 use crate::{
     analysis::{
-        AbstractFeature,
+        database::{AbstractDatabase, Record},
+        AnalysisError,
         AnalysisResult,
-        FeatureInitializer,
-        FeatureInvalidator,
+        AttrRef,
+        Computable,
         ScopeAttr,
+        NIL_ATTR_REF,
     },
+    arena::{Entry, Id, Identifiable, Repo},
+    std::*,
     sync::SyncBuildHasher,
-    syntax::Node,
+    syntax::{Key, Node, NodeRef},
+    units::Document,
 };
 
 pub trait Grammar: Node + AbstractFeature {
-    fn initialize<S: SyncBuildHasher>(&mut self, initializer: &mut FeatureInitializer<Self, S>);
+    type Classifier: Classifier<Node = Self>;
 
-    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self, S>);
+    fn init<S: SyncBuildHasher>(&mut self, initializer: &mut Initializer<Self, S>);
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut Invalidator<Self, S>);
 
     fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self>>;
 
     fn is_scope(&self) -> bool;
+}
 
-    fn has_scopes() -> bool;
+pub trait Classifier {
+    type Node: Node;
+    type Class: Clone + Eq + Hash + Send + Sync;
+
+    fn classify<S: SyncBuildHasher>(
+        doc: &Document<Self::Node>,
+        node_ref: &NodeRef,
+    ) -> HashSet<Self::Class, S>;
+}
+
+pub struct VoidClassifier<N: Node>(PhantomData<N>);
+
+impl<N: Node> Classifier for VoidClassifier<N> {
+    type Node = N;
+    type Class = ();
+
+    #[inline(always)]
+    fn classify<S: SyncBuildHasher>(
+        _doc: &Document<Self::Node>,
+        _node_ref: &NodeRef,
+    ) -> HashSet<Self::Class, S> {
+        HashSet::default()
+    }
+}
+
+pub trait Feature: AbstractFeature {
+    type Node: Grammar;
+
+    fn new(node_ref: NodeRef) -> Self
+    where
+        Self: Sized;
+
+    fn init<S: SyncBuildHasher>(&mut self, initializer: &mut Initializer<Self::Node, S>);
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut Invalidator<Self::Node, S>);
+}
+
+pub trait AbstractFeature {
+    fn attr_ref(&self) -> &AttrRef;
+
+    fn feature(&self, key: Key) -> AnalysisResult<&dyn AbstractFeature>;
+
+    fn feature_keys(&self) -> &'static [&'static Key];
+}
+
+pub struct Initializer<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    pub(super) id: Id,
+    pub(super) database: Weak<dyn AbstractDatabase>,
+    pub(super) records: &'a mut Repo<Record<N, S>>,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for Initializer<'a, N, S> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Initializer<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn register_attribute<C: Computable<Node = N> + Eq>(
+        &mut self,
+        node_ref: NodeRef,
+    ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        (
+            self.database.clone(),
+            self.records.insert(Record::new::<C>(node_ref)),
+        )
+    }
+}
+
+pub struct Invalidator<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
+    pub(super) id: Id,
+    pub(super) records: &'a mut Repo<Record<N, S>>,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for Invalidator<'a, N, S> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Invalidator<'a, N, S> {
+    #[inline(always)]
+    pub(super) fn invalidate_attribute(&mut self, entry: &Entry) {
+        let Some(record) = self.records.get(entry) else {
+            return;
+        };
+
+        record.invalidate();
+    }
+}
+
+pub struct Semantics<F: Feature> {
+    inner: Box<SemanticsInner<F>>,
+}
+
+impl<F: Feature> AbstractFeature for Semantics<F> {
+    #[inline(always)]
+    fn attr_ref(&self) -> &AttrRef {
+        let Ok(inner) = self.get() else {
+            return &NIL_ATTR_REF;
+        };
+
+        inner.attr_ref()
+    }
+
+    #[inline(always)]
+    fn feature(&self, key: Key) -> AnalysisResult<&dyn AbstractFeature> {
+        self.get()?.feature(key)
+    }
+
+    #[inline(always)]
+    fn feature_keys(&self) -> &'static [&'static Key] {
+        let Ok(inner) = self.get() else {
+            return &[];
+        };
+
+        inner.feature_keys()
+    }
+}
+
+impl<F: Feature> Feature for Semantics<F> {
+    type Node = F::Node;
+
+    fn new(node_ref: NodeRef) -> Self {
+        Self {
+            inner: Box::new(SemanticsInner::Uninit(node_ref)),
+        }
+    }
+
+    fn init<S: SyncBuildHasher>(&mut self, initializer: &mut Initializer<Self::Node, S>) {
+        let SemanticsInner::Uninit(node_ref) = self.inner.deref() else {
+            return;
+        };
+
+        let node_ref = *node_ref;
+
+        let mut feature = F::new(node_ref);
+        let mut scope_attr = ScopeAttr::new(node_ref);
+
+        feature.init(initializer);
+        scope_attr.init(initializer);
+
+        *self.inner = SemanticsInner::Init {
+            feature,
+            scope_attr,
+        };
+    }
+
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut Invalidator<Self::Node, S>) {
+        let SemanticsInner::Init { feature, .. } = self.inner.deref() else {
+            return;
+        };
+
+        feature.invalidate(invalidator);
+    }
+}
+
+impl<F: Feature> Semantics<F> {
+    #[inline(always)]
+    pub fn get(&self) -> AnalysisResult<&F> {
+        let SemanticsInner::Init { feature, .. } = self.inner.deref() else {
+            return Err(AnalysisError::UninitSemantics);
+        };
+
+        Ok(feature)
+    }
+
+    #[inline(always)]
+    pub fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<F::Node>> {
+        let SemanticsInner::Init { scope_attr, .. } = self.inner.deref() else {
+            return Err(AnalysisError::UninitSemantics);
+        };
+
+        Ok(scope_attr)
+    }
+}
+
+enum SemanticsInner<F: Feature> {
+    Uninit(NodeRef),
+    Init {
+        feature: F,
+        scope_attr: ScopeAttr<F::Node>,
+    },
 }

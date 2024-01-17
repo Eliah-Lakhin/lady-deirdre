@@ -326,6 +326,7 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
 
     fn rule_description(rule: TokenRule, verbose: bool) -> Option<&'static str>;
 
+    //todo consider removing to reduce API complexity
     fn blanks() -> &'static TokenSet;
 }
 

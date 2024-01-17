@@ -37,7 +37,7 @@
 
 use std::{mem::take, time::Instant};
 
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::Ident;
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
@@ -48,7 +48,6 @@ use syn::{
     DeriveInput,
     Error,
     File,
-    LitStr,
     Result,
     Type,
     Visibility,
@@ -58,7 +57,7 @@ use crate::{
     node::{
         automata::{NodeAutomataImpl, Scope},
         generics::ParserGenerics,
-        globals::{GlobalVar, Globals},
+        globals::Globals,
         index::Index,
         recovery::Recovery,
         regex::{Regex, RegexImpl},
@@ -66,17 +65,7 @@ use crate::{
         token::TokenLit,
         variant::{NodeVariant, VariantTrivia},
     },
-    utils::{
-        error,
-        expect_some,
-        system_panic,
-        Dump,
-        Facade,
-        Map,
-        PredictableCollection,
-        Set,
-        SetImpl,
-    },
+    utils::{error, expect_some, system_panic, Dump, Map, PredictableCollection, Set, SetImpl},
 };
 
 pub(super) type VariantMap = Map<Ident, NodeVariant>;
@@ -86,6 +75,7 @@ pub struct NodeInput {
     pub(super) vis: Visibility,
     pub(super) generics: ParserGenerics,
     pub(super) token: Type,
+    pub(super) classifier: Option<Type>,
     pub(super) error: Type,
     pub(super) trivia: Option<Rule>,
     pub(super) recovery: Option<Recovery>,
@@ -144,6 +134,7 @@ impl TryFrom<DeriveInput> for NodeInput {
         let mut inlines = Map::empty();
 
         let mut token = None;
+        let mut classifier = None;
         let mut error = None;
         let mut trivia = None;
         let mut recovery = None;
@@ -169,6 +160,14 @@ impl TryFrom<DeriveInput> for NodeInput {
                     }
 
                     token = Some(attr.parse_args::<Type>()?);
+                }
+
+                "classifier" => {
+                    if classifier.is_some() {
+                        return Err(error!(span, "Duplicate Classifier attribute.",));
+                    }
+
+                    classifier = Some(attr.parse_args::<Type>()?);
                 }
 
                 "error" => {
@@ -544,6 +543,45 @@ impl TryFrom<DeriveInput> for NodeInput {
             automata.check_conflicts(trivia, &variants)?;
         }
 
+        let parent_required = variants
+            .values()
+            .any(|variant| variant.index.is_some() && variant.inheritance.has_parent());
+
+        let node_required = variants
+            .values()
+            .any(|variant| variant.index.is_some() && variant.inheritance.has_node());
+
+        let semantics_required = variants
+            .values()
+            .any(|variant| variant.index.is_some() && variant.inheritance.has_semantics());
+
+        for (_, variant) in &variants {
+            if variant.index.is_none() {
+                continue;
+            }
+
+            if parent_required && !variant.inheritance.has_parent() {
+                return Err(error!(
+                    variant.ident.span(),
+                    "Missing parent node reference. Introduce a field with #[parent] annotation.",
+                ));
+            }
+
+            if node_required && !variant.inheritance.has_node() {
+                return Err(error!(
+                    variant.ident.span(),
+                    "Missing self node reference. Introduce a field with #[node] annotation.",
+                ));
+            }
+
+            if semantics_required && !variant.inheritance.has_semantics() {
+                return Err(error!(
+                    variant.ident.span(),
+                    "Missing semantics field. Introduce a field with #[semantics] annotation.",
+                ));
+            }
+        }
+
         let analysis = start.elapsed();
 
         let result = Self {
@@ -551,6 +589,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             vis,
             generics,
             token,
+            classifier,
             error,
             trivia,
             recovery,
@@ -690,557 +729,5 @@ impl TryFrom<DeriveInput> for NodeInput {
         }
 
         Ok(result)
-    }
-}
-
-impl ToTokens for NodeInput {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        if let Dump::Dry(..) = self.dump {
-            return;
-        }
-
-        let output_comments = match self.dump {
-            Dump::None | Dump::Decl(..) => false,
-            Dump::Dry(..) => return,
-            _ => true,
-        };
-
-        let ident = &self.ident;
-        let vis = &self.vis;
-        let span = ident.span();
-        let core = span.face_core();
-        let option = span.face_option();
-        let result = span.face_result();
-        let unimplemented = span.face_unimplemented();
-
-        let (impl_generics, type_generics, where_clause) = self.generics.ty.split_for_impl();
-        let code = &self.generics.code;
-
-        let token = &self.token;
-        let error = &self.error;
-
-        let mut globals = Globals::default();
-
-        let trivia = match &self.trivia {
-            None => None,
-            Some(trivia) => Some(self.compile_skip_fn(
-                &mut globals,
-                trivia,
-                &Index::Generated(span, 0),
-                false,
-                output_comments,
-                true,
-            )),
-        };
-
-        let capacity = self.variants.len();
-
-        let mut indices = Vec::with_capacity(capacity);
-        let mut is_scope = Vec::with_capacity(capacity);
-        let mut functions = Vec::with_capacity(capacity);
-        let mut cases = Vec::with_capacity(capacity);
-        let mut node_getters = Vec::with_capacity(capacity);
-        let mut parent_getters = Vec::with_capacity(capacity);
-        let mut parent_setters = Vec::with_capacity(capacity);
-        let mut capture_getter = Vec::with_capacity(capacity);
-        let mut capture_keys = Vec::with_capacity(capacity);
-        let mut initializers = Vec::with_capacity(capacity);
-        let mut invalidators = Vec::with_capacity(capacity);
-        let mut attr_ref = Vec::with_capacity(capacity);
-        let mut feature_getter = Vec::with_capacity(capacity);
-        let mut feature_keys = Vec::with_capacity(capacity);
-        let mut scope_attr_getter = Vec::with_capacity(capacity);
-
-        let mut by_index = self
-            .variants
-            .values()
-            .map(|variant| match &variant.index {
-                None => None,
-                Some(index) => Some((index.get(), variant.ident.clone())),
-            })
-            .flatten()
-            .collect::<Vec<_>>();
-
-        by_index.sort_by_key(|(index, _)| *index);
-
-        for (_, ident) in by_index {
-            let variant = match self.variants.get(&ident) {
-                None => continue,
-                Some(variant) => variant,
-            };
-
-            node_getters.push(variant.inheritance.compile_node_getter());
-            parent_getters.push(variant.inheritance.compile_parent_getter());
-            parent_setters.push(variant.inheritance.compile_parent_setter());
-            capture_getter.push(variant.inheritance.compile_capture_getter());
-            capture_keys.push(variant.inheritance.compile_capture_keys());
-            initializers.push(variant.inheritance.compile_initializer());
-            invalidators.push(variant.inheritance.compile_invalidator());
-            attr_ref.push(variant.inheritance.compile_attr_ref());
-            feature_getter.push(variant.inheritance.compile_feature_getter());
-            feature_keys.push(variant.inheritance.compile_feature_keys());
-            scope_attr_getter.push(variant.inheritance.compile_scope_attr_getter());
-
-            if variant.scope {
-                is_scope.push(quote_spanned!(span=> Self::#ident {..}))
-            }
-
-            if let Some(Index::Named(name, Some(index))) = &variant.index {
-                let span = name.span();
-                let core = span.face_core();
-                indices.push(quote_spanned!(span=>
-                    #vis const #name: #core::syntax::NodeRule = #index;
-                ))
-            }
-
-            if variant.rule.is_none() {
-                continue;
-            }
-
-            let index = expect_some!(variant.index.as_ref(), "Parsable rule without index.",);
-
-            let function = expect_some!(
-                variant.compile_parser_fn(self, &mut globals, true, false, output_comments, true,),
-                "Parsable rule without parser.",
-            );
-
-            functions.push(function);
-
-            let ident = variant.parser_fn_ident();
-
-            cases.push(quote_spanned!(span=> #index => #ident(session),));
-        }
-
-        let mut descriptions = self
-            .variants
-            .values()
-            .map(|variant| {
-                if !variant.description.is_set() {
-                    return None;
-                }
-
-                let index = expect_some!(variant.index.as_ref(), "Description without index",);
-
-                Some((index, &variant.ident, &variant.description))
-            })
-            .flatten()
-            .collect::<Vec<_>>();
-
-        descriptions.sort_by_key(|(index, _, _)| index.get());
-
-        let get_rule = descriptions
-            .iter()
-            .map(|(index, ident, _)| quote_spanned!(index.span() => Self::#ident { .. } => #index,))
-            .collect::<Vec<_>>();
-
-        let (rule_name, rule_description): (Vec<_>, Vec<_>) = descriptions
-            .into_iter()
-            .map(|(index, ident, description)| {
-                let name = LitStr::new(&ident.to_string(), ident.span());
-                let short = description.short();
-                let verbose = description.verbose();
-
-                (
-                    quote_spanned!(index.span() => #index => #option::Some(#name),),
-                    match short == verbose {
-                        true => quote_spanned!(index.span() => #index => #option::Some(#verbose),),
-
-                        false => quote_spanned!(index.span() =>
-                            #index => match verbose {
-                                false => #option::Some(#short),
-                                true => #option::Some(#verbose),
-                            },),
-                    },
-                )
-            })
-            .unzip();
-
-        let globals = globals.compile(span, &self.token);
-
-        let checks = self
-            .alphabet
-            .iter()
-            .map(|lit| {
-                let name = match lit {
-                    TokenLit::Ident(ident) => ident,
-                    _ => return None,
-                };
-
-                let span = name.span();
-                let core = span.face_core();
-                let panic = span.face_panic();
-
-                Some(quote_spanned!(span=>
-                    if #token::#name as u8 == #core::lexis::EOI {
-                        #panic("EOI token cannot be used explicitly.");
-                    }
-                ))
-            })
-            .flatten()
-            .collect::<Vec<_>>();
-
-        let indices = match indices.is_empty() {
-            true => None,
-            false => Some(quote_spanned!(span=>
-                impl #ident #type_generics #where_clause {
-                #(
-                    #indices
-                )*
-                }
-            )),
-        };
-
-        let is_scope = match is_scope.is_empty() {
-            true => None,
-            false => Some(quote_spanned!(span=> #( #is_scope )|* => true,)),
-        };
-
-        let has_scopes = match is_scope.is_some() {
-            true => quote_spanned!(span=> true),
-            false => quote_spanned!(span=> false),
-        };
-
-        let checks = match !checks.is_empty() && cfg!(debug_assertions) {
-            false => None,
-
-            true => Some(quote_spanned!(span=>
-                #[cfg(debug_assertions)]
-                #[allow(dead_code)]
-                const CHECK_EOI: () = {
-                    #( #checks )*
-
-                    ()
-                };
-            )),
-        };
-
-        quote_spanned!(span=>
-            impl #impl_generics #core::analysis::AbstractFeature for #ident #type_generics
-            #where_clause
-            {
-                fn attr_ref(&self) -> &#core::analysis::AttrRef {
-                    match self {
-                        #( #attr_ref )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => &#core::analysis::NIL_ATTR_REF,
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn feature(&self, key: #core::syntax::Key)
-                    -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature>
-                {
-                    match self {
-                        #( #feature_getter )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #result::Err(#core::analysis::AnalysisError::MissingFeature),
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn feature_keys(&self) -> &'static [&'static #core::syntax::Key] {
-                    match self {
-                        #( #feature_keys )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => &[],
-                    }
-                }
-            }
-
-            impl #impl_generics #core::analysis::Grammar for #ident #type_generics
-            #where_clause
-            {
-                #[allow(unused_variables)]
-                fn initialize<S: #core::sync::SyncBuildHasher>(
-                    &mut self,
-                    #[allow(unused)] initializer: &mut #core::analysis::FeatureInitializer<Self, S>,
-                ) {
-                    match self {
-                        #( #initializers )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn invalidate<S: #core::sync::SyncBuildHasher>(
-                    &self,
-                    invalidator: &mut #core::analysis::FeatureInvalidator<Self, S>,
-                ) {
-                    match self {
-                        #( #invalidators )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-                }
-
-                fn scope_attr(&self) -> #core::analysis::AnalysisResult<&#core::analysis::ScopeAttr<Self>> {
-                    match self {
-                        #( #scope_attr_getter )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #result::Err(#core::analysis::AnalysisError::MissingScope),
-                    }
-                }
-
-                #[inline(always)]
-                fn is_scope(&self) -> bool {
-                    match self {
-                        #is_scope
-
-                        #[allow(unreachable_patterns)]
-                        _ => false,
-                    }
-                }
-
-                #[inline(always)]
-                fn has_scopes() -> bool {
-                    #has_scopes
-                }
-            }
-
-            impl #impl_generics #core::syntax::AbstractNode for #ident #type_generics
-            #where_clause
-            {
-                fn rule(&self) -> #core::syntax::NodeRule {
-                    match self {
-                        #(
-                        #get_rule
-                        )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::syntax::NON_RULE,
-                    }
-                }
-
-                #[inline(always)]
-                fn name(&self) -> #option<&'static str> {
-                    Self::rule_name(self.rule())
-                }
-
-                #[inline(always)]
-                fn describe(&self, verbose: bool) -> #option<&'static str> {
-                    Self::rule_description(self.rule(), verbose)
-                }
-
-                fn node_ref(&self) -> #core::syntax::NodeRef {
-                    match self {
-                        #( #node_getters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::syntax::NodeRef::nil(),
-                    }
-                }
-
-                fn parent_ref(&self) -> #core::syntax::NodeRef {
-                    match self {
-                        #( #parent_getters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #core::syntax::NodeRef::nil(),
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn set_parent_ref(&mut self, parent_ref: #core::syntax::NodeRef) {
-                    match self {
-                        #( #parent_setters )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => (),
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn capture(&self, key: #core::syntax::Key) -> #option::<#core::syntax::Capture> {
-                    match self {
-                        #( #capture_getter )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => #option::None,
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn capture_keys(&self) -> &'static [#core::syntax::Key<'static>] {
-                    match self {
-                        #( #capture_keys )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => &[],
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn rule_name(rule: #core::syntax::NodeRule) -> #option<&'static str> {
-                    match rule {
-                        #( #rule_name )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => None,
-                    }
-                }
-
-                #[allow(unused_variables)]
-                fn rule_description(rule: #core::syntax::NodeRule, verbose: bool) -> #option<&'static str> {
-                    match rule {
-                        #( #rule_description )*
-
-                        #[allow(unreachable_patterns)]
-                        _ => None,
-                    }
-                }
-            }
-
-            impl #impl_generics #core::syntax::Node for #ident #type_generics
-            #where_clause
-            {
-                type Token = #token;
-                type Error = #error;
-
-                #[inline(always)]
-                fn parse<#code>(
-                    session: &mut impl #core::syntax::SyntaxSession<#code, Node = Self>,
-                    rule: #core::syntax::NodeRule,
-                ) -> Self
-                {
-                    #globals
-
-                    #trivia
-
-                    #checks
-
-                    #( #functions )*
-
-                    match rule {
-                        #( #cases )*
-
-                        #[allow(unreachable_patterns)]
-                        other => #unimplemented("Unsupported rule {}.", other),
-                    }
-                }
-            }
-
-            #indices
-        )
-        .to_tokens(tokens)
-    }
-}
-
-impl NodeInput {
-    pub(super) fn this(&self) -> TokenStream {
-        let ident = &self.ident;
-
-        match self.generics.ty.params.is_empty() {
-            true => ident.to_token_stream(),
-
-            false => {
-                let span = ident.span();
-                let (_, generics, _) = self.generics.ty.split_for_impl();
-                let generics = generics.as_turbofish();
-
-                quote_spanned!(span=> #ident #generics)
-            }
-        }
-    }
-
-    pub(super) fn make_fn(
-        &self,
-        ident: Ident,
-        isolated_session: bool,
-        params: Vec<TokenStream>,
-        result: Option<TokenStream>,
-        body: TokenStream,
-        allow_warnings: bool,
-    ) -> (Ident, TokenStream) {
-        let span = ident.span();
-        let core = span.face_core();
-        let (impl_generics, _, where_clause) = self.generics.func.split_for_impl();
-        let code = &self.generics.code;
-        let this = self.this();
-
-        let allowed_warnings = match allow_warnings {
-            true => Some(Self::base_warnings(span)),
-            false => None,
-        };
-
-        let session_ty = match isolated_session {
-            true => quote_spanned!(span=> &impl #core::syntax::SyntaxSession<#code, Node = #this>),
-            false => {
-                quote_spanned!(span=> &mut impl #core::syntax::SyntaxSession<#code, Node = #this>)
-            }
-        };
-
-        let result = match result {
-            Some(ty) => Some(quote_spanned!(span=> -> #ty)),
-            None => None,
-        };
-
-        (
-            ident.clone(),
-            quote_spanned!(span=>
-                #allowed_warnings
-                fn #ident #impl_generics (
-                    session: #session_ty,
-                    #(
-                    #params,
-                    )*
-                ) #result #where_clause {
-                    #body
-                }
-            ),
-        )
-    }
-
-    pub(super) fn compile_skip_fn(
-        &self,
-        globals: &mut Globals,
-        trivia: &Rule,
-        context: &Index,
-        include_globals: bool,
-        output_comments: bool,
-        allow_warnings: bool,
-    ) -> TokenStream {
-        let span = trivia.span;
-        let body = trivia.compile(
-            self,
-            globals,
-            context,
-            &GlobalVar::UnlimitedRecovery,
-            false,
-            false,
-            output_comments,
-        );
-
-        let globals = match include_globals {
-            false => None,
-            true => Some(globals.compile(span, &self.token)),
-        };
-
-        self.make_fn(
-            format_ident!("skip_trivia", span = span),
-            false,
-            vec![],
-            None,
-            quote_spanned!(span=> #globals #body),
-            allow_warnings,
-        )
-        .1
-    }
-
-    #[inline]
-    pub(super) fn base_warnings(span: Span) -> TokenStream {
-        quote_spanned!(span=>
-            #[allow(unused)]
-            #[allow(unused_mut)]
-            #[allow(unused_assignments)]
-            #[allow(unused_variables)]
-            #[allow(non_snake_case)]
-        )
     }
 }

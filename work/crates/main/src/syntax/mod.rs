@@ -58,7 +58,7 @@ pub use crate::syntax::{
     morphism::{PolyRef, PolyVariant, RefKind},
     no::NoSyntax,
     node::{AbstractNode, Node, NodeRef, NIL_NODE_REF},
-    observer::{DebugObserver, Observer},
+    observer::{DebugObserver, Observer, VoidObserver},
     recovery::{Recovery, RecoveryResult, UNLIMITED_RECOVERY},
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,

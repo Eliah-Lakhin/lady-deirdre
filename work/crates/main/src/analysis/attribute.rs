@@ -38,20 +38,19 @@
 use crate::{
     analysis::{
         database::AbstractDatabase,
-        tasks::TaskSealed,
         AbstractFeature,
+        AbstractTask,
         AnalysisError,
         AnalysisResult,
         AttrContext,
         AttrReadGuard,
         Computable,
         Feature,
-        FeatureInitializer,
-        FeatureInvalidator,
         Grammar,
-        MutationTask,
+        Initializer,
+        Invalidator,
+        MutationAccess,
         Revision,
-        ScopeAttr,
         SemanticAccess,
     },
     arena::{Entry, Id, Identifiable},
@@ -167,17 +166,14 @@ impl<C: Computable + Eq> Feature for Attr<C> {
     type Node = C::Node;
 
     #[inline(always)]
-    fn new_uninitialized(node_ref: NodeRef) -> Self {
+    fn new(node_ref: NodeRef) -> Self {
         Self {
             inner: AttrInner::Uninit(node_ref),
             _data: PhantomData,
         }
     }
 
-    fn initialize<S: SyncBuildHasher>(
-        &mut self,
-        initializer: &mut FeatureInitializer<Self::Node, S>,
-    ) {
+    fn init<S: SyncBuildHasher>(&mut self, initializer: &mut Initializer<Self::Node, S>) {
         let AttrInner::Uninit(node_ref) = &self.inner else {
             return;
         };
@@ -199,7 +195,7 @@ impl<C: Computable + Eq> Feature for Attr<C> {
         };
     }
 
-    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut FeatureInvalidator<Self::Node, S>) {
+    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut Invalidator<Self::Node, S>) {
         let AttrInner::Init { attr_ref, .. } = &self.inner else {
             return;
         };
@@ -210,16 +206,6 @@ impl<C: Computable + Eq> Feature for Attr<C> {
         }
 
         invalidator.invalidate_attribute(&attr_ref.entry);
-    }
-
-    #[inline(always)]
-    fn scope_attr(&self) -> AnalysisResult<&ScopeAttr<Self::Node>> {
-        if TypeId::of::<Self>() == TypeId::of::<ScopeAttr<Self::Node>>() {
-            // Safety: Type ids match.
-            return Ok(unsafe { transmute::<&Self, &ScopeAttr<Self::Node>>(self) });
-        }
-
-        Err(AnalysisError::MissingScope)
     }
 }
 
@@ -327,8 +313,8 @@ impl AttrRef {
         unsafe { self.fetch::<true, C, S>(reader) }
     }
 
-    pub fn invalidate<N: Grammar, S: SyncBuildHasher>(&self, task: &mut MutationTask<N, S>) {
-        let Some(records) = task.analyzer().database.records.get(self.id) else {
+    pub fn invalidate<N: Grammar, S: SyncBuildHasher>(&self, task: &mut impl MutationAccess<N, S>) {
+        let Some(records) = task.analyzer().db.records.get(&self.id) else {
             #[cfg(debug_assertions)]
             {
                 panic!("Attribute does not belong to specified Analyzer.");
@@ -345,12 +331,15 @@ impl AttrRef {
         };
 
         record.invalidate();
-        task.analyzer().database.commit();
+        task.analyzer().db.commit_revision();
     }
 
     #[inline(always)]
-    pub fn is_valid_ref<N: Grammar, S: SyncBuildHasher>(&self, task: &AttrContext<N, S>) -> bool {
-        let Some(records) = task.analyzer().database.records.get(self.id) else {
+    pub fn is_valid_ref<N: Grammar, S: SyncBuildHasher>(
+        &self,
+        task: &mut impl AbstractTask<N, S>,
+    ) -> bool {
+        let Some(records) = task.analyzer().db.records.get(&self.id) else {
             return false;
         };
 

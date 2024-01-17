@@ -226,6 +226,18 @@ impl<'a> TryFrom<&'a Variant> for Inheritance {
 }
 
 impl Inheritance {
+    pub(super) fn has_parent(&self) -> bool {
+        self.parent.is_some()
+    }
+
+    pub(super) fn has_node(&self) -> bool {
+        self.node.is_some()
+    }
+
+    pub(super) fn has_semantics(&self) -> bool {
+        self.semantics.is_some()
+    }
+
     pub(super) fn compile_node_getter(&self) -> Option<TokenStream> {
         let node = self.node.as_ref()?;
         let ident = &self.ident;
@@ -328,7 +340,7 @@ impl Inheritance {
             let core = span.face_core();
 
             quote_spanned!(span=>
-                <#field_ty as #core::analysis::Feature>::initialize(_0, initializer);
+                <#field_ty as #core::analysis::Feature>::init(_0, initializer);
             )
         };
 
@@ -426,7 +438,7 @@ impl Inheritance {
             let core = span.face_core();
 
             quote_spanned!(span=>
-                <#field_ty as #core::analysis::Feature>::scope_attr(_0)
+                #core::analysis::Semantics::scope_attr(_0)
             )
         };
 

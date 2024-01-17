@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::Ident;
 use quote::ToTokens;
 use syn::{
     parse::{Parse, ParseStream},
@@ -48,22 +48,20 @@ use syn::{
     Fields,
     File,
     Generics,
-    LitStr,
     Result,
     Type,
     Visibility,
 };
 
-use crate::utils::{error, system_panic, Dump, Facade, PredictableCollection, Set};
+use crate::utils::{error, system_panic, Dump, PredictableCollection, Set};
 
 pub struct FeatureInput {
-    ident: Ident,
-    generics: Generics,
-    vis: Visibility,
-    fields: Fields,
-    node: Type,
-    scope: Scope,
-    invalidate: Set<usize>,
+    pub(super) ident: Ident,
+    pub(super) generics: Generics,
+    pub(super) vis: Visibility,
+    pub(super) fields: Fields,
+    pub(super) node: Type,
+    pub(super) invalidate: Set<usize>,
     pub(crate) dump: Dump,
 }
 
@@ -156,11 +154,9 @@ impl TryFrom<DeriveInput> for FeatureInput {
             }
         };
 
-        let mut scope = Scope::Unset;
         let mut invalidate = Set::with_capacity(fields.len());
 
         for (index, field) in fields.iter().enumerate() {
-            let mut scope_flag = None;
             let mut invalidate_flag = false;
 
             for attr in &field.attrs {
@@ -177,17 +173,9 @@ impl TryFrom<DeriveInput> for FeatureInput {
                 let span = attr.span();
 
                 match name.to_string().as_str() {
-                    "scope" => {
-                        if scope_flag.is_some() {
-                            return Err(error!(span, "Duplicate Scope attribute.",));
-                        }
-
-                        scope_flag = Some(span);
-                    }
-
-                    "invalidate" => {
+                    "scoped" => {
                         if invalidate_flag {
-                            return Err(error!(span, "Duplicate Invalidate attribute.",));
+                            return Err(error!(span, "Duplicate Scoped attribute.",));
                         }
 
                         invalidate_flag = true;
@@ -204,20 +192,6 @@ impl TryFrom<DeriveInput> for FeatureInput {
             if invalidate_flag {
                 let _ = invalidate.insert(index);
             }
-
-            if let Some(span) = scope_flag {
-                if scope.specified() {
-                    return Err(error!(
-                        span,
-                        "The feature object may have at most one scope attribute.",
-                    ));
-                }
-
-                scope = match &field.ident {
-                    Some(ident) => Scope::Ident(ident.clone()),
-                    None => Scope::Index(index),
-                };
-            }
         }
 
         let result = Self {
@@ -226,7 +200,6 @@ impl TryFrom<DeriveInput> for FeatureInput {
             vis,
             fields,
             node,
-            scope,
             invalidate,
             dump,
         };
@@ -260,216 +233,5 @@ impl TryFrom<DeriveInput> for FeatureInput {
         }
 
         Ok(result)
-    }
-}
-
-impl ToTokens for FeatureInput {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        if let Dump::Dry(..) = self.dump {
-            return;
-        }
-
-        let ident = &self.ident;
-        let node = &self.node;
-        let vis = &self.vis;
-
-        let span = ident.span();
-        let core = span.face_core();
-        let result = span.face_result();
-
-        let mut getters = Vec::with_capacity(self.fields.len());
-        let mut keys = Vec::with_capacity(self.fields.len());
-        let mut constructors = Vec::with_capacity(self.fields.len());
-        let mut initializers = Vec::with_capacity(self.fields.len());
-        let mut invalidators = Vec::with_capacity(self.fields.len());
-
-        for (index, field) in self.fields.iter().enumerate() {
-            let ident = &field.ident;
-            let ty = &field.ty;
-
-            let span = ty.span();
-            let core = span.face_core();
-            let result = span.face_result();
-
-            let invalidate = self.invalidate.contains(&index);
-
-            match ident {
-                Some(ident) => {
-                    if &field.vis == vis {
-                        let span = ident.span();
-                        let core = ident.face_core();
-
-                        let literal = LitStr::new(ident.to_string().as_str(), span);
-
-                        getters.push(quote_spanned!(span=>
-                            #core::syntax::Key::Index(#index)
-                                | #core::syntax::Key::Name(#literal) => #result::Ok(&self.#ident)
-                        ));
-                        keys.push(quote_spanned!(span=> &#core::syntax::Key::Name(#literal)));
-                    }
-
-                    constructors.push(quote_spanned!(span=>
-                        #ident: <#ty as #core::analysis::Feature>::new_uninitialized(node_ref),
-                    ));
-
-                    initializers.push(quote_spanned!(span=>
-                        <#ty as #core::analysis::Feature>::initialize(
-                            &mut self.#ident,
-                            initializer,
-                        );
-                    ));
-
-                    if invalidate {
-                        invalidators.push(quote_spanned!(span=>
-                            <#ty as #core::analysis::Feature>::invalidate(
-                                &self.#ident,
-                                invalidator,
-                            );
-                        ));
-                    }
-                }
-
-                None => {
-                    if &field.vis == vis {
-                        getters.push(quote_spanned!(span=>
-                            #core::syntax::Key::Index(#index) => #result::Ok(&self.#ident)
-                        ));
-                        keys.push(quote_spanned!(span=> &#core::syntax::Key::Index(#index)));
-                    }
-
-                    constructors.push(quote_spanned!(span=>
-                        <#ty as #core::analysis::Feature>::new_uninitialized(node_ref),
-                    ));
-
-                    initializers.push(quote_spanned!(span=>
-                        <#ty as #core::analysis::Feature>::initialize(
-                            &mut self.#index,
-                            initializer,
-                        );
-                    ));
-
-                    if invalidate {
-                        invalidators.push(quote_spanned!(span=>
-                            <#ty as #core::analysis::Feature>::invalidate(
-                                &self.#index,
-                                invalidator,
-                            );
-                        ));
-                    }
-                }
-            }
-        }
-
-        let constructor = match self.fields {
-            Fields::Named(_) => quote_spanned!(span=> Self {
-                #(
-                #constructors
-                )*
-            }),
-
-            Fields::Unnamed(_) => quote_spanned!(span=> Self(
-                #(
-                #constructors
-                )*
-            )),
-
-            Fields::Unit => quote_spanned!(span=> Self),
-        };
-
-        let scope_getter = match &self.scope {
-            Scope::Unset => {
-                quote_spanned!(span=> #result::Err(#core::analysis::AnalysisError::MissingScope))
-            }
-            Scope::Ident(ident) => quote_spanned!(span=> #result::Ok(&self.#ident)),
-            Scope::Index(index) => quote_spanned!(span=> #result::Ok(&self.#index)),
-        };
-
-        let (impl_generics, type_generics, where_clause) = self.generics.split_for_impl();
-
-        quote_spanned!(span=>
-            impl #impl_generics #core::analysis::AbstractFeature for #ident #type_generics
-            #where_clause
-            {
-                #[inline(always)]
-                fn attr_ref(&self) -> &#core::analysis::AttrRef {
-                    &#core::analysis::NIL_ATTR_REF
-                }
-
-                fn feature(&self, key: #core::syntax::Key)
-                    -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature>
-                {
-                    match key {
-                        #(
-                        #getters,
-                        )*
-
-                        _ => #result::Err(#core::analysis::AnalysisError::MissingFeature),
-                    }
-                }
-
-                #[inline(always)]
-                fn feature_keys(&self) -> &'static [&'static #core::syntax::Key] {
-                    &[#( #keys ),*]
-                }
-            }
-
-            impl #impl_generics #core::analysis::Feature for #ident #type_generics
-            #where_clause
-            {
-                type Node = #node;
-
-                #[inline(always)]
-                #[allow(unused_variables)]
-                fn new_uninitialized(node_ref: #core::syntax::NodeRef) -> Self {
-                    #constructor
-                }
-
-                #[inline(always)]
-                #[allow(unused_variables)]
-                fn initialize<S: #core::sync::SyncBuildHasher>(
-                    &mut self,
-                    initializer: &mut #core::analysis::FeatureInitializer<Self::Node, S>,
-                ) {
-                    #(
-                    #initializers
-                    )*
-                }
-
-                #[inline(always)]
-                #[allow(unused_variables)]
-                fn invalidate<S: #core::sync::SyncBuildHasher>(
-                    &self,
-                    #[allow(unused)] invalidator: &mut #core::analysis::FeatureInvalidator<Self::Node, S>,
-                ) {
-                    #(
-                    #invalidators
-                    )*
-                }
-
-                #[inline(always)]
-                fn scope_attr(&self)
-                    -> #core::analysis::AnalysisResult<&#core::analysis::ScopeAttr<Self::Node>>
-                {
-                    #scope_getter
-                }
-            }
-        )
-        .to_tokens(tokens);
-    }
-}
-
-enum Scope {
-    Unset,
-    Ident(Ident),
-    Index(usize),
-}
-
-impl Scope {
-    #[inline(always)]
-    fn specified(&self) -> bool {
-        match self {
-            Self::Unset => false,
-            _ => true,
-        }
     }
 }

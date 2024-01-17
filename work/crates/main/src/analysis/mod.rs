@@ -39,29 +39,39 @@ mod analyzer;
 mod attribute;
 mod compute;
 mod database;
+mod entry;
 mod error;
-mod features;
 mod grammar;
 mod manager;
-mod memo;
-mod record;
 mod scope;
-mod semantics;
-mod signal;
-mod table;
 mod tasks;
 
 pub use crate::analysis::{
-    analyzer::{Analyzer, DocumentReadGuard, Revision},
+    analyzer::Analyzer,
     attribute::{Attr, AttrRef, NIL_ATTR_REF},
     compute::{AttrContext, AttrReadGuard, Computable},
+    database::Revision,
+    entry::{
+        DocumentReadGuard,
+        Event,
+        DOC_ADDED_EVENT,
+        DOC_ERRORS_EVENT,
+        DOC_REMOVED_EVENT,
+        DOC_UPDATED_EVENT,
+    },
     error::{AnalysisError, AnalysisResult, AnalysisResultEx},
-    features::{AbstractFeature, Feature, FeatureInitializer, FeatureInvalidator},
-    grammar::Grammar,
+    grammar::{
+        AbstractFeature,
+        Classifier,
+        Feature,
+        Grammar,
+        Initializer,
+        Invalidator,
+        Semantics,
+        VoidClassifier,
+    },
     manager::{TASKS_ALL, TASKS_ANALYSIS, TASKS_EXCLUSIVE, TASKS_MUTATION},
     scope::{Scope, ScopeAttr},
-    semantics::Semantics,
-    signal::{Lifecycle, Signal},
     tasks::{
         AbstractTask,
         AnalysisTask,
@@ -127,7 +137,7 @@ mod tests {
     #[derive(Feature)]
     #[node(TestNode)]
     struct RootSemantics {
-        #[invalidate]
+        #[scoped]
         total_sum: Attr<TotalSumAttr>,
     }
 

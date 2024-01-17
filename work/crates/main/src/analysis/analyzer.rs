@@ -38,27 +38,25 @@
 use crate::{
     analysis::{
         database::Database,
+        entry::DocEntry,
         manager::TaskManager,
-        table::{UnitTable, UnitTableReadGuard},
         AnalysisResult,
         AnalysisTask,
+        Event,
         ExclusiveTask,
-        FeatureInitializer,
         Grammar,
         MutationTask,
+        Revision,
     },
-    arena::{Identifiable, Repo},
+    arena::Id,
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher},
-    syntax::{ErrorRef, NodeRef, SyntaxTree},
-    units::Document,
+    sync::{Latch, SyncBuildHasher, Table},
 };
 
-pub type Revision = u64;
-
 pub struct Analyzer<N: Grammar, S: SyncBuildHasher = RandomState> {
-    pub(super) docs: UnitTable<DocEntry<N, S>, S>,
-    pub(super) database: Arc<Database<N, S>>,
+    pub(super) docs: Table<Id, DocEntry<N, S>, S>,
+    pub(super) events: Table<Id, HashMap<Event, Revision>, S>,
+    pub(super) db: Arc<Database<N, S>>,
     pub(super) tasks: TaskManager<S>,
 }
 
@@ -72,16 +70,18 @@ impl<N: Grammar, S: SyncBuildHasher> Default for Analyzer<N, S> {
 impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
     pub fn for_single_document() -> Self {
         Self {
-            docs: UnitTable::new_single(),
-            database: Arc::new(Database::new_single()),
+            docs: Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+            events: Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+            db: Arc::new(Database::new_single()),
             tasks: TaskManager::new(),
         }
     }
 
     pub fn for_many_documents() -> Self {
         Self {
-            docs: UnitTable::new_multi(1),
-            database: Arc::new(Database::new_multi()),
+            docs: Table::new(),
+            events: Table::new(),
+            db: Arc::new(Database::new_many()),
             tasks: TaskManager::new(),
         }
     }
@@ -128,82 +128,4 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
     pub fn interrupt(&self, tasks_mask: u8) {
         self.tasks.interrupt(tasks_mask);
     }
-
-    pub(super) fn register_doc(&self, mut document: Document<N>) {
-        let id = document.id();
-
-        let node_refs = document.node_refs().collect::<Vec<_>>();
-        let mut records = Repo::with_capacity(node_refs.len());
-        let mut scopes = HashSet::with_capacity_and_hasher(node_refs.len(), S::default());
-
-        if !node_refs.is_empty() {
-            let mut initializer = FeatureInitializer {
-                id,
-                database: Arc::downgrade(&self.database) as Weak<_>,
-                records: &mut records,
-            };
-
-            for node_ref in node_refs {
-                let Some(node) = node_ref.deref_mut(&mut document) else {
-                    continue;
-                };
-
-                if node.is_scope() {
-                    let _ = scopes.insert(node_ref);
-                }
-
-                node.initialize(&mut initializer);
-            }
-
-            self.database.commit();
-        }
-
-        let errors = document.error_refs().collect();
-
-        // Safety: Ids are globally unique.
-        unsafe {
-            self.docs.insert(
-                id,
-                DocEntry {
-                    document,
-                    scope_accumulator: Shared::new(scopes),
-                    error_accumulator: Shared::new(errors),
-                },
-            );
-        }
-
-        // Safety: records are always in sync with documents.
-        unsafe {
-            self.database.records.insert(id, records);
-        }
-    }
-}
-
-#[repr(transparent)]
-pub struct DocumentReadGuard<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
-    guard: UnitTableReadGuard<'a, DocEntry<N, S>, S>,
-}
-
-impl<'a, N: Grammar, S: SyncBuildHasher> Deref for DocumentReadGuard<'a, N, S> {
-    type Target = Document<N>;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        &self.guard.deref().document
-    }
-}
-
-impl<'a, N: Grammar, S: SyncBuildHasher> From<UnitTableReadGuard<'a, DocEntry<N, S>, S>>
-    for DocumentReadGuard<'a, N, S>
-{
-    #[inline(always)]
-    fn from(guard: UnitTableReadGuard<'a, DocEntry<N, S>, S>) -> Self {
-        Self { guard }
-    }
-}
-
-pub(super) struct DocEntry<N: Grammar, S: SyncBuildHasher> {
-    pub(super) document: Document<N>,
-    pub(super) scope_accumulator: Shared<HashSet<NodeRef, S>>,
-    pub(super) error_accumulator: Shared<HashSet<ErrorRef, S>>,
 }
