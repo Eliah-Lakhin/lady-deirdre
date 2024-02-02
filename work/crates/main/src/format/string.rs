@@ -40,6 +40,8 @@ use crate::{
     std::*,
 };
 
+//todo consider removing this interface in favor to just Cow, or move it to lexis module.
+
 #[derive(Clone)]
 pub struct PrintString<'a> {
     string: Cow<'a, str>,

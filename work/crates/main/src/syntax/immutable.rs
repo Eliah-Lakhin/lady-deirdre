@@ -223,7 +223,7 @@ impl<N: Node> SyntaxTree for ImmutableSyntaxTree<N> {
 impl<N: Node> ImmutableSyntaxTree<N> {
     #[inline(always)]
     pub fn parse<'code>(token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>) -> Self {
-        Self::with_id(Id::new(), token_cursor)
+        Self::new(Id::new(), token_cursor, &mut VoidObserver::default())
     }
 
     #[inline(always)]
@@ -234,15 +234,7 @@ impl<N: Node> ImmutableSyntaxTree<N> {
         Self::new(Id::new(), token_cursor, observer)
     }
 
-    #[inline(always)]
-    pub(crate) fn with_id<'code>(
-        id: Id,
-        token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
-    ) -> Self {
-        Self::new(id, token_cursor, &mut VoidObserver::default())
-    }
-
-    fn new<'code, 'observer>(
+    pub(crate) fn new<'code, 'observer>(
         id: Id,
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
         observer: &'observer mut impl Observer<Node = N>,

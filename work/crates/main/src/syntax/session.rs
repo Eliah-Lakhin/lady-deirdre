@@ -37,10 +37,10 @@
 
 use crate::{
     arena::{Entry, EntryIndex, Id, Identifiable},
-    lexis::{Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
+    lexis::{Chunk, Length, Site, SiteRef, TokenCount, TokenCursor, TokenRef},
     report::debug_unreachable,
     std::*,
-    syntax::{ErrorRef, Node, NodeRef, NodeRule, Observer},
+    syntax::{ErrorRef, Node, NodeRef, NodeRule, Observer, VoidObserver},
 };
 
 /// An interface to the source code syntax parsing/re-parsing session.
@@ -152,6 +152,10 @@ where
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
+        let token = self.token(0);
+        let token_ref = self.token_ref(0);
+        self.observer.read_token(token, token_ref);
+
         let advanced = self.token_cursor.advance();
 
         self.failing = self.failing && !advanced;
@@ -160,10 +164,16 @@ where
     }
 
     #[inline(always)]
-    fn skip(&mut self, distance: TokenCount) {
+    fn skip(&mut self, mut distance: TokenCount) {
         let start = self.token_cursor.site(0);
 
-        self.token_cursor.skip(distance);
+        while distance > 0 {
+            if !self.advance() {
+                break;
+            }
+
+            distance -= 1;
+        }
 
         self.failing = self.failing && start == self.token_cursor.site(0);
     }
@@ -223,24 +233,24 @@ where
 
     #[inline]
     fn enter(&mut self, rule: NodeRule) -> NodeRef {
-        self.observer.enter_rule(rule);
-
         let index = self.nodes.len();
 
         self.nodes.push(None);
 
         self.context.push(index);
 
-        NodeRef {
+        let node_ref = NodeRef {
             id: self.id,
             entry: Entry { index, version: 0 },
-        }
+        };
+
+        self.observer.enter_rule(rule, node_ref);
+
+        node_ref
     }
 
     #[inline]
     fn leave(&mut self, node: Self::Node) -> NodeRef {
-        self.observer.leave_rule(node.rule(), &node);
-
         let Some(index) = self.context.pop() else {
             #[cfg(debug_assertions)]
             {
@@ -257,14 +267,20 @@ where
             unsafe { debug_unreachable!("Bad context index.") }
         };
 
+        let rule = node.rule();
+
         if replace(item, Some(node)).is_some() {
             unsafe { debug_unreachable!("Bad context index.") }
         }
 
-        NodeRef {
+        let node_ref = NodeRef {
             id: self.id,
             entry: Entry { index, version: 0 },
-        }
+        };
+
+        self.observer.leave_rule(rule, node_ref);
+
+        node_ref
     }
 
     #[inline]
@@ -296,6 +312,8 @@ where
         };
 
         node.set_parent_ref(parent_ref);
+
+        self.observer.lift_node(*node_ref);
     }
 
     #[inline(always)]
@@ -341,17 +359,19 @@ where
             return ErrorRef::nil();
         }
 
-        self.observer.parse_error();
-
         self.failing = true;
 
         let index = self.errors.len();
 
         self.errors.push(error.into());
 
-        return ErrorRef {
+        let error_ref = ErrorRef {
             id: self.id,
             entry: Entry { index, version: 0 },
         };
+
+        self.observer.parse_error(error_ref);
+
+        error_ref
     }
 }

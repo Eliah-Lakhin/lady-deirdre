@@ -106,8 +106,8 @@ impl PrettyPrintConfig {
     }
 }
 
-pub struct PrettyPrinter<'a> {
-    output: PrintString<'a>,
+pub struct PrettyPrinter {
+    output: String,
     debug: bool,
     margin: LengthSigned,
     inline: LengthSigned,
@@ -115,7 +115,7 @@ pub struct PrettyPrinter<'a> {
     space: LengthSigned,
     right: LengthSigned,
     left: LengthSigned,
-    scan_queue: VecDeque<ScanEntry<'a>>,
+    scan_queue: VecDeque<ScanEntry>,
     scan_stack: VecDeque<usize>,
     scan_consumed: usize,
     print_stack: Vec<PrintFrame>,
@@ -124,7 +124,7 @@ pub struct PrettyPrinter<'a> {
     whitespaces: Vec<String>,
 }
 
-impl<'a> PrettyPrinter<'a> {
+impl PrettyPrinter {
     #[inline(always)]
     pub fn new(config: PrettyPrintConfig) -> Self {
         let margin = config.margin as LengthSigned;
@@ -132,7 +132,7 @@ impl<'a> PrettyPrinter<'a> {
         let step = config.indent as LengthSigned;
 
         Self {
-            output: PrintString::default(),
+            output: String::new(),
             debug: config.debug,
             margin,
             inline,
@@ -151,116 +151,103 @@ impl<'a> PrettyPrinter<'a> {
     }
 
     #[inline(always)]
-    pub fn ibox(&mut self, ident: isize) -> &mut Self {
+    pub fn ibox(&mut self, ident: isize) {
         let step = self.step;
 
         self.scan_begin(Group {
             mode: Mode::Inconsistent,
             indent: step * ident,
         });
-
-        self
     }
 
     #[inline(always)]
-    pub fn cbox(&mut self, ident: isize) -> &mut Self {
+    pub fn cbox(&mut self, ident: isize) {
         let step = self.step;
 
         self.scan_begin(Group {
             mode: Mode::Consistent,
             indent: step * ident,
         });
-
-        self
     }
 
     #[inline(always)]
-    pub fn end(&mut self) -> &mut Self {
+    pub fn end(&mut self) {
         self.scan_end();
-
-        self
     }
 
     #[inline(always)]
-    pub fn word(&mut self, word: impl Into<PrintString<'a>>) -> &mut Self {
+    pub fn word(&mut self, word: impl Into<String>) {
         self.scan_string(word.into());
-
-        self
     }
 
     #[inline(always)]
-    pub fn whitespace(&mut self) -> &mut Self {
-        self.word(PrintString::whitespace());
-
-        self
-    }
-
-    #[inline(always)]
-    pub fn blank(&mut self) -> &mut Self {
+    pub fn blank(&mut self) {
         self.scan_blank(Blank {
             space: 1,
             indent: 0,
             pre_break: None,
             pre_space: None,
+            neverbreak: false,
         });
-
-        self
     }
 
     #[inline(always)]
-    pub fn hardbreak(&mut self) -> &mut Self {
+    pub fn hardbreak(&mut self) {
         self.scan_blank(Blank {
             space: SIZE_INFINITY as Length,
             indent: 0,
             pre_break: None,
             pre_space: None,
+            neverbreak: false,
         });
-
-        self
     }
 
     #[inline(always)]
-    pub fn softbreak(&mut self) -> &mut Self {
+    pub fn softbreak(&mut self) {
         self.scan_blank(Blank {
             space: 0,
             indent: 0,
             pre_break: None,
             pre_space: None,
+            neverbreak: false,
         });
-
-        self
     }
 
     #[inline(always)]
-    pub fn indent(&mut self, indent: isize) -> &mut Self {
+    pub fn neverbreak(&mut self) {
+        self.scan_blank(Blank {
+            space: 0,
+            indent: 0,
+            pre_break: None,
+            pre_space: None,
+            neverbreak: true,
+        });
+    }
+
+    #[inline(always)]
+    pub fn indent(&mut self, indent: isize) {
         let offset = self.step * indent;
 
         if let Some(blank) = self.blank_token() {
             blank.indent = offset;
         }
-
-        self
     }
 
     #[inline(always)]
-    pub fn pre_break(&mut self, string: impl Into<PrintString<'a>>) -> &mut Self {
+    pub fn pre_break(&mut self, string: impl Into<String>) {
         if let Some(blank) = self.blank_token() {
             blank.pre_break = Some(string.into());
         }
-
-        self
     }
 
     #[inline(always)]
-    pub fn pre_space(&mut self, string: impl Into<PrintString<'a>>) -> &mut Self {
+    pub fn pre_space(&mut self, string: impl Into<String>) {
         if let Some(blank) = self.blank_token() {
             blank.pre_space = Some(string.into());
         }
-
-        self
     }
 
-    pub fn finish(mut self) -> PrintString<'a> {
+    pub fn finish(mut self) -> String {
         if !self.scan_stack.is_empty() {
             self.handle_scan_stack();
             self.consume();
@@ -270,7 +257,7 @@ impl<'a> PrettyPrinter<'a> {
     }
 
     #[inline(always)]
-    fn blank_token(&mut self) -> Option<&mut Blank<'a>> {
+    fn blank_token(&mut self) -> Option<&mut Blank> {
         match self.scan_queue.back_mut() {
             Some(ScanEntry {
                 token: ScanToken::Blank(blank),
@@ -282,7 +269,7 @@ impl<'a> PrettyPrinter<'a> {
     }
 }
 
-impl<'a> PrettyPrinter<'a> {
+impl PrettyPrinter {
     fn scan_begin(&mut self, group: Group) {
         if self.scan_stack.is_empty() {
             self.left = 1;
@@ -316,7 +303,7 @@ impl<'a> PrettyPrinter<'a> {
         self.scan_stack.push_back(index);
     }
 
-    fn scan_blank(&mut self, blank: Blank<'a>) {
+    fn scan_blank(&mut self, blank: Blank) {
         if self.scan_stack.is_empty() {
             self.left = 1;
             self.right = 1;
@@ -328,7 +315,7 @@ impl<'a> PrettyPrinter<'a> {
         let mut space = blank.space;
 
         if let Some(pre) = &blank.pre_space {
-            space += pre.length();
+            space += pre.len();
         }
 
         let index = self.scan_consumed + self.scan_queue.len();
@@ -343,13 +330,13 @@ impl<'a> PrettyPrinter<'a> {
         self.right += space as LengthSigned;
     }
 
-    fn scan_string(&mut self, string: PrintString<'a>) {
+    fn scan_string(&mut self, string: String) {
         if self.scan_stack.is_empty() {
             self.print_string(string);
             return;
         }
 
-        let size = string.length() as LengthSigned;
+        let size = string.len() as LengthSigned;
 
         self.scan_queue.push_back(ScanEntry {
             token: ScanToken::String(string),
@@ -406,7 +393,7 @@ impl<'a> PrettyPrinter<'a> {
                     self.left += blank.space as LengthSigned;
 
                     if let Some(pre) = &blank.pre_space {
-                        self.left += pre.length() as LengthSigned;
+                        self.left += pre.len() as LengthSigned;
                     }
 
                     self.print_blank(blank, entry.size);
@@ -517,12 +504,13 @@ impl<'a> PrettyPrinter<'a> {
         }
     }
 
-    fn print_blank(&mut self, blank: Blank<'a>, size: LengthSigned) {
-        let inline = match self.frame() {
-            PrintFrame::Inline(..) => true,
-            PrintFrame::Break(Mode::Consistent, ..) => false,
-            PrintFrame::Break(Mode::Inconsistent, ..) => size <= self.space,
-        };
+    fn print_blank(&mut self, blank: Blank, size: LengthSigned) {
+        let inline = blank.neverbreak
+            || match self.frame() {
+                PrintFrame::Inline(..) => true,
+                PrintFrame::Break(Mode::Consistent, ..) => false,
+                PrintFrame::Break(Mode::Inconsistent, ..) => size <= self.space,
+            };
 
         if self.debug {
             self.output.push('·');
@@ -541,7 +529,7 @@ impl<'a> PrettyPrinter<'a> {
 
         if let Some(pre) = blank.pre_break {
             self.print_whitespace();
-            self.output.append(pre);
+            self.output.push_str(&pre);
         }
 
         self.output.push('\n');
@@ -551,11 +539,11 @@ impl<'a> PrettyPrinter<'a> {
         self.space = self.inline.max(self.margin - indent);
     }
 
-    fn print_string(&mut self, string: PrintString<'a>) {
-        let string_length = string.length();
+    fn print_string(&mut self, string: String) {
+        let string_length = string.len();
 
         self.print_whitespace();
-        self.output.append(string);
+        self.output.push_str(&string);
         self.space -= string_length as LengthSigned;
     }
 
@@ -598,16 +586,17 @@ type LengthSigned = isize;
 
 const SIZE_INFINITY: LengthSigned = 0x10000;
 
-struct Blank<'a> {
+struct Blank {
     space: Length,
     indent: LengthSigned,
-    pre_break: Option<PrintString<'a>>,
-    pre_space: Option<PrintString<'a>>,
+    pre_break: Option<String>,
+    pre_space: Option<String>,
+    neverbreak: bool,
 }
 
-enum ScanToken<'a> {
-    String(PrintString<'a>),
-    Blank(Blank<'a>),
+enum ScanToken {
+    String(String),
+    Blank(Blank),
     Begin(Group),
     End,
 }
@@ -628,7 +617,7 @@ enum Mode {
     Inconsistent,
 }
 
-struct ScanEntry<'a> {
-    token: ScanToken<'a>,
+struct ScanEntry {
+    token: ScanToken,
     size: LengthSigned,
 }

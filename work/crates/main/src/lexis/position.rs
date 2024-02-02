@@ -102,7 +102,7 @@ pub type Column = usize;
 ///
 /// assert_eq!(position, Position::new(3, 6));
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
     /// A number of the line inside the Source code.
     ///

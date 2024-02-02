@@ -36,18 +36,23 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
+    lexis::{Token, TokenRef},
     std::*,
-    syntax::{Node, NodeRule},
+    syntax::{ErrorRef, Node, NodeRef, NodeRule},
 };
 
 pub trait Observer {
     type Node: Node;
 
-    fn enter_rule(&mut self, rule: NodeRule);
+    fn read_token(&mut self, token: <Self::Node as Node>::Token, token_ref: TokenRef);
 
-    fn leave_rule(&mut self, rule: NodeRule, node: &Self::Node);
+    fn enter_rule(&mut self, rule: NodeRule, node_ref: NodeRef);
 
-    fn parse_error(&mut self);
+    fn leave_rule(&mut self, rule: NodeRule, node_ref: NodeRef);
+
+    fn lift_node(&mut self, node_ref: NodeRef);
+
+    fn parse_error(&mut self, error_ref: ErrorRef);
 }
 
 pub struct DebugObserver<N: Node> {
@@ -68,25 +73,37 @@ impl<N: Node> Default for DebugObserver<N> {
 impl<N: Node> Observer for DebugObserver<N> {
     type Node = N;
 
-    fn enter_rule(&mut self, rule: NodeRule) {
+    fn read_token(&mut self, token: <Self::Node as Node>::Token, _token_ref: TokenRef) {
+        let indent = self.indent();
+        let name = token.name().unwrap_or("?");
+
+        println!("{indent} ${name}");
+    }
+
+    fn enter_rule(&mut self, rule: NodeRule, _node_ref: NodeRef) {
         let indent = self.indent();
         let name = N::rule_name(rule).unwrap_or("?");
 
-        println!("{indent} {name} {{",);
+        println!("{indent} {name} {{");
 
         self.depth += 1;
     }
 
-    fn leave_rule(&mut self, rule: NodeRule, _node: &Self::Node) {
+    fn leave_rule(&mut self, rule: NodeRule, _node_ref: NodeRef) {
         self.depth = self.depth.checked_sub(1).unwrap_or_default();
 
         let indent = self.indent();
         let name = N::rule_name(rule).unwrap_or("?");
 
-        println!("{indent} }} {name}",);
+        println!("{indent} }} {name}");
     }
 
-    fn parse_error(&mut self) {
+    fn lift_node(&mut self, _node_ref: NodeRef) {
+        let indent = self.indent();
+        println!("{indent} --- lift ---",);
+    }
+
+    fn parse_error(&mut self, _error_ref: ErrorRef) {
         let indent = self.indent();
         println!("{indent} --- error ---",);
     }
@@ -113,11 +130,17 @@ impl<N: Node> Observer for VoidObserver<N> {
     type Node = N;
 
     #[inline(always)]
-    fn enter_rule(&mut self, _rule: NodeRule) {}
+    fn read_token(&mut self, _token: <Self::Node as Node>::Token, _token_ref: TokenRef) {}
 
     #[inline(always)]
-    fn leave_rule(&mut self, _rule: NodeRule, _node: &Self::Node) {}
+    fn enter_rule(&mut self, _rule: NodeRule, _node_ref: NodeRef) {}
 
     #[inline(always)]
-    fn parse_error(&mut self) {}
+    fn leave_rule(&mut self, _rule: NodeRule, _node_ref: NodeRef) {}
+
+    #[inline(always)]
+    fn lift_node(&mut self, _node_ref: NodeRef) {}
+
+    #[inline(always)]
+    fn parse_error(&mut self, _error_ref: ErrorRef) {}
 }

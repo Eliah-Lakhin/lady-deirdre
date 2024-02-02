@@ -40,7 +40,7 @@ use crate::{
     format::SnippetFormatter,
     lexis::{SourceCode, Token, TokenBuffer},
     std::*,
-    syntax::{ImmutableSyntaxTree, Node},
+    syntax::{ImmutableSyntaxTree, Node, VoidObserver},
     units::{CompilationUnit, Lexis, Syntax},
 };
 
@@ -115,7 +115,8 @@ impl<T: Token> TokenBuffer<T> {
     {
         self.reset_id();
 
-        let syntax = ImmutableSyntaxTree::with_id(self.id(), self.cursor(..));
+        let syntax =
+            ImmutableSyntaxTree::new(self.id(), self.cursor(..), &mut VoidObserver::default());
 
         ImmutableUnit {
             lexis: self,
@@ -147,7 +148,8 @@ impl<N: Node> ImmutableUnit<N> {
     pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         let lexis = text.into();
 
-        let syntax = ImmutableSyntaxTree::with_id(lexis.id(), lexis.cursor(..));
+        let syntax =
+            ImmutableSyntaxTree::new(lexis.id(), lexis.cursor(..), &mut VoidObserver::default());
 
         Self { lexis, syntax }
     }
