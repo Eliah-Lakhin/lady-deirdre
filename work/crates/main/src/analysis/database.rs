@@ -39,17 +39,19 @@ use crate::{
     analysis::{
         AnalysisError,
         AnalysisResult,
+        AnalyzerConfig,
         AttrContext,
         AttrRef,
         Classifier,
         Computable,
         Event,
         Grammar,
+        Handle,
     },
     arena::{Entry, Id, Repo},
-    report::debug_unreachable,
+    report::{debug_assert, debug_unreachable, system_panic},
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher, Table},
+    sync::{Shared, SyncBuildHasher, Table},
     syntax::NodeRef,
 };
 
@@ -57,22 +59,19 @@ pub type Revision = u64;
 
 pub(super) struct Database<N: Grammar, S: SyncBuildHasher> {
     pub(super) records: Table<Id, Repo<Record<N, S>>, S>,
+    pub(super) timeout: Duration,
     pub(super) revision: AtomicU64,
 }
 
 impl<N: Grammar, S: SyncBuildHasher> Database<N, S> {
     #[inline(always)]
-    pub(super) fn new_single() -> Self {
+    pub(super) fn new(config: &AnalyzerConfig) -> Self {
         Self {
-            records: Table::with_capacity_and_hasher_and_shards(0, S::default(), 1),
-            revision: AtomicU64::new(0),
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn new_many() -> Self {
-        Self {
-            records: Table::new(),
+            records: match config.single_document {
+                true => Table::with_capacity_and_hasher_and_shards(0, S::default(), 1),
+                false => Table::new(),
+            },
+            timeout: config.attributes_timeout,
             revision: AtomicU64::new(0),
         }
     }
@@ -102,26 +101,37 @@ impl<N: Grammar, S: SyncBuildHasher> AbstractDatabase for Database<N, S> {
     }
 }
 
+const UNLOCK_MASK: usize = 0;
+const READ_MASK: usize = !0 ^ 1;
+const READ_BIT: usize = 1 << 1;
+const WRITE_MASK: usize = 1;
+const TIMEOUT: u64 = 1 << 10;
+
 pub(super) struct Record<N: Grammar, S: SyncBuildHasher> {
-    lock: RwLock<RecordInner<N, S>>,
-    writers: Mutex<HashSet<usize, S>>,
+    state: Mutex<usize>,
+    state_changed: Condvar,
+    data: UnsafeCell<RecordData<N, S>>,
 }
+
+unsafe impl<N: Grammar, S: SyncBuildHasher> Send for Record<N, S> {}
+
+unsafe impl<N: Grammar, S: SyncBuildHasher> Sync for Record<N, S> {}
 
 impl<N: Grammar, S: SyncBuildHasher> Record<N, S> {
     #[inline(always)]
     pub(super) fn new<C: Computable<Node = N> + Eq>(node_ref: NodeRef) -> Self {
         Self {
-            lock: RwLock::new(RecordInner::new::<C>(node_ref)),
-            writers: Mutex::new(HashSet::default()),
+            state: Mutex::new(UNLOCK_MASK),
+            state_changed: Condvar::new(),
+            data: UnsafeCell::new(RecordData::new::<C>(node_ref)),
         }
     }
 
     #[inline(always)]
     pub(super) fn invalidate(&self) {
-        let mut guard = self
-            .lock
-            .write()
-            .unwrap_or_else(|poison| poison.into_inner());
+        let Ok(mut guard) = self.write(&Duration::ZERO) else {
+            panic!("Invalidation timeout.");
+        };
 
         let Some(cache) = &mut guard.cache else {
             return;
@@ -130,83 +140,175 @@ impl<N: Grammar, S: SyncBuildHasher> Record<N, S> {
         cache.dirty = true;
     }
 
-    //todo check writers too?
-    #[inline(always)]
-    pub(super) fn read(&self) -> RwLockReadGuard<RecordInner<N, S>> {
-        self.lock
-            .read()
-            .unwrap_or_else(|poison| poison.into_inner())
-    }
-
-    #[inline(always)]
-    pub(super) fn write(&self, task: &Latch) -> AnalysisResult<RecordWriteGuard<N, S>> {
-        let writer = task.addr();
-
-        let mut writers_guard = self
-            .writers
+    #[cfg(not(target_family = "wasm"))]
+    pub(super) fn read(&self, timeout: &Duration) -> AnalysisResult<RecordReadGuard<N, S>> {
+        let mut state_guard = self
+            .state
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
 
-        if !writers_guard.insert(writer) {
-            return Err(AnalysisError::CycleDetected);
+        let mut cooldown = 1;
+        let time = Instant::now();
+
+        loop {
+            if *state_guard & WRITE_MASK == 0 {
+                *state_guard += READ_BIT;
+                return Ok(RecordReadGuard { record: self });
+            }
+
+            (state_guard, _) = self
+                .state_changed
+                .wait_timeout(state_guard, Duration::from_millis(cooldown))
+                .unwrap_or_else(|poison| poison.into_inner());
+
+            if &time.elapsed() > timeout {
+                return Err(AnalysisError::Timeout);
+            }
+
+            cooldown <<= 1;
         }
+    }
 
-        drop(writers_guard);
-
-        let guard = self
-            .lock
-            .write()
+    #[cfg(target_family = "wasm")]
+    pub(super) fn read(&self, timeout: &Duration) -> AnalysisResult<RecordReadGuard<N, S>> {
+        let mut state_guard = self
+            .state
+            .lock()
             .unwrap_or_else(|poison| poison.into_inner());
 
-        Ok(RecordWriteGuard {
-            writers: &self.writers,
-            writer,
-            guard,
-        })
+        if *state_guard & WRITE_MASK == 0 {
+            *state_guard += READ_BIT;
+            return Ok(RecordReadGuard { record: self });
+        }
+
+        Err(AnalysisError::Timeout)
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    pub(super) fn write(&self, timeout: &Duration) -> AnalysisResult<RecordWriteGuard<N, S>> {
+        let mut state_guard = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        let mut culldown = 1;
+        let time = Instant::now();
+
+        loop {
+            if *state_guard == UNLOCK_MASK {
+                *state_guard = WRITE_MASK;
+                return Ok(RecordWriteGuard { record: self });
+            }
+
+            (state_guard, _) = self
+                .state_changed
+                .wait_timeout(state_guard, Duration::from_millis(culldown))
+                .unwrap_or_else(|poison| poison.into_inner());
+
+            if &time.elapsed() > timeout {
+                return Err(AnalysisError::Timeout);
+            }
+
+            culldown <<= 1;
+        }
+    }
+
+    #[cfg(target_family = "wasm")]
+    pub(super) fn write(&self, timeout: &Duration) -> AnalysisResult<RecordWriteGuard<N, S>> {
+        let mut state_guard = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        if *state_guard == UNLOCK_MASK {
+            *state_guard = WRITE_MASK;
+            return Ok(RecordWriteGuard { record: self });
+        }
+
+        Err(AnalysisError::Timeout)
+    }
+}
+
+pub(super) struct RecordReadGuard<'a, N: Grammar, S: SyncBuildHasher> {
+    record: &'a Record<N, S>,
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Drop for RecordReadGuard<'a, N, S> {
+    fn drop(&mut self) {
+        let mut state_guard = self
+            .record
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+
+        debug_assert!(*state_guard & WRITE_MASK == 0, "Invalid lock state.");
+        debug_assert!(*state_guard & READ_MASK > 0, "Invalid lock state.");
+
+        *state_guard -= READ_BIT;
+
+        if *state_guard == UNLOCK_MASK {
+            drop(state_guard);
+            self.record.state_changed.notify_one();
+        }
+    }
+}
+
+impl<'a, N: Grammar, S: SyncBuildHasher> Deref for RecordReadGuard<'a, N, S> {
+    type Target = RecordData<N, S>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.record.data.get() }
     }
 }
 
 pub(super) struct RecordWriteGuard<'a, N: Grammar, S: SyncBuildHasher> {
-    writers: &'a Mutex<HashSet<usize, S>>,
-    writer: usize,
-    guard: RwLockWriteGuard<'a, RecordInner<N, S>>,
+    record: &'a Record<N, S>,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Drop for RecordWriteGuard<'a, N, S> {
     fn drop(&mut self) {
-        let mut writers_guard = self
-            .writers
+        let mut state_guard = self
+            .record
+            .state
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
 
-        let _ = writers_guard.remove(&self.writer);
+        debug_assert!(*state_guard & WRITE_MASK > 0, "Invalid lock state.");
+        debug_assert!(*state_guard & READ_MASK == 0, "Invalid lock state.");
+
+        *state_guard = UNLOCK_MASK;
+
+        drop(state_guard);
+
+        self.record.state_changed.notify_all();
     }
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> Deref for RecordWriteGuard<'a, N, S> {
-    type Target = RecordInner<N, S>;
+    type Target = RecordData<N, S>;
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        self.guard.deref()
+        unsafe { &*self.record.data.get() }
     }
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> DerefMut for RecordWriteGuard<'a, N, S> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.guard.deref_mut()
+        unsafe { &mut *self.record.data.get() }
     }
 }
 
-pub(super) struct RecordInner<N: Grammar, S: SyncBuildHasher> {
+pub(super) struct RecordData<N: Grammar, S: SyncBuildHasher> {
     pub(super) verified_at: Revision,
     pub(super) cache: Option<RecordCache<N, S>>,
     pub(super) node_ref: NodeRef,
     pub(super) function: &'static dyn Function<N, S>,
 }
 
-impl<N: Grammar, S: SyncBuildHasher> RecordInner<N, S> {
+impl<N: Grammar, S: SyncBuildHasher> RecordData<N, S> {
     #[inline(always)]
     fn new<C: Computable<Node = N> + Eq>(node_ref: NodeRef) -> Self {
         Self {

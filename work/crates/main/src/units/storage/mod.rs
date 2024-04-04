@@ -71,7 +71,7 @@ mod tests {
         units::storage::{branch::Branch, item::Item, page::Page},
     };
     use crate::{
-        lexis::{LexisSession, Token, TokenRule, TokenSet},
+        lexis::{Length, LexisSession, Token, TokenRule, TokenSet},
         std::*,
         syntax::{AbstractNode, Capture, Key, Node, NodeRef, NodeRule, ParseError, SyntaxSession},
         units::storage::{
@@ -905,6 +905,8 @@ mod tests {
     struct TestToken(usize);
 
     impl Token for TestToken {
+        const LOOKBACK: Length = 1;
+
         fn parse(_session: &mut impl LexisSession) -> Self {
             unimplemented!()
         }
@@ -926,10 +928,6 @@ mod tests {
         }
 
         fn rule_description(_index: TokenRule, _verbose: bool) -> Option<&'static str> {
-            unimplemented!()
-        }
-
-        fn blanks() -> &'static TokenSet {
             unimplemented!()
         }
     }

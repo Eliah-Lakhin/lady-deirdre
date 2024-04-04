@@ -196,7 +196,6 @@ impl LineIndex {
         }
     }
 
-    //todo
     #[allow(dead_code)]
     // Safety: `span <= self.length()`
     pub(crate) unsafe fn shrink_unchecked(&mut self, span: Length) {

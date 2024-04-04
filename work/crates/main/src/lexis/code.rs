@@ -37,7 +37,6 @@
 
 use crate::{
     arena::{Entry, Identifiable},
-    format::PrintString,
     lexis::{Chunk, Length, LineIndex, Site, SiteRef, ToSpan, Token, TokenCount, TokenCursor},
     std::*,
 };
@@ -161,7 +160,7 @@ pub trait SourceCode: Identifiable {
     ///     "line\nSecond line\nThird",
     /// );
     /// ```
-    fn substring(&self, span: impl ToSpan) -> PrintString<'_>
+    fn substring(&self, span: impl ToSpan) -> Cow<str>
     where
         Self: Sized,
     {
@@ -172,15 +171,13 @@ pub trait SourceCode: Identifiable {
 
         let mut cursor = self.cursor(span.clone());
 
-        let length = span.len();
-
         if cursor.site(0) == Some(span.start) && cursor.site(1) == Some(span.end) {
             if let Some(string) = cursor.string(0) {
-                return unsafe { PrintString::new_unchecked(Cow::Borrowed(string), length) };
+                return Cow::Borrowed(string);
             }
         }
 
-        unsafe { PrintString::new_unchecked(self.chars(span).collect(), length) }
+        Cow::from(self.chars(span).collect::<String>())
     }
 
     /// Returns `true` if the token referred by specified low-level `chunk_entry` weak reference

@@ -35,7 +35,7 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{format::PrintString, report::debug_unreachable, std::*};
+use crate::{report::debug_unreachable, std::*};
 
 /// A globally unique identifier of the data container.
 ///
@@ -178,9 +178,9 @@ impl Id {
     }
 
     #[inline(always)]
-    pub fn name(&self) -> PrintString<'static> {
+    pub fn name(&self) -> String {
         if self.is_nil() {
-            return PrintString::empty();
+            return String::new();
         }
 
         let key = *self;
@@ -189,7 +189,7 @@ impl Id {
     }
 
     #[inline(always)]
-    pub fn set_name(&self, name: impl Into<PrintString<'static>>) {
+    pub fn set_name(&self, name: impl Into<String>) {
         if self.is_nil() {
             panic!("An attempt to set a name to the Nil identifier.");
         }
@@ -227,9 +227,10 @@ pub trait Identifiable {
     fn id(&self) -> Id;
 }
 
+//todo turn to Lazy RwLock
 struct IdNames {
     lock: AtomicBool,
-    data: UnsafeCell<Option<StdMap<Id, PrintString<'static>>>>,
+    data: UnsafeCell<Option<StdMap<Id, String>>>,
 }
 
 // Safety: Access is protected by a mutex.
@@ -256,9 +257,7 @@ impl IdNames {
     }
 
     #[inline(always)]
-    fn access<R>(
-        grant: impl FnOnce(&mut StdMap<Id, PrintString<'static>>) -> R + Send + Sync + 'static,
-    ) -> R {
+    fn access<R>(grant: impl FnOnce(&mut StdMap<Id, String>) -> R + Send + Sync + 'static) -> R {
         static GLOBAL: IdNames = IdNames::new();
 
         GLOBAL.access_raw(move |raw| {
@@ -284,7 +283,7 @@ impl IdNames {
 
     fn access_raw<R>(
         &self,
-        grant: impl FnOnce(&mut Option<StdMap<Id, PrintString<'static>>>) -> R + Send + Sync + 'static,
+        grant: impl FnOnce(&mut Option<StdMap<Id, String>>) -> R + Send + Sync + 'static,
     ) -> R {
         loop {
             let borrow = self.lock.load(AtomicOrdering::Relaxed);

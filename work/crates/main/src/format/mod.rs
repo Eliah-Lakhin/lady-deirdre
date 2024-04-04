@@ -35,18 +35,12 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod delimited;
-mod parse;
 mod printer;
 mod snippet;
-mod string;
 mod terminal;
 
 pub use crate::format::{
-    delimited::{Delimited, DelimitedItem},
-    parse::{ParseBlank, ParseNode, ParseSegment, ParseToken, ParseTree},
     printer::{PrettyPrintConfig, PrettyPrinter},
     snippet::{Highlighter, Priority, Snippet, SnippetConfig, SnippetFormatter},
-    string::PrintString,
     terminal::{Color, Style, TerminalString},
 };

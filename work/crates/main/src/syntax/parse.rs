@@ -47,6 +47,7 @@ use crate::{
         ToSpan,
         Token,
         TokenBuffer,
+        TokenCursor,
         TokenRef,
         TokenRule,
     },
@@ -56,29 +57,29 @@ use crate::{
     units::{CompilationUnit, Lexis, Syntax},
 };
 
-pub struct ParseTree<N: Node> {
-    lexis: TokenBuffer<N::Token>,
+pub struct ParseTree<'a, N: Node, C: SourceCode<Token = N::Token>> {
+    code: &'a C,
     syntax: ImmutableSyntaxTree<N>,
     root: ParseNode,
 }
 
-impl<N: Node> Identifiable for ParseTree<N> {
+impl<'a, N: Node, C: SourceCode<Token = N::Token>> Identifiable for ParseTree<'a, N, C> {
     #[inline(always)]
     fn id(&self) -> Id {
-        self.lexis.id()
+        self.code.id()
     }
 }
 
-impl<N: Node> Lexis for ParseTree<N> {
-    type Lexis = TokenBuffer<N::Token>;
+impl<'a, N: Node, C: SourceCode<Token = N::Token>> Lexis for ParseTree<'a, N, C> {
+    type Lexis = C;
 
     #[inline(always)]
     fn lexis(&self) -> &Self::Lexis {
-        &self.lexis
+        self.code
     }
 }
 
-impl<N: Node> Syntax for ParseTree<N> {
+impl<'a, N: Node, C: SourceCode<Token = N::Token>> Syntax for ParseTree<'a, N, C> {
     type Syntax = ImmutableSyntaxTree<N>;
 
     #[inline(always)]
@@ -92,7 +93,7 @@ impl<N: Node> Syntax for ParseTree<N> {
     }
 }
 
-impl<N: Node> CompilationUnit for ParseTree<N> {
+impl<'a, N: Node, C: SourceCode<Token = N::Token>> CompilationUnit for ParseTree<'a, N, C> {
     #[inline(always)]
     fn is_mutable(&self) -> bool {
         false
@@ -100,43 +101,43 @@ impl<N: Node> CompilationUnit for ParseTree<N> {
 
     #[inline(always)]
     fn into_token_buffer(self) -> TokenBuffer<<Self as SourceCode>::Token> {
-        self.lexis
+        TokenBuffer::from(self.code.substring(..))
     }
 }
 
-impl<N: Node> Debug for ParseTree<N> {
+impl<'a, N: Node, C: SourceCode<Token = N::Token>> Debug for ParseTree<'a, N, C> {
     #[inline(always)]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         self.root.debug("", self, formatter)
     }
 }
 
-impl<N: Node> ParseTree<N> {
-    pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
-        let lexis = text.into();
-
+impl<'a, N: Node, C: SourceCode<Token = N::Token>> ParseTree<'a, N, C> {
+    pub fn new(code: &'a C, span: impl ToSpan) -> Self {
         let mut builder = ParseTreeBuilder {
-            lexis: &lexis,
+            code,
             site: 0,
             position: Position::default(),
             stack: Vec::new(),
+            node: PhantomData,
         };
 
-        let syntax = ImmutableSyntaxTree::new(lexis.id(), lexis.cursor(..), &mut builder);
+        let syntax = ImmutableSyntaxTree::parse_with_id_and_observer(
+            code.id(),
+            code.cursor(span),
+            &mut builder,
+        );
 
         let root = builder.stack.pop().unwrap_or_else(|| ParseNode {
             rule: ROOT_RULE,
             node_ref: NodeRef::nil(),
             site_span: 0..0,
             position_span: Position::default()..Position::default(),
+            well_formed: false,
             children: Vec::new(),
         });
 
-        Self {
-            lexis,
-            syntax,
-            root,
-        }
+        Self { code, syntax, root }
     }
 
     #[inline(always)]
@@ -155,7 +156,6 @@ pub enum ParseSegment {
     Blank(ParseBlank),
     Token(ParseToken),
     Node(ParseNode),
-    Error(ErrorRef),
 }
 
 impl ParseSegment {
@@ -165,7 +165,6 @@ impl ParseSegment {
             ParseSegment::Blank(segment) => segment.breaks(),
             ParseSegment::Token(segment) => segment.breaks(),
             ParseSegment::Node(segment) => segment.breaks(),
-            ParseSegment::Error(..) => 0,
         }
     }
 
@@ -175,7 +174,6 @@ impl ParseSegment {
             ParseSegment::Blank(segment) => segment.start_line(),
             ParseSegment::Token(segment) => segment.start_line(),
             ParseSegment::Node(segment) => segment.start_line(),
-            ParseSegment::Error(..) => 0,
         }
     }
 
@@ -185,21 +183,27 @@ impl ParseSegment {
             ParseSegment::Blank(segment) => segment.end_line(),
             ParseSegment::Token(segment) => segment.end_line(),
             ParseSegment::Node(segment) => segment.end_line(),
-            ParseSegment::Error(..) => 0,
         }
     }
 
-    fn debug<N: Node>(
+    pub fn well_formed(&self) -> bool {
+        match self {
+            ParseSegment::Blank(_) => true,
+            ParseSegment::Token(_) => true,
+            ParseSegment::Node(segment) => segment.well_formed,
+        }
+    }
+
+    fn debug<'a, N: Node, C: SourceCode<Token = N::Token>>(
         &self,
         indent: &str,
-        tree: &ParseTree<N>,
+        tree: &ParseTree<'a, N, C>,
         formatter: &mut Formatter<'_>,
     ) -> FmtResult {
         match self {
             ParseSegment::Blank(segment) => segment.debug(indent, tree, formatter),
             ParseSegment::Token(segment) => segment.debug(indent, tree, formatter),
             ParseSegment::Node(segment) => segment.debug(indent, tree, formatter),
-            ParseSegment::Error(..) => formatter.write_fmt(format_args!("{indent}<error>")),
         }
     }
 }
@@ -228,10 +232,10 @@ impl ParseBlank {
     }
 
     #[inline(always)]
-    fn debug<N: Node>(
+    fn debug<'a, N: Node, C: SourceCode<Token = N::Token>>(
         &self,
         indent: &str,
-        tree: &ParseTree<N>,
+        tree: &ParseTree<'a, N, C>,
         formatter: &mut Formatter<'_>,
     ) -> FmtResult {
         let span = self.position_span.display(tree);
@@ -265,10 +269,10 @@ impl ParseToken {
     }
 
     #[inline(always)]
-    fn debug<N: Node>(
+    fn debug<'a, N: Node, C: SourceCode<Token = N::Token>>(
         &self,
         indent: &str,
-        tree: &ParseTree<N>,
+        tree: &ParseTree<'a, N, C>,
         formatter: &mut Formatter<'_>,
     ) -> FmtResult {
         let name = <N::Token as Token>::rule_name(self.rule).unwrap_or("?");
@@ -285,6 +289,7 @@ pub struct ParseNode {
     pub node_ref: NodeRef,
     pub site_span: SiteSpan,
     pub position_span: PositionSpan,
+    pub well_formed: bool,
     pub children: Vec<ParseSegment>,
 }
 
@@ -305,10 +310,10 @@ impl ParseNode {
     }
 
     #[inline(always)]
-    fn debug<N: Node>(
+    fn debug<'a, N: Node, C: SourceCode<Token = N::Token>>(
         &self,
         indent: &str,
-        tree: &ParseTree<N>,
+        tree: &ParseTree<'a, N, C>,
         formatter: &mut Formatter<'_>,
     ) -> FmtResult {
         let name = N::rule_name(self.rule).unwrap_or("?");
@@ -338,30 +343,35 @@ impl ParseNode {
     }
 }
 
-struct ParseTreeBuilder<'a, N: Node> {
-    lexis: &'a TokenBuffer<N::Token>,
+struct ParseTreeBuilder<'a, N: Node, C: SourceCode<Token = N::Token>> {
+    code: &'a C,
     site: Site,
     position: Position,
     stack: Vec<ParseNode>,
+    node: PhantomData<N>,
 }
 
-impl<'a, N: Node> Observer for ParseTreeBuilder<'a, N> {
+impl<'a, N, C> Observer for ParseTreeBuilder<'a, N, C>
+where
+    N: Node,
+    C: SourceCode<Token = N::Token>,
+{
     type Node = N;
 
     fn read_token(&mut self, token: <Self::Node as Node>::Token, token_ref: TokenRef) {
         let start_site = self.site;
         let start_position = self.position;
 
-        if let Some(length) = token_ref.length(self.lexis) {
+        if let Some(length) = token_ref.length(self.code) {
             self.site += length;
         };
 
         let mut is_blank = true;
 
-        if let Some(string) = token_ref.string(self.lexis) {
+        if let Some(string) = token_ref.string(self.code) {
             for ch in string.chars() {
                 match ch {
-                    ' ' | '\r' | '\x0c' => {
+                    ' ' | '\r' | '\x0c' | '\t' => {
                         self.position.column += 1;
                     }
 
@@ -421,6 +431,7 @@ impl<'a, N: Node> Observer for ParseTreeBuilder<'a, N> {
             node_ref,
             site_span: self.site..self.site,
             position_span: self.position..self.position,
+            well_formed: true,
             children: Vec::new(),
         });
     }
@@ -494,11 +505,11 @@ impl<'a, N: Node> Observer for ParseTreeBuilder<'a, N> {
         current.children.append(&mut tail);
     }
 
-    fn parse_error(&mut self, error_ref: ErrorRef) {
+    fn parse_error(&mut self, _error_ref: ErrorRef) {
         let Some(current) = self.stack.last_mut() else {
             return;
         };
 
-        current.children.push(ParseSegment::Error(error_ref))
+        current.well_formed = false;
     }
 }

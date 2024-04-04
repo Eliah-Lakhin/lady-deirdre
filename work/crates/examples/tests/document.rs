@@ -41,7 +41,7 @@
 use std::fmt::{Debug, Display, Formatter};
 
 use lady_deirdre::{
-    lexis::{LexisSession, SourceCode, Token, TokenCursor, TokenRule, TokenSet, EMPTY_TOKEN_SET},
+    lexis::{Length, LexisSession, SourceCode, Token, TokenCursor, TokenRule},
     syntax::{NoSyntax, SimpleNode},
     units::Document,
 };
@@ -59,6 +59,8 @@ fn test_document_lexis() {
     }
 
     impl Token for CustomToken {
+        const LOOKBACK: Length = 1;
+
         #[inline]
         fn parse(session: &mut impl LexisSession) -> Self {
             let mut token = Self::F;
@@ -155,10 +157,6 @@ fn test_document_lexis() {
             }
 
             None
-        }
-
-        fn blanks() -> &'static TokenSet {
-            &EMPTY_TOKEN_SET
         }
     }
 

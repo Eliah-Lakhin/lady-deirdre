@@ -44,12 +44,13 @@ use crate::{
         DocumentReadGuard,
         Event,
         Grammar,
+        Handle,
         Revision,
     },
     arena::Id,
     lexis::{ToSpan, TokenBuffer},
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher},
+    sync::{Shared, SyncBuildHasher},
     syntax::NodeRef,
     units::Document,
 };
@@ -57,14 +58,14 @@ use crate::{
 pub struct AnalysisTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     analyzer: &'a Analyzer<N, S>,
     revision: Revision,
-    handle: &'a Latch,
+    handle: &'a Handle,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<N, S> for AnalysisTask<'a, N, S> {}
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<N, S> for AnalysisTask<'a, N, S> {
     #[inline(always)]
-    fn handle(&self) -> &Latch {
+    fn handle(&self) -> &Handle {
         self.handle
     }
 }
@@ -89,7 +90,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Drop for AnalysisTask<'a, N, S> {
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
     #[inline(always)]
-    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Handle) -> Self {
         Self {
             analyzer,
             revision: analyzer.db.load_revision(),
@@ -100,14 +101,14 @@ impl<'a, N: Grammar, S: SyncBuildHasher> AnalysisTask<'a, N, S> {
 
 pub struct MutationTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     analyzer: &'a Analyzer<N, S>,
-    handle: &'a Latch,
+    handle: &'a Handle,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<N, S> for MutationTask<'a, N, S> {}
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<N, S> for MutationTask<'a, N, S> {
     #[inline(always)]
-    fn handle(&self) -> &Latch {
+    fn handle(&self) -> &Handle {
         self.handle
     }
 }
@@ -132,14 +133,14 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Drop for MutationTask<'a, N, S> {
 
 impl<'a, N: Grammar, S: SyncBuildHasher> MutationTask<'a, N, S> {
     #[inline(always)]
-    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Handle) -> Self {
         Self { analyzer, handle }
     }
 }
 
 pub struct ExclusiveTask<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     analyzer: &'a Analyzer<N, S>,
-    handle: &'a Latch,
+    handle: &'a Handle,
 }
 
 impl<'a, N: Grammar, S: SyncBuildHasher> SemanticAccess<N, S> for ExclusiveTask<'a, N, S> {}
@@ -148,7 +149,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> MutationAccess<N, S> for ExclusiveTask<
 
 impl<'a, N: Grammar, S: SyncBuildHasher> AbstractTask<N, S> for ExclusiveTask<'a, N, S> {
     #[inline(always)]
-    fn handle(&self) -> &Latch {
+    fn handle(&self) -> &Handle {
         self.handle
     }
 }
@@ -173,7 +174,7 @@ impl<'a, N: Grammar, S: SyncBuildHasher> Drop for ExclusiveTask<'a, N, S> {
 
 impl<'a, N: Grammar, S: SyncBuildHasher> ExclusiveTask<'a, N, S> {
     #[inline(always)]
-    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Latch) -> Self {
+    pub(super) fn new(analyzer: &'a Analyzer<N, S>, handle: &'a Handle) -> Self {
         Self { analyzer, handle }
     }
 }
@@ -215,11 +216,11 @@ pub trait MutationAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {
 pub trait SemanticAccess<N: Grammar, S: SyncBuildHasher>: AbstractTask<N, S> {}
 
 pub trait AbstractTask<N: Grammar, S: SyncBuildHasher>: TaskSealed<N, S> {
-    fn handle(&self) -> &Latch;
+    fn handle(&self) -> &Handle;
 
     #[inline(always)]
     fn proceed(&self) -> AnalysisResult<()> {
-        if self.handle().get_relaxed() {
+        if self.handle().triggered() {
             return Err(AnalysisError::Interrupted);
         }
 

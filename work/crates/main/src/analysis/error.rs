@@ -52,7 +52,7 @@ pub enum AnalysisError {
     MissingSemantics,
     TypeMismatch,
     MissingFeature,
-    CycleDetected,
+    Timeout,
 }
 
 impl Display for AnalysisError {
@@ -69,7 +69,7 @@ impl Display for AnalysisError {
             Self::MissingSemantics => "Node variant does not have semantics.",
             Self::TypeMismatch => "Incorrect attribute type.",
             Self::MissingFeature => "An attempt to access semantic feature that does not exist.",
-            Self::CycleDetected => "Attribute graph contains a cycle.",
+            Self::Timeout => "Attribute computation timeout.",
         };
 
         formatter.write_str(text)
@@ -80,10 +80,11 @@ impl Error for AnalysisError {}
 
 impl AnalysisError {
     #[inline(always)]
-    pub fn is_interrupt(&self) -> bool {
+    pub fn is_abnormal(&self) -> bool {
         match self {
-            Self::Interrupted => true,
-            _ => false,
+            Self::Interrupted => false,
+            Self::Timeout => cfg!(debug_assertions),
+            _ => true,
         }
     }
 }
@@ -98,7 +99,7 @@ impl<T> AnalysisResultEx<T> for AnalysisResult<T> {
     fn unwrap_abnormal(self) -> AnalysisResult<T> {
         match self {
             Ok(ok) => Ok(ok),
-            Err(error) if error.is_interrupt() => Err(error),
+            Err(error) if !error.is_abnormal() => Err(error),
             Err(error) => panic!("Analysis internal error. {error}"),
         }
     }

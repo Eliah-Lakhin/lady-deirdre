@@ -49,6 +49,32 @@ pub const TASKS_ALL: u8 = TASKS_ANALYSIS | TASKS_EXCLUSIVE | TASKS_MUTATION;
 
 const TASKS_CAPACITY: usize = 10;
 
+#[derive(Default, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Handle {
+    pub primary: Latch,
+    pub secondary: Latch,
+}
+
+impl Handle {
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self {
+            primary: Latch::new(),
+            secondary: Latch::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn triggered(&self) -> bool {
+        self.primary.get_relaxed() || self.secondary.get_relaxed()
+    }
+
+    #[inline(always)]
+    pub fn trigger(&self) {
+        self.primary.set();
+    }
+}
+
 pub(super) struct TaskManager<S> {
     state: Mutex<State<S>>,
     notifiers: Notifiers,
@@ -82,7 +108,7 @@ impl<S: SyncBuildHasher> TaskManager<S> {
     }
 
     #[inline(always)]
-    pub(super) fn acquire_analysis(&self, handle: &Latch, lock: bool) -> AnalysisResult<()> {
+    pub(super) fn acquire_analysis(&self, handle: &Handle, lock: bool) -> AnalysisResult<()> {
         let mut state_guard = self.lock_state();
 
         state_guard.pending.analysis += 1;
@@ -119,7 +145,7 @@ impl<S: SyncBuildHasher> TaskManager<S> {
     }
 
     #[inline(always)]
-    pub(super) fn acquire_exclusive(&self, handle: &Latch, lock: bool) -> AnalysisResult<()> {
+    pub(super) fn acquire_exclusive(&self, handle: &Handle, lock: bool) -> AnalysisResult<()> {
         let mut state_guard = self.lock_state();
 
         state_guard.pending.exclusive += 1;
@@ -145,12 +171,16 @@ impl<S: SyncBuildHasher> TaskManager<S> {
                 continue;
             };
 
-            state.pending.exclusive -= 1;
-
             return match exclusive_task {
-                Some(current) if current == handle => Err(AnalysisError::DuplicateHandle),
+                Some(current) if current == handle => {
+                    state.pending.exclusive -= 1;
+
+                    Err(AnalysisError::DuplicateHandle)
+                }
 
                 None => {
+                    state.pending.exclusive -= 1;
+
                     *exclusive_task = Some(handle.clone());
 
                     Ok(())
@@ -162,7 +192,7 @@ impl<S: SyncBuildHasher> TaskManager<S> {
     }
 
     #[inline(always)]
-    pub(super) fn acquire_mutation(&self, handle: &Latch, lock: bool) -> AnalysisResult<()> {
+    pub(super) fn acquire_mutation(&self, handle: &Handle, lock: bool) -> AnalysisResult<()> {
         let mut state_guard = self.lock_state();
 
         state_guard.pending.mutations += 1;
@@ -199,7 +229,7 @@ impl<S: SyncBuildHasher> TaskManager<S> {
     }
 
     #[inline(always)]
-    pub(super) fn release_analysis(&self, handle: &Latch) {
+    pub(super) fn release_analysis(&self, handle: &Handle) {
         let mut state_guard = self.lock_state();
 
         match &mut state_guard.stage {
@@ -236,7 +266,7 @@ impl<S: SyncBuildHasher> TaskManager<S> {
     }
 
     #[inline(always)]
-    pub(super) fn release_exclusive(&self, handle: &Latch) {
+    pub(super) fn release_exclusive(&self, handle: &Handle) {
         let mut state_guard = self.lock_state();
 
         match &mut state_guard.stage {
@@ -271,7 +301,7 @@ impl<S: SyncBuildHasher> TaskManager<S> {
     }
 
     #[inline(always)]
-    pub(super) fn release_mutation(&self, handle: &Latch) {
+    pub(super) fn release_mutation(&self, handle: &Handle) {
         let mut state_guard = self.lock_state();
 
         match &mut state_guard.stage {
@@ -348,7 +378,7 @@ impl<S: SyncBuildHasher> State<S> {
                 };
 
                 for handle in analysis_tasks {
-                    handle.set();
+                    handle.trigger();
                 }
             }
 
@@ -370,7 +400,7 @@ impl<S: SyncBuildHasher> State<S> {
 
                 self.stage = Stage::Interruption { pending: 1 };
 
-                handle.set();
+                handle.trigger();
             }
 
             Stage::Mutation { mutation_tasks } => {
@@ -385,7 +415,7 @@ impl<S: SyncBuildHasher> State<S> {
                 };
 
                 for handle in mutation_tasks {
-                    handle.set();
+                    handle.trigger();
                 }
             }
 
@@ -444,9 +474,9 @@ impl<S: SyncBuildHasher> State<S> {
 }
 
 enum Stage<S> {
-    Analysis { analysis_tasks: HashSet<Latch, S> },
-    Exclusive { exclusive_task: Option<Latch> },
-    Mutation { mutation_tasks: HashSet<Latch, S> },
+    Analysis { analysis_tasks: HashSet<Handle, S> },
+    Exclusive { exclusive_task: Option<Handle> },
+    Mutation { mutation_tasks: HashSet<Handle, S> },
     Interruption { pending: usize },
 }
 
@@ -475,6 +505,6 @@ struct Pending {
 }
 
 #[inline(always)]
-fn new_tasks_set<S: SyncBuildHasher>() -> HashSet<Latch, S> {
+fn new_tasks_set<S: SyncBuildHasher>() -> HashSet<Handle, S> {
     HashSet::with_capacity_and_hasher(TASKS_CAPACITY, S::default())
 }

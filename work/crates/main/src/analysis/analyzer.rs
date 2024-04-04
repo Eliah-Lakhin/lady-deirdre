@@ -45,13 +45,50 @@ use crate::{
         Event,
         ExclusiveTask,
         Grammar,
+        Handle,
         MutationTask,
         Revision,
     },
     arena::Id,
     std::*,
-    sync::{Latch, SyncBuildHasher, Table},
+    sync::{SyncBuildHasher, Table},
 };
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[non_exhaustive]
+pub struct AnalyzerConfig {
+    pub single_document: bool,
+    pub attributes_timeout: Duration,
+}
+
+impl Default for AnalyzerConfig {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AnalyzerConfig {
+    #[inline(always)]
+    pub const fn new() -> Self {
+        let attributes_timeout;
+
+        #[cfg(debug_assertions)]
+        {
+            attributes_timeout = 1000;
+        }
+
+        #[cfg(not(debug_assertions))]
+        {
+            attributes_timeout = 5000;
+        }
+
+        Self {
+            single_document: false,
+            attributes_timeout: Duration::from_millis(attributes_timeout),
+        }
+    }
+}
 
 pub struct Analyzer<N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) docs: Table<Id, DocEntry<N, S>, S>,
@@ -63,54 +100,51 @@ pub struct Analyzer<N: Grammar, S: SyncBuildHasher = RandomState> {
 impl<N: Grammar, S: SyncBuildHasher> Default for Analyzer<N, S> {
     #[inline(always)]
     fn default() -> Self {
-        Self::for_many_documents()
+        Self::new(AnalyzerConfig::default())
     }
 }
 
 impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
-    pub fn for_single_document() -> Self {
+    pub fn new(config: AnalyzerConfig) -> Self {
         Self {
-            docs: Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
-            events: Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
-            db: Arc::new(Database::new_single()),
+            docs: match config.single_document {
+                true => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+                false => Table::new(),
+            },
+            events: match config.single_document {
+                true => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+                false => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+            },
+            db: Arc::new(Database::new(&config)),
             tasks: TaskManager::new(),
         }
     }
 
-    pub fn for_many_documents() -> Self {
-        Self {
-            docs: Table::new(),
-            events: Table::new(),
-            db: Arc::new(Database::new_many()),
-            tasks: TaskManager::new(),
-        }
-    }
-
-    pub fn analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<AnalysisTask<'a, N, S>> {
+    pub fn analyze<'a>(&'a self, handle: &'a Handle) -> AnalysisResult<AnalysisTask<'a, N, S>> {
         self.tasks.acquire_analysis(handle, true)?;
 
         Ok(AnalysisTask::new(self, handle))
     }
 
-    pub fn try_analyze<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<AnalysisTask<'a, N, S>> {
+    pub fn try_analyze<'a>(&'a self, handle: &'a Handle) -> AnalysisResult<AnalysisTask<'a, N, S>> {
         self.tasks.acquire_analysis(handle, false)?;
 
         Ok(AnalysisTask::new(self, handle))
     }
 
-    pub fn mutate<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<MutationTask<'a, N, S>> {
+    pub fn mutate<'a>(&'a self, handle: &'a Handle) -> AnalysisResult<MutationTask<'a, N, S>> {
         self.tasks.acquire_mutation(handle, true)?;
 
         Ok(MutationTask::new(self, handle))
     }
 
-    pub fn try_mutate<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<MutationTask<'a, N, S>> {
+    pub fn try_mutate<'a>(&'a self, handle: &'a Handle) -> AnalysisResult<MutationTask<'a, N, S>> {
         self.tasks.acquire_mutation(handle, false)?;
 
         Ok(MutationTask::new(self, handle))
     }
 
-    pub fn exclusive<'a>(&'a self, handle: &'a Latch) -> AnalysisResult<ExclusiveTask<'a, N, S>> {
+    pub fn exclusive<'a>(&'a self, handle: &'a Handle) -> AnalysisResult<ExclusiveTask<'a, N, S>> {
         self.tasks.acquire_exclusive(handle, true)?;
 
         Ok(ExclusiveTask::new(self, handle))
@@ -118,7 +152,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
     pub fn try_exclusive<'a>(
         &'a self,
-        handle: &'a Latch,
+        handle: &'a Handle,
     ) -> AnalysisResult<ExclusiveTask<'a, N, S>> {
         self.tasks.acquire_exclusive(handle, false)?;
 

@@ -114,10 +114,8 @@ pub trait SyntaxSession<'code>: TokenCursor<'code, Token = <Self::Node as Node>:
 
 pub(super) struct ImmutableSyntaxSession<
     'code,
-    'observer,
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
-    O: Observer<Node = N>,
 > {
     pub(super) id: Id,
     pub(super) context: Vec<EntryIndex>,
@@ -125,15 +123,13 @@ pub(super) struct ImmutableSyntaxSession<
     pub(super) errors: Vec<N::Error>,
     pub(super) failing: bool,
     pub(super) token_cursor: C,
-    pub(super) observer: &'observer mut O,
     pub(super) _phantom: PhantomData<&'code ()>,
 }
 
-impl<'code, 'observer, N, C, O> Identifiable for ImmutableSyntaxSession<'code, 'observer, N, C, O>
+impl<'code, N, C> Identifiable for ImmutableSyntaxSession<'code, N, C>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
-    O: Observer<Node = N>,
 {
     #[inline(always)]
     fn id(&self) -> Id {
@@ -141,21 +137,15 @@ where
     }
 }
 
-impl<'code, 'observer, N, C, O> TokenCursor<'code>
-    for ImmutableSyntaxSession<'code, 'observer, N, C, O>
+impl<'code, N, C> TokenCursor<'code> for ImmutableSyntaxSession<'code, N, C>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
-    O: Observer<Node = N>,
 {
     type Token = <N as Node>::Token;
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        let token = self.token(0);
-        let token_ref = self.token_ref(0);
-        self.observer.read_token(token, token_ref);
-
         let advanced = self.token_cursor.advance();
 
         self.failing = self.failing && !advanced;
@@ -164,16 +154,10 @@ where
     }
 
     #[inline(always)]
-    fn skip(&mut self, mut distance: TokenCount) {
+    fn skip(&mut self, distance: TokenCount) {
         let start = self.token_cursor.site(0);
 
-        while distance > 0 {
-            if !self.advance() {
-                break;
-            }
-
-            distance -= 1;
-        }
+        self.token_cursor.skip(distance);
 
         self.failing = self.failing && start == self.token_cursor.site(0);
     }
@@ -214,12 +198,10 @@ where
     }
 }
 
-impl<'code, 'observer, N, C, O> SyntaxSession<'code>
-    for ImmutableSyntaxSession<'code, 'observer, N, C, O>
+impl<'code, N, C> SyntaxSession<'code> for ImmutableSyntaxSession<'code, N, C>
 where
     N: Node,
     C: TokenCursor<'code, Token = <N as Node>::Token>,
-    O: Observer<Node = N>,
 {
     type Node = N;
 
@@ -232,21 +214,17 @@ where
     }
 
     #[inline]
-    fn enter(&mut self, rule: NodeRule) -> NodeRef {
+    fn enter(&mut self, _rule: NodeRule) -> NodeRef {
         let index = self.nodes.len();
 
         self.nodes.push(None);
 
         self.context.push(index);
 
-        let node_ref = NodeRef {
+        NodeRef {
             id: self.id,
             entry: Entry { index, version: 0 },
-        };
-
-        self.observer.enter_rule(rule, node_ref);
-
-        node_ref
+        }
     }
 
     #[inline]
@@ -267,20 +245,14 @@ where
             unsafe { debug_unreachable!("Bad context index.") }
         };
 
-        let rule = node.rule();
-
         if replace(item, Some(node)).is_some() {
             unsafe { debug_unreachable!("Bad context index.") }
         }
 
-        let node_ref = NodeRef {
+        NodeRef {
             id: self.id,
             entry: Entry { index, version: 0 },
-        };
-
-        self.observer.leave_rule(rule, node_ref);
-
-        node_ref
+        }
     }
 
     #[inline]
@@ -312,8 +284,6 @@ where
         };
 
         node.set_parent_ref(parent_ref);
-
-        self.observer.lift_node(*node_ref);
     }
 
     #[inline(always)]
@@ -365,13 +335,9 @@ where
 
         self.errors.push(error.into());
 
-        let error_ref = ErrorRef {
+        ErrorRef {
             id: self.id,
             entry: Entry { index, version: 0 },
-        };
-
-        self.observer.parse_error(error_ref);
-
-        error_ref
+        }
     }
 }

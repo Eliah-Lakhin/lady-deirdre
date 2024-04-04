@@ -43,6 +43,7 @@ use crate::{
         Classifier,
         Feature,
         Grammar,
+        Handle,
         Initializer,
         Invalidator,
         Revision,
@@ -52,7 +53,7 @@ use crate::{
     lexis::ToSpan,
     report::debug_unreachable,
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher, TableReadGuard},
+    sync::{Shared, SyncBuildHasher, TableReadGuard},
     syntax::{ErrorRef, NodeRef, PolyRef, SyntaxTree},
     units::{Document, Watch},
 };
@@ -186,7 +187,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
     pub(super) fn write_to_doc(
         &self,
-        handle: &Latch,
+        handle: &Handle,
         id: Id,
         span: impl ToSpan,
         text: impl AsRef<str>,

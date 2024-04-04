@@ -37,8 +37,18 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    format::{Delimited, PrintString, Priority, SnippetFormatter},
-    lexis::{Length, SiteRefSpan, SourceCode, ToSite, ToSpan, Token, TokenRule, TokenSet},
+    format::{Priority, SnippetFormatter},
+    lexis::{
+        Length,
+        SiteRefSpan,
+        SourceCode,
+        ToSite,
+        ToSpan,
+        Token,
+        TokenRef,
+        TokenRule,
+        TokenSet,
+    },
     std::*,
     syntax::{AbstractNode, Node, NodeRule, NodeSet, RecoveryResult, SyntaxTree, ROOT_RULE},
     units::CompilationUnit,
@@ -130,8 +140,8 @@ impl ParseError {
 
                 #[derive(PartialEq, Eq)]
                 enum TokenOrNode {
-                    Token(PrintString<'static>),
-                    Node(PrintString<'static>),
+                    Token(Cow<'static, str>),
+                    Node(Cow<'static, str>),
                 }
 
                 impl PartialOrd for TokenOrNode {
@@ -154,12 +164,13 @@ impl ParseError {
 
                 impl TokenOrNode {
                     #[inline(always)]
-                    fn print_to(&self, target: &mut PrintString<'static>) {
+                    fn print_to(&self, target: &mut String) {
                         match self {
-                            Self::Node(string) => target.append(string.clone()),
+                            Self::Node(string) => target.push_str(string.as_ref()),
+
                             Self::Token(string) => {
                                 target.push('\'');
-                                target.append(string.clone());
+                                target.push_str(string.as_ref());
                                 target.push('\'');
                             }
                         }
@@ -170,7 +181,7 @@ impl ParseError {
                     alt: bool,
                     set: StdSet<&'static str>,
                     empty_span: bool,
-                    context: PrintString<'static>,
+                    context: Cow<'static, str>,
                     recovery: RecoveryResult,
                     components: Vec<TokenOrNode>,
                     exhaustive: bool,
@@ -188,8 +199,8 @@ impl ParseError {
 
                         let context = N::rule_description(context, true)
                             .filter(|_| context != ROOT_RULE)
-                            .map(PrintString::borrowed)
-                            .unwrap_or(PrintString::empty());
+                            .map(Cow::Borrowed)
+                            .unwrap_or(Cow::Borrowed(""));
 
                         Self {
                             alt,
@@ -211,7 +222,7 @@ impl ParseError {
 
                         if self.set.insert(description) {
                             self.components
-                                .push(TokenOrNode::Token(PrintString::borrowed(description)));
+                                .push(TokenOrNode::Token(Cow::Borrowed(description)));
                         }
                     }
 
@@ -223,7 +234,7 @@ impl ParseError {
 
                         if self.set.insert(description) {
                             self.components
-                                .push(TokenOrNode::Node(PrintString::borrowed(description)));
+                                .push(TokenOrNode::Node(Cow::Borrowed(description)));
                         }
                     }
 
@@ -243,117 +254,118 @@ impl ParseError {
                     }
 
                     #[inline(always)]
-                    fn missing_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> = PrintString::borrowed("missing");
-                        static ALT_STR: PrintString<'static> = PrintString::borrowed("Missing");
+                    fn missing_str(&self) -> &'static str {
+                        static STRING: &'static str = "missing";
+                        static ALT_STR: &'static str = "Missing";
 
                         match self.alt {
-                            false => STRING.clone(),
-                            true => ALT_STR.clone(),
+                            false => STRING,
+                            true => ALT_STR,
                         }
                     }
 
                     #[inline(always)]
-                    fn unexpected_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> =
-                            PrintString::borrowed("unexpected input");
-                        static ALT_STR: PrintString<'static> =
-                            PrintString::borrowed("Unexpected input");
+                    fn unexpected_str(&self) -> &'static str {
+                        static STRING: &'static str = "unexpected input";
+                        static ALT_STR: &'static str = "Unexpected input";
 
                         match self.alt {
-                            false => STRING.clone(),
-                            true => ALT_STR.clone(),
+                            false => STRING,
+                            true => ALT_STR,
                         }
                     }
 
                     #[inline(always)]
-                    fn in_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> = PrintString::borrowed(" in ");
-                        static ALT_STR: PrintString<'static> = PrintString::borrowed(" in ");
+                    fn in_str(&self) -> &'static str {
+                        static STRING: &'static str = " in ";
+                        static ALT_STR: &'static str = " in ";
 
                         match self.alt {
-                            false => STRING.clone(),
-                            true => ALT_STR.clone(),
+                            false => STRING,
+                            true => ALT_STR,
                         }
                     }
 
                     #[inline(always)]
-                    fn eoi_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> =
-                            PrintString::borrowed("unexpected end of input");
-                        static ALT_STR: PrintString<'static> =
-                            PrintString::borrowed("Unexpected end of input");
+                    fn eoi_str(&self) -> &'static str {
+                        static STRING: &'static str = "unexpected end of input";
+                        static ALT_STR: &'static str = "Unexpected end of input";
 
                         match self.alt {
-                            false => STRING.clone(),
-                            true => ALT_STR.clone(),
+                            false => STRING,
+                            true => ALT_STR,
                         }
                     }
 
                     #[inline(always)]
-                    fn or_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> = PrintString::borrowed(" or ");
+                    fn or_str(&self) -> &'static str {
+                        static STRING: &'static str = " or ";
 
-                        STRING.clone()
+                        STRING
                     }
 
                     #[inline(always)]
-                    fn comma_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> = PrintString::borrowed(", ");
+                    fn comma_str(&self) -> &'static str {
+                        static STRING: &'static str = ", ";
 
-                        STRING.clone()
+                        STRING
                     }
 
                     #[inline(always)]
-                    fn etc_str(&self) -> PrintString<'static> {
-                        static STRING: PrintString<'static> = PrintString::borrowed("…");
-                        static ALT_STR: PrintString<'static> = PrintString::borrowed("...");
+                    fn etc_str(&self) -> &'static str {
+                        static STRING: &'static str = "…";
+                        static ALT_STR: &'static str = "...";
 
                         match self.alt {
-                            false => STRING.clone(),
-                            true => ALT_STR.clone(),
+                            false => STRING,
+                            true => ALT_STR,
                         }
                     }
 
-                    fn string(&self) -> PrintString<'static> {
-                        let mut result = PrintString::empty();
+                    fn string(&self) -> String {
+                        let mut result = String::new();
 
                         let print_components;
 
                         match self.recovery {
                             RecoveryResult::InsertRecover => {
-                                result.append(self.missing_str());
+                                result.push_str(self.missing_str());
                                 print_components = true;
                             }
 
                             RecoveryResult::PanicRecover if self.empty_span => {
-                                result.append(self.missing_str());
+                                result.push_str(self.missing_str());
                                 print_components = true;
                             }
 
                             RecoveryResult::PanicRecover => {
-                                result.append(self.unexpected_str());
+                                result.push_str(self.unexpected_str());
                                 print_components = false;
                             }
 
                             RecoveryResult::UnexpectedEOI => {
-                                result.append(self.eoi_str());
+                                result.push_str(self.eoi_str());
                                 print_components = false;
                             }
 
                             RecoveryResult::UnexpectedToken => {
-                                result.append(self.missing_str());
+                                result.push_str(self.missing_str());
                                 print_components = true;
                             }
                         };
 
                         if print_components {
-                            for component in self.components.iter().delimited() {
-                                match component.is_first {
-                                    true => result.push(' '),
+                            let mut is_first = true;
+
+                            for component in &self.components {
+                                match is_first {
+                                    true => {
+                                        result.push(' ');
+                                        is_first = false;
+                                    }
                                     false => match self.components.len() == 2 && self.exhaustive {
-                                        true => result.append(self.or_str()),
-                                        false => result.append(self.comma_str()),
+                                        true => result.push_str(self.or_str()),
+                                        false => result.push_str(self.comma_str()),
                                     },
                                 }
 
@@ -363,13 +375,13 @@ impl ParseError {
 
                         match self.exhaustive {
                             false => {
-                                result.append(self.etc_str());
+                                result.push_str(self.etc_str());
                             }
 
                             true => {
                                 if !self.context.is_empty() {
-                                    result.append(self.in_str());
-                                    result.append(self.context.clone());
+                                    result.push_str(self.in_str());
+                                    result.push_str(self.context.as_ref());
                                 }
 
                                 if self.alt {
@@ -402,7 +414,7 @@ impl ParseError {
 
                 let mut string = out.string();
 
-                while string.length() > LENGTH_MAX {
+                while string.chars().count() > LENGTH_MAX {
                     if !out.shorten() {
                         break;
                     }
@@ -489,7 +501,7 @@ impl ParseError {
                 break;
             }
 
-            if !previous.token_ref().is_blank(code) {
+            if !Self::is_blank(code, previous.token_ref()) {
                 break;
             }
 
@@ -497,7 +509,7 @@ impl ParseError {
         }
 
         loop {
-            if !end.token_ref().is_blank(code) {
+            if !Self::is_blank(code, end.token_ref()) {
                 break;
             }
 
@@ -536,7 +548,7 @@ impl ParseError {
                 break;
             }
 
-            if !previous.token_ref().is_blank(code) {
+            if !Self::is_blank(code, previous.token_ref()) {
                 break;
             }
 
@@ -544,7 +556,7 @@ impl ParseError {
         }
 
         while start != end {
-            if !start.token_ref().is_blank(code) {
+            if !Self::is_blank(code, start.token_ref()) {
                 break;
             }
 
@@ -575,7 +587,7 @@ impl ParseError {
                     break;
                 }
 
-                if !previous.token_ref().is_blank(code) {
+                if !Self::is_blank(code, previous.token_ref()) {
                     break;
                 }
 
@@ -587,6 +599,18 @@ impl ParseError {
         }
 
         start..end
+    }
+
+    #[inline(always)]
+    fn is_blank(code: &impl SourceCode, token_ref: &TokenRef) -> bool {
+        let Some(string) = token_ref.string(code) else {
+            return false;
+        };
+
+        string
+            .as_bytes()
+            .iter()
+            .all(|&ch| ch == b' ' || ch == b'\t' || ch == b'\r' || ch == b'\n' || ch == b'\x0c')
     }
 }
 

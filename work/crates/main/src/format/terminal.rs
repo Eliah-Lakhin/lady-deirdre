@@ -36,7 +36,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    format::PrintString,
     lexis::{SourceCode, Token, TokenBuffer},
     std::*,
 };
@@ -263,7 +262,7 @@ pub trait TerminalString: AsRef<str> {
         target
     }
 
-    fn sanitize(&self) -> PrintString<'static> {
+    fn sanitize(&self) -> String {
         let mut target = String::with_capacity(self.as_ref().len());
         let mut length = 0;
 
@@ -278,7 +277,7 @@ pub trait TerminalString: AsRef<str> {
             length += chunk.length;
         }
 
-        unsafe { PrintString::new_unchecked(Cow::from(target), length) }
+        target
     }
 }
 

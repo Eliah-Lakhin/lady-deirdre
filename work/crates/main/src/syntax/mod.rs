@@ -44,6 +44,7 @@ mod morphism;
 mod no;
 mod node;
 mod observer;
+mod parse;
 mod recovery;
 mod rule;
 mod session;
@@ -59,6 +60,7 @@ pub use crate::syntax::{
     no::NoSyntax,
     node::{AbstractNode, Node, NodeRef, NIL_NODE_REF},
     observer::{DebugObserver, Observer, VoidObserver},
+    parse::{ParseBlank, ParseNode, ParseSegment, ParseToken, ParseTree},
     recovery::{Recovery, RecoveryResult, UNLIMITED_RECOVERY},
     rule::{NodeRule, NodeSet, EMPTY_NODE_SET, NON_RULE, ROOT_RULE},
     session::SyntaxSession,

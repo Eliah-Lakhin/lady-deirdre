@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Id, Identifiable},
-    format::{PrintString, Priority, SnippetConfig, SnippetFormatter},
+    format::{Priority, SnippetConfig, SnippetFormatter},
     lexis::{SiteSpan, ToSpan, Token, TokenRef, NIL_TOKEN_REF},
     report::debug_unreachable,
     std::*,
@@ -199,7 +199,7 @@ pub struct DisplayPolyRef<'unit, U: CompilationUnit> {
 
 impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
-        let mut summary = PrintString::empty();
+        let mut summary = String::new();
         let span;
 
         match self.variant {

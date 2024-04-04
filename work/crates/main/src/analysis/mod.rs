@@ -47,9 +47,9 @@ mod scope;
 mod tasks;
 
 pub use crate::analysis::{
-    analyzer::Analyzer,
+    analyzer::{Analyzer, AnalyzerConfig},
     attribute::{Attr, AttrRef, NIL_ATTR_REF},
-    compute::{AttrContext, AttrReadGuard, Computable},
+    compute::{AttrContext, AttrReadGuard, Computable, SharedComputable},
     database::Revision,
     entry::{
         DocumentReadGuard,
@@ -69,8 +69,9 @@ pub use crate::analysis::{
         Invalidator,
         Semantics,
         VoidClassifier,
+        VoidFeature,
     },
-    manager::{TASKS_ALL, TASKS_ANALYSIS, TASKS_EXCLUSIVE, TASKS_MUTATION},
+    manager::{Handle, TASKS_ALL, TASKS_ANALYSIS, TASKS_EXCLUSIVE, TASKS_MUTATION},
     scope::{Scope, ScopeAttr},
     tasks::{
         AbstractTask,
@@ -94,12 +95,13 @@ mod tests {
             AttrContext,
             Computable,
             Feature,
+            Handle,
             MutationAccess,
             Semantics,
         },
         lexis::{SimpleToken, TokenRef},
         std::*,
-        sync::{Latch, SyncBuildHasher},
+        sync::SyncBuildHasher,
         syntax::{Key, Node, NodeRef, ParseError, SyntaxTree},
     };
 
@@ -213,17 +215,17 @@ mod tests {
 
     #[test]
     fn test_analyzer() {
-        let analyzer = Analyzer::<TestNode>::for_single_document();
+        let analyzer = Analyzer::<TestNode>::default();
 
         let id = {
-            let handle = Latch::new();
+            let handle = Handle::new();
             let mut mutation = analyzer.mutate(&handle).unwrap();
 
             mutation.add_mutable_doc("(1+ 2) (8 + 2)")
         };
 
         {
-            let handle = Latch::new();
+            let handle = Handle::new();
             let analysis = analyzer.analyze(&handle).unwrap();
 
             let doc = analysis.read_doc(id).unwrap();
@@ -243,14 +245,14 @@ mod tests {
         }
 
         {
-            let handle = Latch::new();
+            let handle = Handle::new();
             let mut mutation = analyzer.mutate(&handle).unwrap();
 
             let _ = mutation.write_to_doc(id, 4..5, "0 + 1").unwrap();
         }
 
         {
-            let handle = Latch::new();
+            let handle = Handle::new();
             let analysis = analyzer.analyze(&handle).unwrap();
 
             let doc = analysis.read_doc(id).unwrap();

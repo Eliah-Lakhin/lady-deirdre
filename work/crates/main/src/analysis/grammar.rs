@@ -119,6 +119,47 @@ pub struct Initializer<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     pub(super) records: &'a mut Repo<Record<N, S>>,
 }
 
+pub struct VoidFeature<N: Grammar>(PhantomData<N>);
+
+impl<N: Grammar> Default for VoidFeature<N> {
+    #[inline(always)]
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+impl<N: Grammar> AbstractFeature for VoidFeature<N> {
+    #[inline(always)]
+    fn attr_ref(&self) -> &AttrRef {
+        &NIL_ATTR_REF
+    }
+
+    #[inline(always)]
+    fn feature(&self, _key: Key) -> AnalysisResult<&dyn AbstractFeature> {
+        Err(AnalysisError::MissingFeature)
+    }
+
+    #[inline(always)]
+    fn feature_keys(&self) -> &'static [&'static Key] {
+        &[]
+    }
+}
+
+impl<N: Grammar> Feature for VoidFeature<N> {
+    type Node = N;
+
+    #[inline(always)]
+    fn new(_node_ref: NodeRef) -> Self {
+        Self::default()
+    }
+
+    #[inline(always)]
+    fn init<S: SyncBuildHasher>(&mut self, _initializer: &mut Initializer<Self::Node, S>) {}
+
+    #[inline(always)]
+    fn invalidate<S: SyncBuildHasher>(&self, _invalidator: &mut Invalidator<Self::Node, S>) {}
+}
+
 impl<'a, N: Grammar, S: SyncBuildHasher> Identifiable for Initializer<'a, N, S> {
     #[inline(always)]
     fn id(&self) -> Id {

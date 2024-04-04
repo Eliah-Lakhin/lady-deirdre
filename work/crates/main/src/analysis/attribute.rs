@@ -230,7 +230,7 @@ impl<C: Computable> Attr<C> {
     #[inline(always)]
     pub fn read<'a, S: SyncBuildHasher>(
         &self,
-        reader: &mut AttrContext<'a, C::Node, S>,
+        context: &mut AttrContext<'a, C::Node, S>,
     ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
         let attr_ref = self.as_ref();
 
@@ -239,7 +239,7 @@ impl<C: Computable> Attr<C> {
         }
 
         // Safety: Attributes data came from the C::compute function.
-        unsafe { attr_ref.fetch::<false, C, S>(reader) }
+        unsafe { attr_ref.fetch::<false, C, S>(context) }
     }
 }
 

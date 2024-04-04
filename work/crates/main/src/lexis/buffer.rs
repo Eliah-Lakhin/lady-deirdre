@@ -37,7 +37,7 @@
 
 use crate::{
     arena::{Entry, Id, Identifiable},
-    format::{PrintString, SnippetFormatter},
+    format::SnippetFormatter,
     lexis::{
         cursor::TokenBufferCursor,
         session::{BufferLexisSession, Cursor},
@@ -220,7 +220,7 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
         rest.take(span_length)
     }
 
-    fn substring(&self, span: impl ToSpan) -> PrintString<'_> {
+    fn substring(&self, span: impl ToSpan) -> Cow<str> {
         let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
             Some(span) => span,
@@ -229,7 +229,7 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
         let span_length = span.end - span.start;
 
         if span_length == 0 {
-            return PrintString::empty();
+            return Cow::from("");
         };
 
         let start = match self.search(span.start) {
@@ -267,9 +267,7 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
         debug_assert!(start <= end, "Invalid byte bounds.");
         debug_assert!(end <= self.text.len(), "Invalid byte bounds.");
 
-        unsafe {
-            PrintString::new_unchecked(Cow::from(self.text.get_unchecked(start..end)), span_length)
-        }
+        unsafe { Cow::from(self.text.get_unchecked(start..end)) }
     }
 
     #[inline(always)]
@@ -422,44 +420,39 @@ impl<T: Token> TokenBuffer<T> {
             return;
         }
 
-        let byte;
-        let site;
+        let mut byte = self.text.len();
+        let mut site = self.length();
 
-        match self.text.is_empty() {
-            true => {
-                byte = 0;
-                site = 0;
+        let mut lookback = 0;
+
+        while lookback < T::LOOKBACK {
+            let Some(span) = self.spans.pop() else {
+                break;
+            };
+
+            lookback += span;
+
+            if self.tokens.pop().is_none() {
+                // Safety: Underlying TokenBuffer collections represent
+                //         a sequence of Chunks.
+                unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
             }
 
-            false => {
-                if self.spans.pop().is_none() {
-                    // Safety: Underlying TokenBuffer collections represent
-                    //         a sequence of Chunks.
-                    unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
-                }
+            byte = match self.indices.pop() {
+                Some(index) => index,
+                // Safety: Underlying TokenBuffer collections represent
+                //         a sequence of Chunks.
+                None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
+            };
 
-                if self.tokens.pop().is_none() {
-                    // Safety: Underlying TokenBuffer collections represent
-                    //         a sequence of Chunks.
-                    unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
-                }
+            site = match self.sites.pop() {
+                Some(site) => site,
 
-                byte = match self.indices.pop() {
-                    Some(index) => index,
-                    // Safety: Underlying TokenBuffer collections represent
-                    //         a sequence of Chunks.
-                    None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
-                };
-
-                site = match self.sites.pop() {
-                    Some(site) => site,
-
-                    // Safety: Underlying TokenBuffer collections represent
-                    //         a sequence of Chunks.
-                    None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
-                }
+                // Safety: Underlying TokenBuffer collections represent
+                //         a sequence of Chunks.
+                None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
             }
-        };
+        }
 
         self.text.push_str(text);
         self.lines.append(text);
@@ -570,9 +563,9 @@ impl<'buffer, T: Token> Iterator for TokenBufferIter<'buffer, T> {
         let start = *self.indices.next()?;
 
         let string = match self.indices.peek() {
-            // Safety: TokenBuffer::indices are well formed.
+            // Safety: TokenBuffer::indices are well-formed.
             None => unsafe { self.text.get_unchecked(start..) },
-            // Safety: TokenBuffer::indices are well formed.
+            // Safety: TokenBuffer::indices are well-formed.
             Some(end) => unsafe { self.text.get_unchecked(start..**end) },
         };
 

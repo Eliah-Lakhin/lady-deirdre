@@ -237,7 +237,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "1:11 (10 chars): Unexpected input.\n\
+        "1:12 (9 chars): Unexpected input.\n\
         1:8: Missing Braces, Brackets, Parenthesis, ']' in Brackets."
     );
 
@@ -248,7 +248,7 @@ fn test_balance() {
     assert_eq!(document.substring(..), "([{foo})[] bXar] baz)");
     assert_eq!(
         document.debug_errors(),
-        "1:11 (11 chars): Unexpected input.\n\
+        "1:12 (10 chars): Unexpected input.\n\
         1:8: Missing Braces, Brackets, Parenthesis, ']' in Brackets."
     );
 

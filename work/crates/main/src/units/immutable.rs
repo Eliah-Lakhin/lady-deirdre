@@ -115,8 +115,7 @@ impl<T: Token> TokenBuffer<T> {
     {
         self.reset_id();
 
-        let syntax =
-            ImmutableSyntaxTree::new(self.id(), self.cursor(..), &mut VoidObserver::default());
+        let syntax = ImmutableSyntaxTree::parse_with_id(self.id(), self.cursor(..));
 
         ImmutableUnit {
             lexis: self,
@@ -148,8 +147,7 @@ impl<N: Node> ImmutableUnit<N> {
     pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         let lexis = text.into();
 
-        let syntax =
-            ImmutableSyntaxTree::new(lexis.id(), lexis.cursor(..), &mut VoidObserver::default());
+        let syntax = ImmutableSyntaxTree::parse_with_id(lexis.id(), lexis.cursor(..));
 
         Self { lexis, syntax }
     }

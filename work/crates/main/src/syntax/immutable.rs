@@ -41,7 +41,7 @@ use crate::{
     report::system_panic,
     std::*,
     syntax::{
-        observer::VoidObserver,
+        observer::{ObservableSyntaxSession, VoidObserver},
         session::ImmutableSyntaxSession,
         ErrorRef,
         Node,
@@ -116,7 +116,7 @@ impl<N: Node> Debug for ImmutableSyntaxTree<N> {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
         formatter
-            .debug_struct("SyntaxBuffer")
+            .debug_struct("SyntaxTree")
             .field("id", &self.id())
             .finish_non_exhaustive()
     }
@@ -223,7 +223,7 @@ impl<N: Node> SyntaxTree for ImmutableSyntaxTree<N> {
 impl<N: Node> ImmutableSyntaxTree<N> {
     #[inline(always)]
     pub fn parse<'code>(token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>) -> Self {
-        Self::new(Id::new(), token_cursor, &mut VoidObserver::default())
+        Self::parse_with_id(Id::new(), token_cursor)
     }
 
     #[inline(always)]
@@ -231,15 +231,38 @@ impl<N: Node> ImmutableSyntaxTree<N> {
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
         observer: &mut impl Observer<Node = N>,
     ) -> Self {
-        Self::new(Id::new(), token_cursor, observer)
+        Self::parse_with_id_and_observer(Id::new(), token_cursor, observer)
     }
 
-    pub(crate) fn new<'code, 'observer>(
+    pub(crate) fn parse_with_id<'code, 'observer>(
+        id: Id,
+        token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
+    ) -> Self {
+        let mut session = ImmutableSyntaxSession {
+            id,
+            context: Vec::new(),
+            nodes: Vec::new(),
+            errors: Vec::new(),
+            failing: false,
+            token_cursor,
+            _phantom: PhantomData,
+        };
+
+        let _ = session.descend(ROOT_RULE);
+
+        Self {
+            id,
+            nodes: session.nodes,
+            errors: session.errors,
+        }
+    }
+
+    pub(crate) fn parse_with_id_and_observer<'code, 'observer>(
         id: Id,
         token_cursor: impl TokenCursor<'code, Token = <N as Node>::Token>,
         observer: &'observer mut impl Observer<Node = N>,
     ) -> Self {
-        let mut session = ImmutableSyntaxSession {
+        let mut session = ObservableSyntaxSession {
             id,
             context: Vec::new(),
             nodes: Vec::new(),

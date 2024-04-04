@@ -289,7 +289,7 @@ use crate::{
 ///     .join("\n");
 /// assert_eq!(
 ///     errors.as_str(),
-///     "1:2 (3 chars): Unexpected input in Brackets.",
+///     "1:2 (2 chars): Unexpected input in Brackets.",
 /// );
 ///
 /// ```
@@ -713,62 +713,74 @@ impl<N: Node> MutableUnit<N> {
 
     fn update_lexis(&mut self, watch: &mut impl Watch, mut span: SiteSpan, text: &str) -> Cover<N> {
         let mut head;
-        let mut head_offset;
+        let mut lookback;
         let mut tail;
         let mut tail_offset;
 
         match span.start == span.end {
             false => {
-                head_offset = span.start;
-                head = self.tree.lookup(&mut head_offset);
+                lookback = span.start;
+                head = self.tree.lookup(&mut lookback);
                 tail_offset = span.end;
                 tail = self.tree.lookup(&mut tail_offset);
             }
 
             true => {
-                head_offset = span.start;
-                head = self.tree.lookup(&mut head_offset);
-                tail_offset = head_offset;
+                lookback = span.start;
+                head = self.tree.lookup(&mut lookback);
+                tail_offset = lookback;
                 tail = head;
             }
         }
 
         let mut input = Vec::with_capacity(3);
 
-        if head_offset > 0 {
-            debug_assert!(
-                !head.is_dangling(),
-                "Dangling reference with non-zero offset.",
-            );
+        match lookback > 0 {
+            true => {
+                debug_assert!(
+                    !head.is_dangling(),
+                    "Dangling reference with non-zero offset.",
+                );
 
-            input.push(split_left(unsafe { head.string() }, head_offset));
+                input.push(split_left(unsafe { head.string() }, lookback));
 
-            span.start -= head_offset;
-        } else {
-            let moved = match head.is_dangling() {
-                false => match unsafe { !head.is_first() } {
-                    true => {
-                        unsafe { head.back() }
-                        true
-                    }
+                span.start -= lookback;
+            }
 
-                    false => false,
-                },
-
-                true => {
+            false => {
+                if head.is_dangling() {
                     head = self.tree.last();
 
-                    !head.is_dangling()
-                }
-            };
+                    if !head.is_dangling() {
+                        let head_string = unsafe { head.string() };
+                        let head_span = unsafe { *head.span() };
 
-            if moved {
+                        input.push(head_string);
+
+                        span.start -= head_span;
+                        lookback = head_span;
+                    }
+                }
+            }
+        }
+
+        if !head.is_dangling() {
+            while lookback < <N::Token as Token>::LOOKBACK {
+                debug_assert!(!head.is_dangling(), "Dangling head.",);
+
+                if unsafe { head.is_first() } {
+                    break;
+                }
+
+                unsafe { head.back() };
+
                 let head_string = unsafe { head.string() };
                 let head_span = unsafe { *head.span() };
 
-                input.push(head_string);
+                input.insert(0, head_string);
 
                 span.start -= head_span;
+                lookback += head_span;
             }
         }
 

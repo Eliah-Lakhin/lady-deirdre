@@ -45,12 +45,13 @@ use crate::{
         AttrRef,
         Computable,
         Grammar,
+        Handle,
         Revision,
     },
     arena::Repo,
     report::debug_unreachable,
     std::*,
-    sync::{Latch, Shared, SyncBuildHasher},
+    sync::{Shared, SyncBuildHasher},
     syntax::NodeRef,
     units::Document,
 };
@@ -137,7 +138,7 @@ impl<N: Grammar> ScopeAttr<N> {
     // Safety: `attr_ref` refers ScopeAttr.
     pub(super) unsafe fn snapshot_manually<S: SyncBuildHasher>(
         attr_ref: &AttrRef,
-        handle: &Latch,
+        handle: &Handle,
         doc: &Document<N>,
         records: &Repo<Record<N, S>>,
         revision: Revision,
@@ -147,7 +148,7 @@ impl<N: Grammar> ScopeAttr<N> {
         };
 
         loop {
-            let record_read_guard = record.read();
+            let record_read_guard = record.read(&Duration::ZERO)?;
 
             if record_read_guard.verified_at >= revision {
                 if let Some(cache) = &record_read_guard.cache {
@@ -163,13 +164,13 @@ impl<N: Grammar> ScopeAttr<N> {
 
             drop(record_read_guard);
 
-            let mut record_write_guard = record.write(handle)?;
+            let mut record_write_guard = record.write(&Duration::ZERO)?;
 
-            let record_inner = record_write_guard.deref_mut();
+            let record_data = record_write_guard.deref_mut();
 
-            let Some(cache) = &mut record_inner.cache else {
+            let Some(cache) = &mut record_data.cache else {
                 let (dep, scope_ref) =
-                    Self::compute_manually(&record_inner.node_ref, handle, doc, records, revision)?;
+                    Self::compute_manually(&record_data.node_ref, handle, doc, records, revision)?;
 
                 let mut deps = CacheDeps::default();
 
@@ -177,7 +178,7 @@ impl<N: Grammar> ScopeAttr<N> {
                     let _ = deps.attrs.insert(dep);
                 }
 
-                record_inner.cache = Some(RecordCache {
+                record_data.cache = Some(RecordCache {
                     dirty: false,
                     updated_at: revision,
                     memo: Box::new(Scope {
@@ -187,12 +188,12 @@ impl<N: Grammar> ScopeAttr<N> {
                     deps: Shared::new(deps),
                 });
 
-                record_inner.verified_at = revision;
+                record_data.verified_at = revision;
 
                 return Ok(scope_ref);
             };
 
-            if record_inner.verified_at >= revision {
+            if record_data.verified_at >= revision {
                 // Safety: Upheld by the caller.
                 let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
 
@@ -209,7 +210,7 @@ impl<N: Grammar> ScopeAttr<N> {
                             break;
                         };
 
-                        let dep_record_read_guard = dep_record.read();
+                        let dep_record_read_guard = dep_record.read(&Duration::ZERO)?;
 
                         let Some(dep_cache) = &dep_record_read_guard.cache else {
                             cache.dirty = true;
@@ -221,7 +222,7 @@ impl<N: Grammar> ScopeAttr<N> {
                             break;
                         }
 
-                        if dep_cache.updated_at > record_inner.verified_at {
+                        if dep_cache.updated_at > record_data.verified_at {
                             cache.dirty = true;
                             break;
                         }
@@ -234,7 +235,7 @@ impl<N: Grammar> ScopeAttr<N> {
 
                     if !cache.dirty {
                         if deps_verified {
-                            record_inner.verified_at = revision;
+                            record_data.verified_at = revision;
 
                             // Safety: Upheld by the caller.
                             let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
@@ -257,7 +258,7 @@ impl<N: Grammar> ScopeAttr<N> {
             }
 
             if !cache.dirty {
-                record_inner.verified_at = revision;
+                record_data.verified_at = revision;
 
                 // Safety: Upheld by the caller.
                 let scope = unsafe { cache.downcast_unchecked::<Scope<N>>() };
@@ -266,7 +267,7 @@ impl<N: Grammar> ScopeAttr<N> {
             }
 
             let (dep, scope_ref) =
-                Self::compute_manually(&record_inner.node_ref, handle, doc, records, revision)?;
+                Self::compute_manually(&record_data.node_ref, handle, doc, records, revision)?;
 
             // Safety: Upheld by the caller.
             let old_scope = unsafe { cache.downcast_unchecked_mut::<Scope<N>>() };
@@ -284,7 +285,7 @@ impl<N: Grammar> ScopeAttr<N> {
 
             cache.deps = Shared::new(deps);
 
-            record_inner.verified_at = revision;
+            record_data.verified_at = revision;
 
             return Ok(scope_ref);
         }
@@ -293,7 +294,7 @@ impl<N: Grammar> ScopeAttr<N> {
     #[inline]
     fn compute_manually<S: SyncBuildHasher>(
         node_ref: &NodeRef,
-        handle: &Latch,
+        handle: &Handle,
         doc: &Document<N>,
         records: &Repo<Record<N, S>>,
         revision: Revision,

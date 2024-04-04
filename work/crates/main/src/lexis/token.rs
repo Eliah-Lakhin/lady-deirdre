@@ -127,6 +127,8 @@ pub type TokenCount = usize;
 /// scanner libraries. See [`Token::new`](crate::lexis::Token::parse) function specification for
 /// details.
 pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
+    const LOOKBACK: Length;
+
     /// Parses a single token from the source code text, and returns a Token instance that
     /// represents this token kind.
     ///
@@ -194,6 +196,7 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     ///     SourceCode,
     ///     LexisSession,
     ///     Chunk,
+    ///     Length,
     /// };
     ///
     /// // Represents integer numbers or lower case alphabetic words.
@@ -207,6 +210,8 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     /// }
     ///
     /// impl Token for NumOrWord {
+    ///     const LOOKBACK: Length = 1;
+    ///
     ///     fn parse(session: &mut impl LexisSession) -> Self {
     ///         if session.advance() == 0xFF {
     ///             return Self::Mismatch;
@@ -283,10 +288,6 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     ///             _ => None,
     ///         }
     ///     }
-    ///
-    ///     fn blanks() -> &'static TokenSet {
-    ///         &EMPTY_TOKEN_SET
-    ///     }
     /// }
     ///
     /// let buf = TokenBuffer::<NumOrWord>::from("foo123_bar");
@@ -325,9 +326,6 @@ pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
     fn rule_name(rule: TokenRule) -> Option<&'static str>;
 
     fn rule_description(rule: TokenRule, verbose: bool) -> Option<&'static str>;
-
-    //todo consider removing to reduce API complexity
-    fn blanks() -> &'static TokenSet;
 }
 
 /// A weak reference of the [Token] and its [Chunk](crate::lexis::Chunk) metadata inside the source
@@ -585,13 +583,6 @@ impl TokenRef {
         self.deref(code)
             .map(|token| token.describe(verbose))
             .flatten()
-    }
-
-    #[inline(always)]
-    pub fn is_blank<T: Token>(&self, code: &impl SourceCode<Token = T>) -> bool {
-        let blanks = T::blanks();
-
-        blanks.contains(self.rule(code))
     }
 
     /// Returns `true` if and only if referred weak Token reference belongs to specified

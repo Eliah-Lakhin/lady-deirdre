@@ -36,7 +36,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    format::{terminal::Escaped, PrintString, Style},
+    format::{terminal::Escaped, Style},
     lexis::{
         Column,
         Length,
@@ -381,21 +381,21 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
     }
 
     #[inline(always)]
-    pub fn set_caption(&mut self, caption: impl Into<PrintString<'a>>) -> &mut Self {
+    pub fn set_caption(&mut self, caption: impl Into<Cow<'a, str>>) -> &mut Self {
         let caption = caption.into();
 
-        if caption.as_ref().contains('\n') {
+        if caption.contains('\n') {
             panic!("Multiline captions not supported.");
         }
 
-        self.caption = caption;
+        self.caption = PrintString::from_cow(caption);
 
         self
     }
 
     #[inline(always)]
-    pub fn set_summary(&mut self, summary: impl Into<PrintString<'a>>) -> &mut Self {
-        self.summary = summary.into();
+    pub fn set_summary(&mut self, summary: impl Into<Cow<'a, str>>) -> &mut Self {
+        self.summary = PrintString::from_cow(summary.into());
 
         self
     }
@@ -411,11 +411,11 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         &mut self,
         span: impl ToSpan,
         priority: Priority,
-        message: impl Into<PrintString<'a>>,
+        message: impl Into<Cow<'a, str>>,
     ) -> &mut Self {
         let message = message.into();
 
-        if message.as_ref().contains('\n') {
+        if message.contains('\n') {
             panic!("Multiline annotation messages not supported.");
         }
 
@@ -428,7 +428,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self.annotations.push(Annotation {
             span,
             priority,
-            message,
+            message: PrintString::from_cow(message),
         });
 
         self
@@ -455,7 +455,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
         let caption = match self.config.caption {
             false => StyleString::empty(),
-            true => StyleString::from_str(self.config, self.caption.as_ref()),
+            true => StyleString::from_str(self.config, self.caption.as_str()),
         };
 
         let summary = match self.config.summary {
@@ -465,7 +465,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                 let mut summary = Vec::with_capacity(4);
 
                 if !self.summary.is_empty() {
-                    for summary_line in self.summary.as_ref().lines() {
+                    for summary_line in self.summary.as_str().lines() {
                         summary.push(StyleString::from_str(self.config, summary_line));
                     }
                 }
@@ -477,8 +477,8 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         if self.config.draw_frame && caption.length > 0 {
             code_length = code_length.max(
                 caption.length
-                    + self.config.caption_start().length()
-                    + self.config.caption_end().length(),
+                    + self.config.caption_start().length
+                    + self.config.caption_end().length,
             );
         }
 
@@ -489,13 +489,13 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         }
 
         let numbers_length = (cover.end.line.checked_ilog10().unwrap_or(0) as usize + 1)
-            .max(self.config.etc().length());
+            .max(self.config.etc().length);
 
         let mut margin: usize = self.config.margin();
 
         if self.config.draw_frame {
             margin = margin
-                .checked_sub(2 + self.config.box_vertical().length() * 2)
+                .checked_sub(2 + self.config.box_vertical().length * 2)
                 .unwrap_or_default();
         }
 
@@ -1056,7 +1056,7 @@ impl ScanLine {
                         string.style = config.annotation_style(priority).no_emphasis();
                         string.write_sanitized(&drawing);
 
-                        cursor = offset + drawing.length();
+                        cursor = offset + drawing.length;
                     }
 
                     Segment::End(message) => {
@@ -1092,7 +1092,7 @@ impl<'a> Annotation<'a> {
         Message {
             offset,
             priority: self.priority,
-            string: StyleString::from_str(config, self.message.as_ref()),
+            string: StyleString::from_str(config, self.message.as_str()),
         }
     }
 }
@@ -1109,21 +1109,21 @@ impl Message {
     fn span_up_right(&self, config: &SnippetConfig) -> SiteSpan {
         let drawing = config.arrow_up_right();
 
-        self.offset..(self.offset + drawing.length() + self.string.length)
+        self.offset..(self.offset + drawing.length + self.string.length)
     }
 
     #[inline(always)]
     fn span_down_right(&self, config: &SnippetConfig) -> SiteSpan {
         let drawing = config.arrow_down_right();
 
-        self.offset..(self.offset + drawing.length() + self.string.length)
+        self.offset..(self.offset + drawing.length + self.string.length)
     }
 
     #[inline(always)]
     fn span_down_middle(config: &SnippetConfig, offset: Column) -> SiteSpan {
         let drawing = config.arrow_down_middle();
 
-        offset..(offset + drawing.length())
+        offset..(offset + drawing.length)
     }
 }
 
@@ -1204,7 +1204,7 @@ impl StyleString {
     }
 
     fn with_header_etc(self, config: &SnippetConfig, alignment: Length) -> Self {
-        self.with_header(config, alignment, config.etc().as_ref())
+        self.with_header(config, alignment, config.etc().as_str())
     }
 
     fn with_header_number(self, config: &SnippetConfig, alignment: Length, number: Line) -> Self {
@@ -1236,13 +1236,13 @@ impl StyleString {
         let has_caption = caption.length > 0;
 
         if has_caption {
-            alignment -= config.caption_start().length();
+            alignment -= config.caption_start().length;
             self.write_sanitized(config.caption_start());
 
             alignment -= caption.length;
             self.append(caption);
 
-            alignment -= config.caption_end().length();
+            alignment -= config.caption_end().length;
             self.write_sanitized(config.caption_end());
         }
 
@@ -1404,8 +1404,8 @@ impl StyleString {
     fn write_sanitized(&mut self, string: &PrintString) {
         self.submit_style();
 
-        self.text.push_str(string.as_ref());
-        self.length += string.length();
+        self.text.push_str(string.as_str());
+        self.length += string.length;
     }
 
     #[inline(always)]
@@ -1417,8 +1417,8 @@ impl StyleString {
         self.submit_style();
 
         while count > 0 {
-            self.text.push_str(string.as_ref());
-            self.length += string.length();
+            self.text.push_str(string.as_str());
+            self.length += string.length;
             count -= 1;
         }
     }
@@ -1474,6 +1474,86 @@ impl StyleString {
         if self.length == 0 {
             self.start_style = self.end_style;
         }
+    }
+}
+
+struct PrintString<'a> {
+    string: Cow<'a, str>,
+    length: Length,
+}
+
+impl<'a> PrintString<'a> {
+    #[inline(always)]
+    const fn empty() -> Self {
+        Self {
+            string: Cow::Borrowed(""),
+            length: 0,
+        }
+    }
+
+    #[inline(always)]
+    fn owned(string: String) -> Self {
+        Self {
+            length: string.chars().count(),
+            string: Cow::from(string),
+        }
+    }
+
+    #[inline(always)]
+    const fn borrowed(string: &'a str) -> Self {
+        Self {
+            length: Self::length_of(string.as_bytes()),
+            string: Cow::Borrowed(string),
+        }
+    }
+
+    #[inline(always)]
+    fn from_cow(string: Cow<'a, str>) -> Self {
+        Self {
+            length: string.chars().count(),
+            string,
+        }
+    }
+
+    #[inline(always)]
+    fn as_str(&self) -> &str {
+        self.string.as_ref()
+    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.string.is_empty()
+    }
+
+    #[inline(always)]
+    const fn length_of(bytes: &[u8]) -> Length {
+        const PAT_1: u8 = 0b10000000;
+        const PAT_3: u8 = 0b11100000;
+        const PAT_4: u8 = 0b11110000;
+
+        let mut index = 0;
+        let mut length = 0;
+
+        while index < bytes.len() {
+            length += 1;
+
+            let first = bytes[index];
+
+            if first & PAT_1 == 0 {
+                index += 1;
+                continue;
+            }
+
+            let prefix = first & PAT_4;
+
+            match prefix {
+                PAT_4 => index += 4,
+                PAT_3 => index += 3,
+                _ => index += 2,
+            }
+        }
+
+        length
     }
 }
 

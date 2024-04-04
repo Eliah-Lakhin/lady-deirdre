@@ -130,6 +130,7 @@ pub(crate) use std::{
     borrow::{Borrow, Cow},
     boxed::Box,
     cell::UnsafeCell,
+    cfg,
     clone::Clone,
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     collections::{
@@ -216,6 +217,7 @@ pub(crate) use std::{
     },
     thread::{available_parallelism, panicking, spawn},
     thread_local,
+    time::{Duration, Instant},
     todo,
     unimplemented,
     unreachable,

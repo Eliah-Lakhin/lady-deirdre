@@ -47,6 +47,7 @@ use syn::{
     Data,
     DeriveInput,
     Error,
+    Expr,
     File,
     Generics,
     Result,
@@ -83,6 +84,7 @@ pub(super) type Alphabet = Set<char>;
 pub struct TokenInput {
     pub(super) ident: Ident,
     pub(super) generics: Generics,
+    pub(super) lookback: Option<Expr>,
     pub(super) eoi: Ident,
     pub(super) mismatch: Ident,
     pub(super) automata: TokenAutomata,
@@ -141,6 +143,7 @@ impl TryFrom<DeriveInput> for TokenInput {
         }
 
         let mut inline_map = InlineMap::empty();
+        let mut lookback = None;
         let mut opt = None;
         let mut dump = Dump::None;
         let mut repr = false;
@@ -208,6 +211,14 @@ impl TryFrom<DeriveInput> for TokenInput {
                     regex.inline(&inline_map, &variant_map)?;
 
                     let _ = inline_map.insert(name, regex);
+                }
+
+                "lookback" => {
+                    if lookback.is_some() {
+                        return Err(error!(span, "Duplicate Lookback attribute.",));
+                    }
+
+                    lookback = Some(attr.parse_args::<Expr>()?);
                 }
 
                 "opt" => {
@@ -408,6 +419,7 @@ impl TryFrom<DeriveInput> for TokenInput {
         let mut result = Self {
             ident,
             generics,
+            lookback,
             eoi,
             mismatch,
             automata,

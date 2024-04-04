@@ -376,7 +376,8 @@ pub trait Node: AbstractNode + Sized {
     fn debug(text: impl AsRef<str>) {
         let tokens = TokenBuffer::<Self::Token>::from(text);
 
-        ImmutableSyntaxTree::<Self>::parse_with_observer(
+        ImmutableSyntaxTree::<Self>::parse_with_id_and_observer(
+            tokens.id(),
             tokens.cursor(..),
             &mut DebugObserver::default(),
         );

@@ -73,13 +73,13 @@
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    format::PrintString,
     lexis::Length,
     report::{debug_unreachable, system_panic},
     std::*,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[non_exhaustive]
 pub struct PrettyPrintConfig {
     pub margin: u16,
     pub inline: u16,

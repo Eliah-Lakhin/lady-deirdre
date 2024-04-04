@@ -53,6 +53,13 @@ unsafe impl Send for Latch {}
 // Safety: Latch's data access is guarded by the atomic operations.
 unsafe impl Sync for Latch {}
 
+impl Default for Latch {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Debug for Latch {
     #[inline(always)]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
@@ -123,7 +130,6 @@ impl Latch {
         Self { data }
     }
 
-    //todo consider renaming
     pub fn get(&self) -> bool {
         // Safety: Latch owns a pointer to valid data leaked from the Box.
         let state = unsafe { self.data.as_ref() };
@@ -133,7 +139,6 @@ impl Latch {
         value & CHECK_MASK == CHECK_MASK
     }
 
-    //todo consider renaming
     pub fn get_relaxed(&self) -> bool {
         // Safety: Latch owns a pointer to valid data leaked from the Box.
         let state = unsafe { self.data.as_ref() };
@@ -143,7 +148,6 @@ impl Latch {
         value & CHECK_MASK == CHECK_MASK
     }
 
-    //todo consider renaming
     pub fn set(&self) {
         // Safety: Latch owns a pointer to valid data leaked from the Box.
         let state = unsafe { self.data.as_ref() };

@@ -399,7 +399,7 @@ impl<N: Node> Tree<N> {
             return ChildCursor::dangling();
         }
 
-        debug_assert!(self.height > 0, "An attempt to search in empty Tree.");
+        debug_assert!(self.height > 0, "An attempt to search in the empty Tree.");
 
         let mut item = self.root;
         let mut depth = self.height;
