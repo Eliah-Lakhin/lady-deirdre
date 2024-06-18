@@ -1,58 +1,83 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{std::*, syntax::AbstractNode};
+use std::{
+    fmt::{Debug, Display, Formatter},
+    iter::FusedIterator,
+    marker::PhantomData,
+};
 
-/// A static identifier of arbitrary syntax grammar rule.
+use crate::syntax::AbstractNode;
+
+/// A numeric type that denotes a syntax parsing rule within the programming
+/// language grammar.
 ///
-/// The exact values of this type are uniquely specified by the particular
-/// [`syntax parsing algorithm`](crate::syntax::Node::parse) except the [ROOT_RULE] that is always
-/// specifies grammar's an entry rule.
+/// See the [Parse rules](crate::syntax::SyntaxSession#parse-rules) section of
+/// the parsing process specification for details.
 pub type NodeRule = u16;
 
+/// A static set of the syntax node rules without entries.
+///
+/// The value of this static equals to the [NodeSet::empty] value.
 pub static EMPTY_NODE_SET: NodeSet = NodeSet::empty();
 
-/// A syntax grammar entry rule.
+/// Denotes a syntax parse rule of the root node of the syntax tree.
 ///
-/// See [`syntax parser algorithm specification`](crate::syntax::Node::parse) for details.
+/// See the [Parse rules](crate::syntax::SyntaxSession#parse-rules) section of
+/// the parsing process specification for details.
 pub const ROOT_RULE: NodeRule = 0;
 
+/// Denotes an invalid syntax parse rule.
+///
+/// This number does not belong to any syntax parse rule of any
+/// programming language.
+///
+/// See the [Parse rules](crate::syntax::SyntaxSession#parse-rules) section of
+/// the parsing process specification for details.
 pub const NON_RULE: NodeRule = NodeRule::MAX;
 
+/// A set of syntax parse [rules](NodeRule) of fixed size.
+///
+/// The set stores all entries in place, and the set object has a fixed size.
+///
+/// The maximum number of rules the object could store is [NodeSet::LIMIT].
+///
+/// Most methods of this object are the const functions. Some of them take up to
+/// `O(LIMIT)` and `O(LIMIT^2)` time to perform.
+///
+/// The object is assumed to be constructed in a const context as a static value
+/// upfront to reduce the runtime overhead.
 #[repr(transparent)]
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct NodeSet {
@@ -61,7 +86,7 @@ pub struct NodeSet {
 
 impl Debug for NodeSet {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         let mut debug_list = formatter.debug_list();
 
         let mut entry = 0;
@@ -106,8 +131,15 @@ impl FromIterator<NodeRule> for NodeSet {
 }
 
 impl NodeSet {
+    /// The maximum number of entries this set can address.
+    ///
+    /// This number may be increased in future minor versions of Lady Deirdre.
     pub const LIMIT: usize = 16;
 
+    /// Creates a node set without entries.
+    ///
+    /// If you need just a static empty node set, use the predefined
+    /// [EMPTY_NODE_SET] static.
     #[inline(always)]
     pub const fn empty() -> Self {
         Self {
@@ -115,11 +147,20 @@ impl NodeSet {
         }
     }
 
+    /// Constructs a node set from the slice of the node rules.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the `rules` parameter has more than the [LIMIT](Self::LIMIT)
+    /// number of unique node rules.
+    ///
+    /// Panics if any value within the `rules` slice is a [NON_RULE].
     #[inline(always)]
     pub const fn new(rules: &[NodeRule]) -> Self {
         Self::empty().include_all(rules)
     }
 
+    /// Returns true if the node set contains the specified node `rule`.
     #[inline(always)]
     pub const fn contains(&self, rule: NodeRule) -> bool {
         if rule == NON_RULE {
@@ -145,6 +186,15 @@ impl NodeSet {
         false
     }
 
+    /// Consumes this NodeSet instance and returns a new node set that
+    /// includes the `rule` node rule.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the `rule` argument is a [NON_RULE].
+    ///
+    /// Panics if the node set already has a [LIMIT](Self::LIMIT) number of
+    /// unique entries, and the `rule` argument is a new entry within this set.
     #[inline(always)]
     pub const fn include(mut self, mut rule: NodeRule) -> Self {
         if rule == NON_RULE {
@@ -182,6 +232,15 @@ impl NodeSet {
         panic!("Too many rules in the rule set.");
     }
 
+    /// Consumes this NodeSet instance and returns a new node set that
+    /// includes all node rules from the `rules` slice.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if any rule number within the slice argument is a [NON_RULE].
+    ///
+    /// Panics if the total number if unique entries within this node set and
+    /// the rules from the `rules` slice exceeds [LIMIT](Self::LIMIT).
     #[inline(always)]
     pub const fn include_all(mut self, rules: &[NodeRule]) -> Self {
         let mut slice_index = 0;
@@ -194,6 +253,8 @@ impl NodeSet {
         self
     }
 
+    /// Consumes this NodeSet instance and returns a new node set without
+    /// the specified `rule` node rule.
     #[inline(always)]
     pub const fn exclude(mut self, rule: NodeRule) -> Self {
         if rule == NON_RULE {
@@ -236,6 +297,8 @@ impl NodeSet {
         self
     }
 
+    /// Consumes this NodeSet instance and returns a new node set without
+    /// the entries specified in the `rules` node rule slice.
     #[inline(always)]
     pub const fn exclude_all(mut self, rules: &[NodeRule]) -> Self {
         let mut slice_index = 0;
@@ -248,13 +311,15 @@ impl NodeSet {
         self
     }
 
+    /// Returns true if the NodeSet has no entries.
     #[inline(always)]
     pub const fn is_empty(&self) -> bool {
         self.vector[0] == NON_RULE
     }
 
+    /// Returns the number of entries in this NodeSet instance.
     #[inline(always)]
-    pub const fn length(&self) -> usize {
+    pub const fn len(&self) -> usize {
         let mut length = 0;
 
         while length < Self::LIMIT {
@@ -268,15 +333,30 @@ impl NodeSet {
         length
     }
 
+    /// Returns an object that displays all entries within this node set.
+    ///
+    /// The `N` generic parameter specifies the syntax grammar of
+    /// the programming language (see [Node](crate::syntax::Node)).
+    ///
+    /// The underlying displaying algorithm uses
+    /// the [rule_name](AbstractNode::rule_name) function to determine
+    /// the rules' display names.
     #[inline(always)]
-    pub fn display<N: AbstractNode>(&self) -> impl Display + '_ {
+    pub fn display<N: AbstractNode>(&self) -> impl Debug + Display + '_ {
         pub struct DisplayNodeSet<'set, N> {
             set: &'set NodeSet,
             _token: PhantomData<N>,
         }
 
+        impl<'set, N: AbstractNode> Debug for DisplayNodeSet<'set, N> {
+            #[inline(always)]
+            fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+                Display::fmt(self, formatter)
+            }
+        }
+
         impl<'set, N: AbstractNode> Display for DisplayNodeSet<'set, N> {
-            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 let mut vector = Vec::with_capacity(NodeSet::LIMIT);
 
                 for rule in self.set {

@@ -1,39 +1,41 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    fmt::{Debug, Display, Formatter},
+    mem::{replace, take, transmute_copy},
+};
 
 use crate::{
     arena::{Entry, EntryIndex, Id, Identifiable},
@@ -51,248 +53,42 @@ use crate::{
         TokenCount,
         CHUNK_SIZE,
     },
-    report::{debug_assert, debug_assert_eq, debug_unreachable, system_panic},
-    std::*,
-    syntax::{is_void_syntax, NoSyntax, Node, NodeRef, SyntaxTree, NON_RULE, ROOT_RULE},
+    report::{ld_assert, ld_assert_eq, ld_unreachable, system_panic},
+    syntax::{
+        is_void_syntax,
+        Node,
+        NodeRef,
+        SyntaxError,
+        SyntaxTree,
+        VoidSyntax,
+        NON_RULE,
+        ROOT_RULE,
+    },
     units::{
         mutable::{
             cursor::MutableCursor,
             iters::{MutableCharIter, MutableErrorIter, MutableNodeIter},
             lexis::{MutableLexisSession, SessionOutput},
             syntax::MutableSyntaxSession,
-            watch::VoidWatch,
+            watcher::VoidWatcher,
         },
         storage::{Cache, ChildCursor, Tree, TreeRefs},
         CompilationUnit,
-        Watch,
+        Watcher,
     },
 };
 
-/// An incrementally managed compilation unit.
+/// A compilation unit with reparse capabilities.
 ///
-/// Document is a storage of a compilation unit(a source code of the file) with incremental update
-/// operations. Document object stores the source code, the lexical structure of the code, and the
-/// syntax structure of the code. This is the main entry point of the crate API.
+/// This serves as an inner component
+/// of the mutable [Document](crate::units::Document).
 ///
-/// Document is responsible to load the source code, to parse the source code grammar and to
-/// construct lexical and syntax structure of the code, and to perform update operations in
-/// incremental way keeping the code, lexis and syntax structures in sync with the changes.
+/// MutableUnit implements the same set of interfaces and provides the same
+/// set of features, including the ability to edit the source code after
+/// creation.
 ///
-/// Depending on the end compilation system needs there could be several instances of this object
-/// per each compilation unit(per each file of the file structure of compiled project).
-///
-/// ## Instantiation.
-///
-/// An API user specifies Document grammar using generic type parameter `N` of the
-/// [Node](crate::syntax::Node) type.
-///
-/// To opt out syntax analysis stage(e.g. if the syntax grammar unknown or not needed in particular
-/// case), an API user uses special implementation of the Node called
-/// [`NoSyntax<T: Token>`](crate::syntax::NoSyntax) that enforces Document to skip syntax analysis
-/// and the Syntax Tree construction, but persists lexical structure only.
-///
-/// There are three ways to initially load the source code text into the Document:
-///  1. By loading from the relatively small string snippet.
-///     ```rust
-///      use lady_deirdre::{units::Document, syntax::SimpleNode};
-///
-///      let _ = Document::<SimpleNode>::from("test string");
-///     ```
-///  2. By initializing an empty Document, and using [write](Document::write) operation on
-///     the instance.
-///     ```rust
-///      use lady_deirdre::{units::Document, syntax::SimpleNode};
-///
-///      let mut doc = Document::<SimpleNode>::default();
-///      doc.write(.., "test string");
-///     ```
-///  3. And using dedicated [TokenBuffer](crate::lexis::Tokens) instance to preload large file.
-///     ```rust
-///      use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::TokenBuffer};
-///
-///      let mut buffer = TokenBuffer::default();
-///      buffer.append("First line.\n");
-///      buffer.append("Second line.\nThird line.\n");
-///
-///      let _doc = buffer.into_document::<SimpleNode>();
-///     ```
-///
-/// As the TokenBuffer provides functionality for fast line-by-line lexis pre-parsing the last
-/// option is the most preferable(but the most verbose) way for production use.
-///
-/// ## Updating.
-///
-/// An API user performs write operations into the Document using [write](Document::write)
-/// function specifying a [Span](crate::lexis::ToSpan) of the code to rewrite(possibly empty span),
-/// and a string to insert in place of this spanned test. Document performs update operations in
-/// time relative to the user changes, so it is totally fine to call this function on every end-user
-/// input action even on large documents.
-///
-/// ```rust
-/// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::SourceCode};
-///
-/// let mut doc = Document::<SimpleNode>::from("test string");
-///
-/// // Writing another string in the begin of the Document.
-/// doc.write(0..0, "Foo ");
-/// assert_eq!(doc.substring(..), "Foo test string");
-///
-/// // Removing "test " substring.
-/// doc.write(4..9, "");
-/// assert_eq!(doc.substring(..), "Foo string");
-///
-/// // Surrounding substring "str" with parenthesis.
-/// doc.write(4..7, "(str)");
-/// assert_eq!(doc.substring(..), "Foo (str)ing");
-/// ```
-///
-/// There are several ways to specify this Span. In particular, an API use can utilize simple ranges
-/// of character absolute indices([Sites](crate::lexis::Site) as in the example above), ranges of
-/// the column-row [Positions](crate::lexis::Position), or ranges of the
-/// [token weak references](crate::lexis::TokenRef).
-///
-/// ## Inspecting Lexis Structure.
-///
-/// Document implements the [SourceCode](crate::lexis::SourceCode) trait and the
-/// [CodeContent](crate::lexis::CodeContent) extension trait that provide lexical structure
-/// inspection features.
-///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     lexis::{SourceCode, SimpleToken},
-///     syntax::SimpleNode,
-/// };
-///
-/// let doc = Document::<SimpleNode>::from("foo bar baz");
-///
-/// // A number of characters in the Document.
-/// assert_eq!(doc.length(), 11);
-///
-/// // A number of tokens in the Document(including whitespace tokens).
-/// assert_eq!(doc.tokens(), 5);
-///
-/// // A substring from the Document source code.
-/// assert_eq!(doc.substring(1..6), "oo ba");
-///
-/// // A set of lengths of the tokens that "touch" specified span.
-/// assert_eq!(doc.chunks(5..7).map(|chunk| chunk.length).collect::<Vec<_>>(), vec![3, 1]);
-///
-/// // A set of strings of the tokens that "touch" specified span.
-/// assert_eq!(doc.chunks(5..7).map(|chunk| chunk.string).collect::<Vec<_>>(), vec!["bar", " "]);
-/// ```
-///
-/// An API users utilizes lower-level [TokenCursor](crate::lexis::TokenCursor) API to traverse and
-/// to inspect individual tokens metadata.
-///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     lexis::{SourceCode, TokenCursor, SimpleToken},
-///     syntax::SimpleNode
-/// };
-///
-/// let mut doc = Document::<SimpleNode>::from("foo bar baz");
-///
-/// // A generic "iterator" over the tokens at the specified Site(token "bar").
-/// let mut cursor = doc.cursor(5..5);
-///
-/// // A reference of the first token "bar" from this cursor.
-/// let token_ref = cursor.token_ref(0);
-///
-/// // "bar" is of "Identifier" type.
-/// assert_eq!(token_ref.deref(&doc), Some(SimpleToken::Identifier));
-/// assert_eq!(token_ref.string(&doc), Some("bar"));
-///
-/// // Write something at the beginning of the Document.
-/// doc.write(0..0, "123");
-/// assert_eq!(doc.substring(..), "123foo bar baz");
-///
-/// // TokenRef is still dereferencable after the Document changes, because the token was not
-/// // affected by these changes.
-/// assert_eq!(token_ref.string(&doc), Some("bar"));
-///
-/// // And we can write something at the token start Site too.
-/// let token_start_site_ref = token_ref.site_ref();
-/// doc.write(token_start_site_ref..token_start_site_ref, "X");
-/// assert_eq!(doc.substring(..), "123foo Xbar baz");
-///
-/// // However, the TokenRef is no longer valid because the token has been rewritten after
-/// // the previous write action.
-/// assert_eq!(token_ref.string(&doc), None);
-/// ```
-///
-/// ## Inspecting Syntax Structure.
-///
-/// Document implements the [SyntaxTree](crate::syntax::SyntaxTree) trait that provides
-/// Syntax Tree and Syntax Errors access features.
-///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     syntax::{SimpleNode, SyntaxTree, NodeRef},
-///     lexis::{SourceCode, ToSpan},
-/// };
-///
-/// let mut doc = Document::<SimpleNode>::from("foo ([bar] {baz})");
-///
-/// // Returns a weak reference to the root os the SyntaxTree.
-/// // It is OK to copy this reference and reuse the copy many times.
-/// let root_ref = doc.root_node_ref();
-///
-/// // A simple parens structure formatter that traverses the Syntax Tree.
-/// fn fmt(doc: &Document<SimpleNode>, node_ref: &NodeRef) -> String {
-///     let node = match node_ref.deref(doc) {
-///         Some(node) => node,
-///         // If the NodeRef is invalid it means that the syntax parser failed
-///         // to parse particular part of the source code due to syntax errors.
-///         None => return format!("?"),
-///     };
-///
-///     let children = match node {
-///         SimpleNode::Root { inner } => inner,
-///         SimpleNode::Braces { inner } => inner,
-///         SimpleNode::Brackets { inner } => inner,
-///         SimpleNode::Parenthesis { inner } => inner,
-///     };
-///
-///     let children_fmt = children
-///         .iter()
-///         .map(|node_ref| fmt(doc, node_ref))
-///         .collect::<Vec<_>>().join(", ");
-///
-///     match node {
-///         SimpleNode::Root { .. } => children_fmt,
-///         SimpleNode::Braces { .. } => format!("{{{}}}", children_fmt),
-///         SimpleNode::Brackets { .. } => format!("[{}]", children_fmt),
-///         SimpleNode::Parenthesis { .. } => format!("({})", children_fmt),
-///     }
-/// }
-///
-/// assert_eq!(fmt(&doc, &root_ref).as_str(), "([], {})");
-///
-/// // Writing another bracket snippet at the begin of the Document.
-/// doc.write(0..0, "[{x} [y] (z)]");
-/// assert_eq!(doc.substring(..), "[{x} [y] (z)]foo ([bar] {baz})");
-/// assert_eq!(fmt(&doc, &root_ref).as_str(), "[{}, [], ()], ([], {})");
-///
-/// // The Document is resistant to the syntax errors preserving original Tree structure.
-/// // Removing the second char "{".
-/// doc.write(1..2, "");
-/// assert_eq!(doc.substring(..), "[x} [y] (z)]foo ([bar] {baz})");
-/// assert_eq!(fmt(&doc, &root_ref).as_str(), "[[], ()], ([], {})");
-///
-/// // Collecting syntax errors.
-/// let errors = doc.errors()
-///     .map(|error| error.display(&doc).to_string())
-///     .collect::<Vec<_>>()
-///     .join("\n");
-/// assert_eq!(
-///     errors.as_str(),
-///     "1:2 (2 chars): Unexpected input in Brackets.",
-/// );
-///
-/// ```
+/// You are encouraged to use this object if you don’t need a uniform
+/// mutable and immutable API of the Document.
 pub struct MutableUnit<N: Node> {
     root: Option<Cache>,
     tree: Tree<N>,
@@ -322,7 +118,7 @@ impl<N: Node> Drop for MutableUnit<N> {
 
 impl<N: Node> Debug for MutableUnit<N> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         formatter
             .debug_struct("MutableUnit")
             .field("id", &self.id())
@@ -333,7 +129,7 @@ impl<N: Node> Debug for MutableUnit<N> {
 
 impl<N: Node> Display for MutableUnit<N> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         formatter
             .snippet(self)
             .set_caption(format!("MutableUnit({})", self.id()))
@@ -374,7 +170,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     fn get_token(&self, chunk_entry: &Entry) -> Option<Self::Token> {
         let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
-        debug_assert!(
+        ld_assert!(
             !chunk_cursor.is_dangling(),
             "Dangling chunk ref in the TreeRefs repository."
         );
@@ -393,7 +189,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     fn get_string(&self, chunk_entry: &Entry) -> Option<&str> {
         let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
-        debug_assert!(
+        ld_assert!(
             !chunk_cursor.is_dangling(),
             "Dangling chunk ref in the TreeRefs repository."
         );
@@ -405,7 +201,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
     fn get_length(&self, chunk_entry: &Entry) -> Option<Length> {
         let chunk_cursor = self.refs.chunks.get(chunk_entry)?;
 
-        debug_assert!(
+        ld_assert!(
             !chunk_cursor.is_dangling(),
             "Dangling chunk ref in the References repository."
         );
@@ -426,7 +222,7 @@ impl<N: Node> SourceCode for MutableUnit<N> {
 
     #[inline(always)]
     fn length(&self) -> Length {
-        debug_assert_eq!(
+        ld_assert_eq!(
             self.tree.code_length(),
             self.lines.code_length(),
             "LineIndex and Tree resynchronization.",
@@ -451,12 +247,12 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
 
     type NodeIterator<'tree> = MutableNodeIter<'tree, N>;
 
-    type ErrorIterator<'tree> = MutableErrorIter<'tree, N>;
+    type ErrorIterator<'tree> = MutableErrorIter<'tree>;
 
     #[inline(always)]
     fn root_node_ref(&self) -> NodeRef {
         let Some(root) = &self.root else {
-            unsafe { debug_unreachable!("Root cache unset.") };
+            unsafe { ld_unreachable!("Root cache unset.") };
         };
 
         #[cfg(debug_assertions)]
@@ -514,7 +310,7 @@ impl<N: Node> SyntaxTree for MutableUnit<N> {
     }
 
     #[inline(always)]
-    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+    fn get_error(&self, entry: &Entry) -> Option<&SyntaxError> {
         self.refs.errors.get(entry)
     }
 }
@@ -582,6 +378,9 @@ impl<N: Node> CompilationUnit for MutableUnit<N> {
 }
 
 impl<N: Node> MutableUnit<N> {
+    /// Creates a MutableUnit from the source code `text`.
+    ///
+    /// The parameter could be a [TokenBuffer] or just an arbitrary string.
     #[inline(always)]
     pub fn new(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         let mut buffer = text.into();
@@ -615,61 +414,33 @@ impl<N: Node> MutableUnit<N> {
         }
     }
 
-    /// Replaces a spanned substring of the source code with provided `text` string, and re-parses
-    /// Document's lexical and syntax structure relatively to these changes.
+    /// Writes user-input edit into this unit.
     ///
-    /// Operation performance complexity is relative to the `span` and the `text` size. As such it
-    /// is fine to call this function frequently for relatively small changes even for the Documents
-    /// that hold large source codes. For example, it is fine to call this function on every end
-    /// user keyboard typing actions.
+    /// See [Document::write](crate::units::Document::write) for details.
     ///
-    /// The amount of original lexis and syntax structure of the Document to be re-created after
-    /// this operation completion is not specified. The implementation tends to re-use as much
-    /// data from the original structures as possible. However, some weak references into the
-    /// Document [tokens](crate::lexis::TokenRef), [sites](crate::lexis::SiteRef),
-    /// [nodes](crate::syntax::NodeRef), [clusters](crate::syntax::Cluster) and
-    /// [errors](crate::syntax::ErrorRef) may obsolete.  
+    /// **Panic**
     ///
-    /// There are many ways to specify the `span` of the source code. The most trivial way is
-    /// to use a [Range](std::ops::Range) of characters absolute indices(`120..128`). Another way
-    /// is to specify a range of the column-row [positions](crate::lexis::Position):
-    /// `Position::new(10, 20)..Position::new(10..28)`. For details, see
-    /// [ToSpan](crate::lexis::ToSpan) documentation.
-    ///
-    /// Note, that the Span range could be an empty range. In this case the `span` object will
-    /// specify just a cursor inside the code, and the Write operation becomes an Insertion
-    /// operation of specified `text`. If `text` is an empty string, Write operation becomes
-    /// a Deletion operation.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{units::Document, lexis::SourceCode, syntax::SimpleNode};
-    ///
-    /// let mut doc = Document::<SimpleNode>::from("foo bar baz");
-    ///
-    /// doc.write(4..7, "BaR");
-    ///
-    /// assert_eq!(doc.substring(..), "foo BaR baz");
-    /// ```
-    ///
-    /// Write operation will panic if the `span` cannot be turned into a
-    /// [SiteSpan](crate::lexis::SiteSpan). In other words, if the Span is not a valid span for this
-    /// Document instance. This is practically impossible when an API user uses arbitrary numeric
-    /// values such as ranges of character absolute indices or ranges of Positions, but it could
-    /// happen, for example, if the user provides a range of [SiteRef](crate::lexis::SiteRef).
-    /// Because Site weak references could obsolete. In this case an API user could preliminary
-    /// check span's validity using [is_valid_span](crate::lexis::ToSpan::is_valid_span) function.
-    ///
+    /// Panics if the specified span is not valid for this unit.
     #[inline(always)]
     pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) {
-        self.write_and_watch(span, text, &mut VoidWatch)
+        self.write_and_watch(span, text, &mut VoidWatcher)
     }
 
+    /// Writes user-input edit into this unit, and collects all syntax tree
+    /// components that have been affected by this edit.
+    ///
+    /// See [Document::write_and_watch](crate::units::Document::write_and_watch)
+    /// for details.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the specified span is not valid for this unit.
     #[inline(never)]
     pub fn write_and_watch(
         &mut self,
         span: impl ToSpan,
         text: impl AsRef<str>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
     ) {
         let span = match span.to_site_span(self) {
             None => panic!("Specified span is invalid."),
@@ -685,9 +456,9 @@ impl<N: Node> MutableUnit<N> {
 
         unsafe { self.lines.write_unchecked(span.clone(), text) };
 
-        let cover = self.update_lexis(watch, span, text);
+        let cover = self.update_lexis(watcher, span, text);
 
-        debug_assert_eq!(
+        ld_assert_eq!(
             self.tree.code_length(),
             self.lines.code_length(),
             "LineIndex and Tree resynchronization.",
@@ -698,7 +469,7 @@ impl<N: Node> MutableUnit<N> {
         }
 
         //todo consider removing Self::update_syntax return as it is currently unused
-        let _entry = self.update_syntax(watch, cover);
+        let _entry = self.update_syntax(watcher, cover);
     }
 
     #[inline(always)]
@@ -711,7 +482,12 @@ impl<N: Node> MutableUnit<N> {
         &self.refs
     }
 
-    fn update_lexis(&mut self, watch: &mut impl Watch, mut span: SiteSpan, text: &str) -> Cover<N> {
+    fn update_lexis(
+        &mut self,
+        watcher: &mut impl Watcher,
+        mut span: SiteSpan,
+        text: &str,
+    ) -> Cover<N> {
         let mut head;
         let mut lookback;
         let mut tail;
@@ -737,7 +513,7 @@ impl<N: Node> MutableUnit<N> {
 
         match lookback > 0 {
             true => {
-                debug_assert!(
+                ld_assert!(
                     !head.is_dangling(),
                     "Dangling reference with non-zero offset.",
                 );
@@ -766,7 +542,7 @@ impl<N: Node> MutableUnit<N> {
 
         if !head.is_dangling() {
             while lookback < <N::Token as Token>::LOOKBACK {
-                debug_assert!(!head.is_dangling(), "Dangling head.",);
+                ld_assert!(!head.is_dangling(), "Dangling head.",);
 
                 if unsafe { head.is_first() } {
                     break;
@@ -789,7 +565,7 @@ impl<N: Node> MutableUnit<N> {
         }
 
         if tail_offset > 0 {
-            debug_assert!(
+            ld_assert!(
                 !tail.is_dangling(),
                 "Dangling reference with non-zero offset.",
             );
@@ -918,7 +694,7 @@ impl<N: Node> MutableUnit<N> {
         }
 
         if head.is_dangling() {
-            debug_assert!(
+            ld_assert!(
                 product.tail.is_dangling(),
                 "Dangling head and non-dangling tail.",
             );
@@ -947,7 +723,7 @@ impl<N: Node> MutableUnit<N> {
 
                 let chunk_cursor = self.tree.lookup(&mut point);
 
-                debug_assert_eq!(point, 0, "Bad span alignment.");
+                ld_assert_eq!(point, 0, "Bad span alignment.");
 
                 chunk_cursor
             };
@@ -965,7 +741,7 @@ impl<N: Node> MutableUnit<N> {
                 let (chunk_cursor, insert_span) = unsafe {
                     self.tree.write(
                         &mut self.refs,
-                        watch,
+                        watcher,
                         head,
                         remove_count,
                         insert_count,
@@ -993,7 +769,7 @@ impl<N: Node> MutableUnit<N> {
 
             let chunk_cursor = middle.lookup(&mut point);
 
-            debug_assert_eq!(point, 0, "Bad span alignment.");
+            ld_assert_eq!(point, 0, "Bad span alignment.");
 
             chunk_cursor
         };
@@ -1017,8 +793,9 @@ impl<N: Node> MutableUnit<N> {
 
             insert_span = replacement.code_length();
 
-            remove_count =
-                unsafe { replace(&mut middle, replacement).free_as_subtree(&mut self.refs, watch) };
+            remove_count = unsafe {
+                replace(&mut middle, replacement).free_as_subtree(&mut self.refs, watcher)
+            };
         };
 
         unsafe { self.tree.join(&mut self.refs, middle) };
@@ -1032,7 +809,7 @@ impl<N: Node> MutableUnit<N> {
 
             let chunk_cursor = self.tree.lookup(&mut point);
 
-            debug_assert_eq!(point, 0, "Bad span alignment.");
+            ld_assert_eq!(point, 0, "Bad span alignment.");
 
             chunk_cursor
         };
@@ -1043,7 +820,7 @@ impl<N: Node> MutableUnit<N> {
         }
     }
 
-    fn update_syntax(&mut self, watch: &mut impl Watch, mut cover: Cover<N>) -> EntryIndex {
+    fn update_syntax(&mut self, watcher: &mut impl Watcher, mut cover: Cover<N>) -> EntryIndex {
         #[allow(unused_variables)]
         let mut cover_lookahead = 0;
 
@@ -1150,7 +927,7 @@ impl<N: Node> MutableUnit<N> {
 
                     let cache = unsafe { cover.chunk_cursor.release_cache() };
 
-                    cache.free(&mut self.refs, watch);
+                    cache.free(&mut self.refs, watcher);
                 }
             }
 
@@ -1158,10 +935,10 @@ impl<N: Node> MutableUnit<N> {
                 let head = self.tree.first();
 
                 let Some(root_cache) = take(&mut self.root) else {
-                    unsafe { debug_unreachable!("Missing root cache.") }
+                    unsafe { ld_unreachable!("Missing root cache.") }
                 };
 
-                let (rule, primary_node) = root_cache.free_inner(&mut self.refs, watch);
+                let (rule, primary_node) = root_cache.free_inner(&mut self.refs, watcher);
 
                 #[cfg(debug_assertions)]
                 if rule != ROOT_RULE {
@@ -1172,7 +949,7 @@ impl<N: Node> MutableUnit<N> {
                     MutableSyntaxSession::run(
                         &mut self.tree,
                         &mut self.refs,
-                        watch,
+                        watcher,
                         0,
                         head,
                         rule,
@@ -1185,13 +962,13 @@ impl<N: Node> MutableUnit<N> {
                 if self.tree.code_length() > 0 {
                     let mut tail = self.tree.lookup(&mut parse_end_site);
 
-                    debug_assert_eq!(parse_end_site, 0, "Incorrect span alignment.");
+                    ld_assert_eq!(parse_end_site, 0, "Incorrect span alignment.");
 
                     while !tail.is_dangling() {
                         let has_cache = unsafe { tail.cache().is_some() };
 
                         if has_cache {
-                            unsafe { tail.release_cache() }.free(&mut self.refs, watch);
+                            unsafe { tail.release_cache() }.free(&mut self.refs, watcher);
                         }
 
                         unsafe { tail.next() }
@@ -1203,13 +980,13 @@ impl<N: Node> MutableUnit<N> {
 
             let cache = unsafe { cover.chunk_cursor.release_cache() };
 
-            let (rule, primary_node) = cache.free_inner(&mut self.refs, watch);
+            let (rule, primary_node) = cache.free_inner(&mut self.refs, watcher);
 
             let (cache, parse_end_site) = unsafe {
                 MutableSyntaxSession::run(
                     &mut self.tree,
                     &mut self.refs,
-                    watch,
+                    watcher,
                     cover.span.start,
                     cover.chunk_cursor,
                     rule,
@@ -1234,7 +1011,7 @@ impl<N: Node> MutableUnit<N> {
     fn initial_parse<'unit>(tree: &'unit mut Tree<N>, refs: &'unit mut TreeRefs<N>) -> Cache {
         if is_void_syntax::<N>() {
             let primary_node = refs.nodes.insert_raw(unsafe {
-                transmute_copy::<NoSyntax<<N as Node>::Token>, N>(&NoSyntax::default())
+                transmute_copy::<VoidSyntax<<N as Node>::Token>, N>(&VoidSyntax::default())
             });
 
             return Cache {
@@ -1252,7 +1029,15 @@ impl<N: Node> MutableUnit<N> {
         let primary_node = refs.nodes.reserve_entry();
 
         let (root_cache, _parsed_end_site) = unsafe {
-            MutableSyntaxSession::run(tree, refs, &mut VoidWatch, 0, head, ROOT_RULE, primary_node)
+            MutableSyntaxSession::run(
+                tree,
+                refs,
+                &mut VoidWatcher,
+                0,
+                head,
+                ROOT_RULE,
+                primary_node,
+            )
         };
 
         root_cache
@@ -1260,21 +1045,10 @@ impl<N: Node> MutableUnit<N> {
 }
 
 impl<T: Token> TokenBuffer<T> {
-    /// Turns this buffer into incremental [Document](crate::Document) instance.
+    /// Turns this token buffer into MutableUnit.
     ///
-    /// Generic parameter `N` of type [Node](crate::syntax::Node) specifies source code syntax
-    /// grammar. Node's [Token](crate::syntax::Node::Token) associative type must be compatible with
-    /// the TokenBuffer Token type. In other words, Document's syntax structure must be compatible
-    /// with the TokenBuffer's lexical structure.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{units::Document, lexis::{TokenBuffer, SimpleToken}, syntax::SimpleNode};
-    ///
-    /// let buf = TokenBuffer::<SimpleToken>::from("foo [bar]");
-    ///
-    /// // SimpleNode syntax uses SimpleToken's lexis.
-    /// let _doc = buf.into_document::<SimpleNode>();
-    /// ```
+    /// The `N` generic parameter specifies a type of the syntax tree [Node]
+    /// with the `T` [lexis](Node::Token).
     #[inline(always)]
     pub fn into_mutable_unit<N>(self) -> MutableUnit<N>
     where

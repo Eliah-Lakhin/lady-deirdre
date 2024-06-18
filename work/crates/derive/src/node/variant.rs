@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -122,9 +119,9 @@ impl TryFrom<Variant> for NodeVariant {
                     root = Some(span);
                 }
 
-                "index" => {
+                "denote" => {
                     if index.is_some() {
-                        return Err(error!(span, "Duplicate Index attribute.",));
+                        return Err(error!(span, "Duplicate Denote attribute.",));
                     }
 
                     index = Some(attr.parse_args::<Index>()?);
@@ -216,17 +213,20 @@ impl TryFrom<Variant> for NodeVariant {
             if rule.is_none() && !description.is_set() {
                 return Err(error!(
                     index.span(),
-                    "Index attribute is not applicable to unparseable \
+                    "Denote attribute is not applicable to unparseable \
                     variants.\n\nTo make the variant parsable annotate this \
-                    variant with #[rule(...)] attribute.\n\nIf this is \
+                    variant with the #[rule(...)] attribute.\n\nIf this is \
                     intending (e.g. if you want to make this Node variant \
-                    describable)\nannotate this variant with \
+                    describable)\nannotate this variant with the \
                     #[describe(...)] attribute.",
                 ));
             }
 
             if root.is_some() {
-                return Err(error!(index.span(), "Root index cannot be overridden.",));
+                return Err(error!(
+                    index.span(),
+                    "Root denotation cannot be overridden.",
+                ));
             }
         }
 
@@ -235,7 +235,7 @@ impl TryFrom<Variant> for NodeVariant {
                 return Err(error!(
                     span,
                     "Root variant requires rule expression.\n\
-                    Annotate this variant with #[rule(...)] attribute.",
+                    Annotate this variant with the #[rule(...)] attribute.",
                 ));
             }
 
@@ -248,7 +248,7 @@ impl TryFrom<Variant> for NodeVariant {
                     span,
                     "Trivia attribute is not applicable to unparseable \
                     variants.\nTo make the variant parsable annotate this \
-                    variant with #[rule(...)] attribute.",
+                    variant with the #[rule(...)] attribute.",
                 ));
             }
 
@@ -268,7 +268,7 @@ impl TryFrom<Variant> for NodeVariant {
                     recovery.span(),
                     "Recovery attribute is not applicable to unparseable \
                     variants.\nTo make the variant parsable annotate this \
-                    variant with #[rule(...)] attribute.",
+                    variant with the #[rule(...)] attribute.",
                 ));
             }
 
@@ -303,7 +303,7 @@ impl TryFrom<Variant> for NodeVariant {
                     constructor.span(),
                     "Overridden constructor attribute is not applicable to \
                     unparseable variants.\nTo make the variant parsable \
-                    annotate this variant with #[rule(...)] attribute.",
+                    annotate this variant with the #[rule(...)] attribute.",
                 ));
             }
 
@@ -318,7 +318,7 @@ impl TryFrom<Variant> for NodeVariant {
                         span,
                         "Parser attribute is not applicable to unparseable \
                         variants.\nTo make the variant parsable annotate this \
-                        variant with #[rule(...)] attribute.",
+                        variant with the #[rule(...)] attribute.",
                     ));
                 }
 
@@ -347,8 +347,8 @@ impl TryFrom<Variant> for NodeVariant {
                     return Err(error!(
                         span,
                         "Scope attribute is not applicable to unparseable \
-                        variants without index.\nAnnotate this variant with \
-                        #[index(...)] or #[rule(...)] attributes.",
+                        variants without denotation.\nAnnotate this variant \
+                        with the #[denote(...)] or #[rule(...)] attributes.",
                     ));
                 }
 
@@ -364,8 +364,8 @@ impl TryFrom<Variant> for NodeVariant {
                     return Err(error!(
                         span,
                         "Describe attribute is not applicable to unparseable \
-                        variants without index.\nAnnotate this variant with \
-                        #[index(...)] or #[rule(...)] attributes.",
+                        variants without denotation.\nAnnotate this variant \
+                        with the #[denote(...)] or #[rule(...)] attributes.",
                     ));
                 }
 
@@ -381,7 +381,7 @@ impl TryFrom<Variant> for NodeVariant {
                     span,
                     "Dump attribute is not applicable to unparseable \
                     variants.\nTo make the variant parsable annotate this \
-                    variant with #[rule(...)] attribute.",
+                    variant with the #[rule(...)] attribute.",
                 ));
             }
 
@@ -414,8 +414,8 @@ impl TryFrom<Variant> for NodeVariant {
                     _ => {
                         return Err(error!(
                             span,
-                            "Trivia dump is not applicable here, because the rule \
-                            does not override default trivia expression.",
+                            "Trivia dump is not applicable here because the variant \
+                            does not override the default trivia expression.",
                         ));
                     }
                 }

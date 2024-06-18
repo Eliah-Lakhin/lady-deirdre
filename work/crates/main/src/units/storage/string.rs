@@ -1,45 +1,43 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::mem::take;
 
 use crate::{
     lexis::ByteIndex,
     mem::{array_shift, slice_copy_to, slice_shift},
-    report::{debug_assert, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_unreachable},
     units::storage::{
         child::{ChildCount, ChildIndex},
         PAGE_CAP,
@@ -69,8 +67,8 @@ impl PageString {
     //  3. `PageString` indices are well-formed.
     #[inline(always)]
     pub(super) unsafe fn byte_slice(&self, occupied: ChildCount, index: ChildIndex) -> &[u8] {
-        debug_assert!(index < occupied, "Incorrect index.");
-        debug_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
+        ld_assert!(index < occupied, "Incorrect index.");
+        ld_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
 
         let next = index + 1;
 
@@ -103,8 +101,8 @@ impl PageString {
     //  3. `PageString` indices are well-formed.
     #[inline(always)]
     pub(super) unsafe fn byte_slice_from(&self, occupied: ChildCount, index: ChildIndex) -> &[u8] {
-        debug_assert!(index < occupied, "Incorrect index.");
-        debug_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
+        ld_assert!(index < occupied, "Incorrect index.");
+        ld_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
 
         let start_byte = *unsafe { self.indices.get_unchecked(index) };
 
@@ -144,21 +142,21 @@ impl PageString {
         destination: ChildIndex,
         count: ChildCount,
     ) {
-        debug_assert!(source + count <= from_occupied, "Source range overflow.",);
+        ld_assert!(source + count <= from_occupied, "Source range overflow.",);
 
-        debug_assert!(from_occupied <= PAGE_CAP, "Source occupied value overflow.",);
+        ld_assert!(from_occupied <= PAGE_CAP, "Source occupied value overflow.",);
 
-        debug_assert!(
+        ld_assert!(
             destination + count <= to_occupied,
             "Destination range overflow.",
         );
 
-        debug_assert!(
+        ld_assert!(
             to_occupied <= PAGE_CAP,
             "Destination occupied value overflow.",
         );
 
-        debug_assert!(count > 0, "Empty copy range.");
+        ld_assert!(count > 0, "Empty copy range.");
 
         let text_indices = match source + count < from_occupied {
             true => self.indices.get_unchecked(source..=(source + count)),
@@ -191,11 +189,11 @@ impl PageString {
         text_indices: &[ByteIndex],
         count: ChildCount,
     ) {
-        debug_assert!(from + count <= occupied, "Count overflow.");
-        debug_assert!(occupied <= PAGE_CAP, "Occupied value overflow.");
-        debug_assert!(count > 0, "Empty count.");
-        debug_assert!(!text.is_empty(), "Empty text.");
-        debug_assert!(text_indices.len() >= count, "Underflow text_indices.");
+        ld_assert!(from + count <= occupied, "Count overflow.");
+        ld_assert!(occupied <= PAGE_CAP, "Occupied value overflow.");
+        ld_assert!(count > 0, "Empty count.");
+        ld_assert!(!text.is_empty(), "Empty text.");
+        ld_assert!(text_indices.len() >= count, "Underflow text_indices.");
 
         let text_start_byte = *unsafe { text_indices.get_unchecked(0) };
 
@@ -271,9 +269,9 @@ impl PageString {
         from: ChildIndex,
         count: ChildCount,
     ) {
-        debug_assert!(from <= occupied, "String inflation failure.");
-        debug_assert!(occupied + count <= PAGE_CAP, "String inflation failure.",);
-        debug_assert!(count > 0, "Empty inflation.");
+        ld_assert!(from <= occupied, "String inflation failure.");
+        ld_assert!(occupied + count <= PAGE_CAP, "String inflation failure.",);
+        ld_assert!(count > 0, "Empty inflation.");
 
         if from == occupied {
             // For optimization purposes only the first index in the
@@ -297,9 +295,9 @@ impl PageString {
         mut from: ChildIndex,
         count: ChildCount,
     ) {
-        debug_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
-        debug_assert!(from + count <= occupied, "String deflation failure");
-        debug_assert!(count > 0, "Empty string deflation.");
+        ld_assert!(occupied <= PAGE_CAP, "Incorrect occupied value.");
+        ld_assert!(from + count <= occupied, "String deflation failure");
+        ld_assert!(count > 0, "Empty string deflation.");
 
         let to = from + count;
         let start_byte = *unsafe { self.indices.get_unchecked(from) };
@@ -427,7 +425,7 @@ impl PageString {
     //   1. `index < PAGE_CAP`.
     #[inline(always)]
     pub(super) unsafe fn get_byte_index(&self, index: ChildIndex) -> ByteIndex {
-        debug_assert!(index < PAGE_CAP, "Index overflow.");
+        ld_assert!(index < PAGE_CAP, "Index overflow.");
 
         *unsafe { self.indices.get_unchecked(index) }
     }
@@ -436,7 +434,7 @@ impl PageString {
     //   1. `index < PAGE_CAP`.
     #[inline(always)]
     pub(super) unsafe fn set_byte_index(&mut self, index: ChildIndex, byte_index: ByteIndex) {
-        debug_assert!(index < PAGE_CAP, "Index overflow.");
+        ld_assert!(index < PAGE_CAP, "Index overflow.");
 
         *unsafe { self.indices.get_unchecked_mut(index) } = byte_index;
     }
@@ -470,7 +468,7 @@ impl Bytes {
     //  3. `text` is is valid Utd8 sequence.
     #[inline(always)]
     unsafe fn write(&mut self, from: ByteIndex, to: ByteIndex, text: &[u8]) -> isize {
-        debug_assert!(from <= to, "Invalid byte range.");
+        ld_assert!(from <= to, "Invalid byte range.");
 
         let text_diff = text.len();
         let string_diff = to - from;
@@ -579,12 +577,12 @@ impl Bytes {
                     Bytes::Heap(vec) => vec,
 
                     Bytes::Inline(_) => unsafe {
-                        debug_unreachable!("Bytes transfer to heap failure.")
+                        ld_unreachable!("Bytes transfer to heap failure.")
                     },
                 }
             }
 
-            Self::Heap(_) => unsafe { debug_unreachable!("Bytes already on heap.") },
+            Self::Heap(_) => unsafe { ld_unreachable!("Bytes already on heap.") },
         }
     }
 
@@ -613,11 +611,11 @@ impl Bytes {
                         unsafe { vec.set_len(0) };
                     }
 
-                    Bytes::Heap(_) => unsafe { debug_unreachable!("Bytes inlining failure.") },
+                    Bytes::Heap(_) => unsafe { ld_unreachable!("Bytes inlining failure.") },
                 }
             }
 
-            Self::Inline(..) => unsafe { debug_unreachable!("Bytes already inlined.") },
+            Self::Inline(..) => unsafe { ld_unreachable!("Bytes already inlined.") },
         }
     }
 

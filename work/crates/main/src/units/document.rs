@@ -1,39 +1,41 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    fmt::{Debug, Display, Formatter},
+    iter::FusedIterator,
+};
 
 use crate::{
     arena::{Entry, Id, Identifiable},
@@ -50,19 +52,37 @@ use crate::{
         TokenCursor,
         TokenRef,
     },
-    std::*,
-    syntax::{ErrorRef, Node, NodeRef, SyntaxTree},
-    units::{CompilationUnit, ImmutableUnit, MutableUnit, VoidWatch, Watch},
+    syntax::{ErrorRef, Node, NodeRef, SyntaxError, SyntaxTree},
+    units::{CompilationUnit, ImmutableUnit, MutableUnit, VoidWatcher, Watcher},
 };
 
+/// The object that stores the content of an individual file within your
+/// compilation project.
+///
+/// The Document automatically parses the lexical and syntax components of
+/// the programming language grammar and offers methods to inspect this data.
+///
+/// The Document comes in two flavors: mutable and immutable. A mutable document
+/// can accept user-input edits in the source code text, while an immutable
+/// document does not accept edits but is optimized for one-time parsing.
+///
+/// The generic parameter `N` of type [Node] specifies the lexical and syntax
+/// grammar of the language.
+///
+/// Each document instance has a unique [Id] that you can use to distinguish
+/// between two documents or to use as a key in a hash map of documents.
 pub enum Document<N: Node> {
+    /// A document that accepts user-input edits.
     Mutable(MutableUnit<N>),
+
+    /// A document that does not accept user-input edits but is optimized for
+    /// one-time parsing.
     Immutable(ImmutableUnit<N>),
 }
 
 impl<N: Node> Debug for Document<N> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::Mutable(unit) => Debug::fmt(unit, formatter),
             Self::Immutable(unit) => Debug::fmt(unit, formatter),
@@ -72,7 +92,7 @@ impl<N: Node> Debug for Document<N> {
 
 impl<N: Node> Display for Document<N> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::Mutable(unit) => Display::fmt(unit, formatter),
             Self::Immutable(unit) => Display::fmt(unit, formatter),
@@ -270,7 +290,7 @@ impl<N: Node> SyntaxTree for Document<N> {
     }
 
     #[inline(always)]
-    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+    fn get_error(&self, entry: &Entry) -> Option<&SyntaxError> {
         match self {
             Self::Mutable(unit) => unit.get_error(entry),
             Self::Immutable(unit) => unit.get_error(entry),
@@ -326,52 +346,84 @@ impl<N: Node> CompilationUnit for Document<N> {
 }
 
 impl<N: Node> Document<N> {
+    /// Creates a mutable version of the Document.
+    ///
+    /// This type of document accepts user-input edits.
+    ///
+    /// The parameter could be a [TokenBuffer] or just an arbitrary string.
     #[inline(always)]
     pub fn new_mutable(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         Self::Mutable(MutableUnit::new(text))
     }
 
+    /// Creates an immutable version of the Document.
+    ///
+    /// This type of document does not accept user-input edits but
+    /// optimized for one-time parsing.
+    ///
+    /// The parameter could be a [TokenBuffer] or just an arbitrary string.
     #[inline(always)]
     pub fn new_immutable(text: impl Into<TokenBuffer<N::Token>>) -> Self {
         Self::Immutable(ImmutableUnit::new(text))
     }
 
-    #[inline(always)]
-    pub fn is_mutable(&self) -> bool {
-        match self {
-            Self::Mutable(..) => true,
-            Self::Immutable(..) => false,
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_immutable(&self) -> bool {
-        match self {
-            Self::Mutable(..) => false,
-            Self::Immutable(..) => true,
-        }
-    }
-
+    /// Writes user-input edit into this document.
+    ///
+    /// The Document instantly reparses a part of the underlying source code
+    /// relative to the edit.
+    ///
+    /// The reparsing process usually takes a short time if the edit is short,
+    /// and even if the entire source code is big. Therefore, it is acceptable
+    /// to call this function on every user-input action. For instance, you can
+    /// call this function on every content change event from the text editor.
+    ///
+    /// The first parameter `span` specifies a span of the current source code
+    /// text that you want to rewrite (empty spans denote insertion).
+    ///
+    /// The `span` is usually a range in units of various measurement types.
+    ///
+    /// For example, `10..20` is a span of nine Unicode chars starting
+    /// from the tenth char. Line-column index or token sites are also
+    /// acceptable bounds. See [ToSpan] for details.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the Document is not mutable, or if the specified span is not
+    /// valid for this document.
     #[inline(always)]
     pub fn write(&mut self, span: impl ToSpan, text: impl AsRef<str>) {
-        self.write_and_watch(span, text, &mut VoidWatch)
+        self.write_and_watch(span, text, &mut VoidWatcher)
     }
 
+    /// Writes user-input edit into this document, and collects all syntax tree
+    /// components that have been affected by this edit.
+    ///
+    /// This function is similar to the [Document::write] but has
+    /// an additional `watcher` parameter of type [Watcher] into which the
+    /// document reports all syntax changes occurred during the incremental
+    /// reparsing.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the Document is not mutable, or if the specified span is not
+    /// valid for this document.
     #[inline(always)]
     pub fn write_and_watch(
         &mut self,
         span: impl ToSpan,
         text: impl AsRef<str>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
     ) {
         let unit = match self.as_mutable() {
             Some(unit) => unit,
             None => panic!("Specified Document is not mutable."),
         };
 
-        unit.write_and_watch(span, text, watch);
+        unit.write_and_watch(span, text, watcher);
     }
 
+    /// A convenient function that returns a reference to the document's
+    /// inner [MutableUnit] if the document is mutable. Otherwise returns None.
     #[inline(always)]
     pub fn as_mutable(&mut self) -> Option<&mut MutableUnit<N>> {
         match self {
@@ -380,6 +432,15 @@ impl<N: Node> Document<N> {
         }
     }
 
+    /// If the document immutable, creates and returns a new instance of
+    /// the mutable document with the same source code.
+    ///
+    /// Otherwise, if the document is already mutable, returns this instance.
+    ///
+    /// This function is more efficient than creating the mutable document
+    /// from scratch by manually copying the inner text, because the underlying
+    /// algorithm could transfer already parsed lexical structure and the text
+    /// content as they are.
     #[inline(always)]
     pub fn into_mutable(self) -> Self {
         match self {
@@ -388,6 +449,15 @@ impl<N: Node> Document<N> {
         }
     }
 
+    /// If the document mutable, creates and returns a new instance of
+    /// the immutable document with the same source code.
+    ///
+    /// Otherwise, if the document is already immutable, returns this instance.
+    ///
+    /// This function is more efficient than creating the immutable document
+    /// from scratch by manually copying the inner text, because the underlying
+    /// algorithm could transfer already parsed lexical structure and the text
+    /// content as they are.
     #[inline(always)]
     pub fn into_immutable(self) -> Self {
         match self {
@@ -398,6 +468,10 @@ impl<N: Node> Document<N> {
 }
 
 impl<T: Token> TokenBuffer<T> {
+    /// Turns this token buffer into **mutable** Document.
+    ///
+    /// The `N` generic parameter specifies a type of the syntax tree [Node]
+    /// with the `T` [lexis](Node::Token).
     #[inline(always)]
     pub fn into_document<N>(self) -> Document<N>
     where

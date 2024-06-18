@@ -1,510 +1,490 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    analysis::{AnalysisError, AnalysisResult},
-    report::{debug_unreachable, system_panic},
-    std::*,
-    sync::{Latch, SyncBuildHasher},
+use std::{
+    cmp::Ordering,
+    collections::{BinaryHeap, HashMap},
+    fmt::{Debug, Formatter},
+    sync::{Condvar, Mutex, MutexGuard},
 };
 
-pub const TASKS_ANALYSIS: u8 = 1u8 << 0;
-pub const TASKS_EXCLUSIVE: u8 = 1u8 << 1;
-pub const TASKS_MUTATION: u8 = 1u8 << 2;
-pub const TASKS_ALL: u8 = TASKS_ANALYSIS | TASKS_EXCLUSIVE | TASKS_MUTATION;
+use crate::{
+    analysis::{AnalysisError, AnalysisResult},
+    report::{ld_assert, ld_unreachable},
+    sync::{Shared, SyncBuildHasher, Trigger},
+};
 
 const TASKS_CAPACITY: usize = 10;
 
-#[derive(Default, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct Handle {
-    pub primary: Latch,
-    pub secondary: Latch,
+/// An object that signals a task worker to finish its job.
+///
+/// In Lady Deirdre, task jobs are subject for graceful shutdown.
+///
+/// Each task object provides access to the TaskHandle. The analyzer's functions
+/// associated with this task and the user's code assume to examine the
+/// [TaskHandle::is_triggered] value periodically to determine if the job needs
+/// to be finished earlier. If the function returns true, the worker should
+/// finish its job as soon as possible and drop the task.
+///
+/// Another party of the compiler execution, such as the thread that spawns the
+/// worker's sub-thread, and the [Analyzer](crate::analysis::Analyzer) object
+/// itself, that have a clone of the TaskHandle object, may trigger spawned
+/// worker's job interruption by calling a [TaskHandle::trigger] function that
+/// sets the inner flag of the TaskHandle to true.
+///
+/// The [TriggerHandle] object provides default implementation of TaskHandle
+/// backed by a single [Trigger] object. However, in the end compiler
+/// architecture, you can implement your own type of TaskHandle with more
+/// complex triggering logic.
+pub trait TaskHandle: Default + Clone + Send + Sync + 'static {
+    /// Returns true if the task's worker should finish its job as soon as
+    /// possible and drop the corresponding task object.
+    fn is_triggered(&self) -> bool;
+
+    /// Signals the task's worker to finish its job as soon as possible and to
+    /// drop the corresponding task.
+    ///
+    /// The function sets this TaskHandle's state and all of its clones states
+    /// to "triggered" such that their [is_triggered](Self::is_triggered)
+    /// function would return true.
+    ///
+    /// Once the trigger function is called, the TaskHandle triggering state
+    /// cannot be unset.
+    fn trigger(&self);
 }
 
-impl Handle {
+/// A default implementation of the [TaskHandle] backed by the [Trigger] object.
+#[derive(Default, PartialEq, Eq, Hash, Clone)]
+pub struct TriggerHandle(
+    /// An inner state of the handle.
+    pub Trigger,
+);
+
+impl Debug for TriggerHandle {
     #[inline(always)]
-    pub fn new() -> Self {
-        Self {
-            primary: Latch::new(),
-            secondary: Latch::new(),
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.0.is_active() {
+            true => formatter.write_str("TriggerHandle(active)"),
+            false => formatter.write_str("TriggerHandle(inactive)"),
         }
     }
+}
 
+impl TaskHandle for TriggerHandle {
     #[inline(always)]
-    pub fn triggered(&self) -> bool {
-        self.primary.get_relaxed() || self.secondary.get_relaxed()
+    fn is_triggered(&self) -> bool {
+        self.0.is_active()
     }
 
     #[inline(always)]
-    pub fn trigger(&self) {
-        self.primary.set();
+    fn trigger(&self) {
+        self.0.activate();
     }
 }
 
-pub(super) struct TaskManager<S> {
-    state: Mutex<State<S>>,
-    notifiers: Notifiers,
+impl TriggerHandle {
+    /// Creates a new task handle in "untriggered" state.
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
-impl<S: SyncBuildHasher> TaskManager<S> {
+/// A priority of the task.
+///
+/// The [analyzer](crate::analysis::Analyzer)'s task manager attempts to
+/// grant access to the tasks with higher priority value earlier than the tasks
+/// with lower priority.
+pub type TaskPriority = u16;
+
+pub(super) type TaskId = u64;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum TaskKind {
+    Analysis,
+    Mutation,
+    Exclusive,
+}
+
+pub(super) struct TaskManager<H, S> {
+    state: Mutex<ManagerState<H, S>>,
+}
+
+impl<H: TaskHandle, S: SyncBuildHasher> TaskManager<H, S> {
     #[inline(always)]
     pub(super) fn new() -> Self {
         Self {
-            state: Mutex::new(State {
-                stage: Stage::Mutation {
-                    mutation_tasks: new_tasks_set(),
-                },
-                pending: Pending {
-                    analysis: 0,
-                    mutations: 0,
-                    exclusive: 0,
-                },
+            state: Mutex::new(ManagerState {
+                next_task_id: 0,
+                cancel_threshold: 0,
+                active_mode: None,
+                active_tasks: HashMap::with_hasher(S::default()),
+                awoke_tasks: HashMap::with_hasher(S::default()),
+                sleep_tasks: BinaryHeap::new(),
             }),
-            notifiers: Notifiers {
-                ready_for_analysis: Condvar::new(),
-                ready_for_mutation: Condvar::new(),
-                ready_for_exclusive: Condvar::new(),
-            },
         }
     }
 
-    #[inline(always)]
-    pub(super) fn interrupt(&self, tasks_mask: u8) {
-        self.lock_state().interrupt(tasks_mask);
-    }
+    pub(super) fn acquire_task(
+        &self,
+        kind: TaskKind,
+        handle: &H,
+        priority: TaskPriority,
+        lock: bool,
+    ) -> AnalysisResult<TaskId> {
+        let mut state = self.lock_state();
 
-    #[inline(always)]
-    pub(super) fn acquire_analysis(&self, handle: &Handle, lock: bool) -> AnalysisResult<()> {
-        let mut state_guard = self.lock_state();
+        if priority < state.cancel_threshold || handle.is_triggered() {
+            return Err(AnalysisError::Interrupted);
+        }
 
-        state_guard.pending.analysis += 1;
+        let Some(active_mode) = state.active_mode else {
+            state.active_mode = Some(kind);
+
+            let task_id = state.gen_task_id();
+
+            state.insert_active_task(task_id, handle.clone(), priority);
+
+            return Ok(task_id);
+        };
+
+        ld_assert!(!state.active_tasks.is_empty(), "Empty active tasks map.");
+
+        let mode_fits = active_mode_fits(active_mode, kind);
+
+        if mode_fits && state.pending_priority() <= priority {
+            let task_id = state.gen_task_id();
+
+            state.insert_active_task(task_id, handle.clone(), priority);
+
+            return Ok(task_id);
+        }
+
+        if !lock {
+            return Err(AnalysisError::Interrupted);
+        }
+
+        if !mode_fits {
+            state.interrupt_active_tasks(priority);
+        }
+
+        let task_id = state.gen_task_id();
+
+        let waker = state.enqueue_task(task_id, kind, priority, handle.clone());
 
         loop {
-            self.transit(&mut state_guard);
+            state = waker
+                .as_ref()
+                .wait(state)
+                .unwrap_or_else(|poison| poison.into_inner());
 
-            let state = state_guard.deref_mut();
-
-            let Stage::Analysis { analysis_tasks } = &mut state.stage else {
-                if !lock {
-                    state.pending.analysis -= 1;
-
-                    return Err(AnalysisError::Interrupted);
-                }
-
-                state_guard = self
-                    .notifiers
-                    .ready_for_analysis
-                    .wait(state_guard)
-                    .unwrap_or_else(|poison| poison.into_inner());
-
+            let Some(wakeup_kind) = state.awoke_tasks.remove(&task_id) else {
                 continue;
             };
 
-            state.pending.analysis -= 1;
-
-            if !analysis_tasks.insert(handle.clone()) {
-                return Err(AnalysisError::DuplicateHandle);
+            if state.awoke_tasks.capacity() > TASKS_CAPACITY {
+                state.awoke_tasks.shrink_to(TASKS_CAPACITY);
             }
 
-            return Ok(());
+            return match wakeup_kind {
+                WakeupKind::Activate => Ok(task_id),
+                WakeupKind::Cancel => Err(AnalysisError::Interrupted),
+            };
         }
     }
 
-    #[inline(always)]
-    pub(super) fn acquire_exclusive(&self, handle: &Handle, lock: bool) -> AnalysisResult<()> {
-        let mut state_guard = self.lock_state();
+    pub(super) fn release_task(&self, id: TaskId) {
+        let mut state = self.lock_state();
 
-        state_guard.pending.exclusive += 1;
+        ld_assert!(state.active_mode.is_some(), "Release in inactive mode.");
+
+        if state.active_tasks.remove(&id).is_none() {
+            unsafe { ld_unreachable!("Missing active task.") }
+        }
+
+        if !state.active_tasks.is_empty() {
+            return;
+        }
+
+        if state.active_tasks.capacity() > TASKS_CAPACITY {
+            state.active_tasks.shrink_to(TASKS_CAPACITY);
+        }
+
+        state.active_mode = None;
 
         loop {
-            self.transit(&mut state_guard);
+            let Some(sleep_task) = state.sleep_tasks.pop() else {
+                break;
+            };
 
-            let state = state_guard.deref_mut();
-
-            let Stage::Exclusive { exclusive_task } = &mut state.stage else {
-                if !lock {
-                    state.pending.exclusive -= 1;
-
-                    return Err(AnalysisError::Interrupted);
-                }
-
-                state_guard = self
-                    .notifiers
-                    .ready_for_exclusive
-                    .wait(state_guard)
-                    .unwrap_or_else(|poison| poison.into_inner());
+            if sleep_task.is_cancelled(state.cancel_threshold) {
+                state.wake_up_task(sleep_task.id, &sleep_task.waker, WakeupKind::Cancel);
 
                 continue;
-            };
-
-            return match exclusive_task {
-                Some(current) if current == handle => {
-                    state.pending.exclusive -= 1;
-
-                    Err(AnalysisError::DuplicateHandle)
-                }
-
-                None => {
-                    state.pending.exclusive -= 1;
-
-                    *exclusive_task = Some(handle.clone());
-
-                    Ok(())
-                }
-
-                _ => continue,
-            };
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn acquire_mutation(&self, handle: &Handle, lock: bool) -> AnalysisResult<()> {
-        let mut state_guard = self.lock_state();
-
-        state_guard.pending.mutations += 1;
-
-        loop {
-            self.transit(&mut state_guard);
-
-            let state = state_guard.deref_mut();
-
-            let Stage::Mutation { mutation_tasks } = &mut state.stage else {
-                if !lock {
-                    state.pending.mutations -= 1;
-
-                    return Err(AnalysisError::Interrupted);
-                }
-
-                state_guard = self
-                    .notifiers
-                    .ready_for_mutation
-                    .wait(state_guard)
-                    .unwrap_or_else(|poison| poison.into_inner());
-
-                continue;
-            };
-
-            state.pending.mutations -= 1;
-
-            if !mutation_tasks.insert(handle.clone()) {
-                return Err(AnalysisError::DuplicateHandle);
             }
 
-            return Ok(());
-        }
-    }
+            let kind = sleep_task.kind;
 
-    #[inline(always)]
-    pub(super) fn release_analysis(&self, handle: &Handle) {
-        let mut state_guard = self.lock_state();
+            state.active_mode = Some(kind);
 
-        match &mut state_guard.stage {
-            Stage::Analysis { analysis_tasks } => {
-                if !analysis_tasks.remove(handle) {
-                    system_panic!("Missing handle.");
-                }
+            state.insert_active_task(sleep_task.id, sleep_task.handle, sleep_task.priority);
+            state.wake_up_task(sleep_task.id, &sleep_task.waker, WakeupKind::Activate);
 
-                if analysis_tasks.is_empty() {
-                    analysis_tasks.shrink_to(TASKS_CAPACITY);
-                }
+            if kind == TaskKind::Exclusive {
+                break;
             }
 
-            Stage::Interruption { pending } => {
-                *pending = match pending.checked_sub(1) {
-                    Some(counter) => counter,
-                    None => {
-                        system_panic!("Interruption counter mismatch.");
-
-                        // Safety: system_panic interrupts thread.
-                        unsafe { debug_unreachable!("Life after panic.") }
-                    }
+            loop {
+                let Some(top) = state.sleep_tasks.peek() else {
+                    break;
                 };
 
-                if *pending > 0 {
-                    return;
+                if top.kind != kind {
+                    break;
                 }
-            }
 
-            _ => system_panic!("Stage mismatch."),
-        }
-
-        self.transit(&mut state_guard);
-    }
-
-    #[inline(always)]
-    pub(super) fn release_exclusive(&self, handle: &Handle) {
-        let mut state_guard = self.lock_state();
-
-        match &mut state_guard.stage {
-            Stage::Exclusive { exclusive_task } => {
-                let exclusive_task = take(exclusive_task);
-
-                if exclusive_task.as_ref() != Some(handle) {
-                    system_panic!("Missing handle.");
-                }
-            }
-
-            Stage::Interruption { pending } => {
-                *pending = match pending.checked_sub(1) {
-                    Some(counter) => counter,
-                    None => {
-                        system_panic!("Interruption counter mismatch.");
-
-                        // Safety: system_panic interrupts thread.
-                        unsafe { debug_unreachable!("Life after panic.") }
-                    }
+                let Some(sleep_task) = state.sleep_tasks.pop() else {
+                    unsafe { ld_unreachable!("Missing sleep task.") }
                 };
 
-                if *pending > 0 {
-                    return;
+                if sleep_task.is_cancelled(state.cancel_threshold) {
+                    state.wake_up_task(sleep_task.id, &sleep_task.waker, WakeupKind::Cancel);
+
+                    continue;
                 }
+
+                state.insert_active_task(sleep_task.id, sleep_task.handle, sleep_task.priority);
+                state.wake_up_task(sleep_task.id, &sleep_task.waker, WakeupKind::Activate);
             }
 
-            _ => system_panic!("Stage mismatch."),
+            break;
         }
 
-        self.transit(&mut state_guard);
+        if state.sleep_tasks.capacity() > TASKS_CAPACITY {
+            state.sleep_tasks.shrink_to(TASKS_CAPACITY);
+        }
     }
 
-    #[inline(always)]
-    pub(super) fn release_mutation(&self, handle: &Handle) {
-        let mut state_guard = self.lock_state();
+    pub(super) fn set_access_level(&self, threshold: TaskPriority) {
+        let mut state = self.lock_state();
 
-        match &mut state_guard.stage {
-            Stage::Mutation { mutation_tasks } => {
-                if !mutation_tasks.remove(handle) {
-                    system_panic!("Missing handle.");
-                }
-
-                if mutation_tasks.is_empty() {
-                    mutation_tasks.shrink_to(TASKS_CAPACITY);
-                }
-            }
-
-            Stage::Interruption { pending } => {
-                *pending = match pending.checked_sub(1) {
-                    Some(counter) => counter,
-                    None => {
-                        system_panic!("Interruption counter mismatch.");
-
-                        // Safety: system_panic interrupts thread.
-                        unsafe { debug_unreachable!("Life after panic.") }
-                    }
-                };
-
-                if *pending > 0 {
-                    return;
-                }
-            }
-
-            _ => system_panic!("Stage mismatch."),
+        if state.cancel_threshold > threshold {
+            state.cancel_threshold = threshold;
+            return;
         }
 
-        self.transit(&mut state_guard);
+        state.cancel_threshold = threshold;
+
+        state.interrupt_active_tasks(threshold);
+        state.cancel_pending_tasks(threshold);
+    }
+
+    pub(super) fn get_access_level(&self) -> TaskPriority {
+        let state = self.lock_state();
+
+        state.cancel_threshold
     }
 
     #[inline(always)]
-    fn transit(&self, state_guard: &mut MutexGuard<State<S>>) {
-        state_guard.interrupt(0);
-        state_guard.transit(&self.notifiers);
-    }
-
-    #[inline(always)]
-    fn lock_state(&self) -> MutexGuard<State<S>> {
+    fn lock_state(&self) -> MutexGuard<ManagerState<H, S>> {
         self.state
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
     }
 }
 
-struct State<S> {
-    stage: Stage<S>,
-    pending: Pending,
+struct ManagerState<H, S> {
+    next_task_id: TaskId,
+    cancel_threshold: TaskPriority,
+    active_mode: Option<TaskKind>,
+    active_tasks: HashMap<TaskId, ActiveTaskInfo<H>, S>,
+    awoke_tasks: HashMap<TaskId, WakeupKind, S>,
+    sleep_tasks: BinaryHeap<SleepTaskInfo<H>>,
 }
 
-impl<S: SyncBuildHasher> State<S> {
+impl<H: TaskHandle, S: SyncBuildHasher> ManagerState<H, S> {
     #[inline(always)]
-    fn interrupt(&mut self, force_mask: u8) {
-        match &mut self.stage {
-            Stage::Analysis { analysis_tasks } => {
-                if force_mask & TASKS_ANALYSIS == 0 {
-                    if analysis_tasks.is_empty() {
-                        return;
-                    }
+    fn wake_up_task(&mut self, id: TaskId, task_waker: &TaskWaker, wakeup_kind: WakeupKind) {
+        if self.awoke_tasks.insert(id, wakeup_kind).is_some() {
+            unsafe { ld_unreachable!("Duplicate task id.") }
+        }
 
-                    if self.pending.mutations == 0 && self.pending.exclusive == 0 {
-                        return;
-                    }
-                }
+        task_waker.as_ref().notify_one();
+    }
 
-                let analysis_tasks = take(analysis_tasks);
+    #[inline(always)]
+    fn insert_active_task(&mut self, id: TaskId, handle: H, priority: TaskPriority) {
+        let info = ActiveTaskInfo {
+            priority,
+            shutdown: handle,
+        };
 
-                self.stage = Stage::Interruption {
-                    pending: analysis_tasks.len(),
-                };
-
-                for handle in analysis_tasks {
-                    handle.trigger();
-                }
-            }
-
-            Stage::Exclusive { exclusive_task } => {
-                if force_mask & TASKS_EXCLUSIVE == 0 {
-                    if exclusive_task.is_none() {
-                        return;
-                    }
-
-                    if self.pending.mutations == 0 {
-                        return;
-                    }
-                }
-
-                let Some(handle) = take(exclusive_task) else {
-                    self.stage = Stage::Interruption { pending: 0 };
-                    return;
-                };
-
-                self.stage = Stage::Interruption { pending: 1 };
-
-                handle.trigger();
-            }
-
-            Stage::Mutation { mutation_tasks } => {
-                if force_mask & TASKS_MUTATION == 0 {
-                    return;
-                }
-
-                let mutation_tasks = take(mutation_tasks);
-
-                self.stage = Stage::Interruption {
-                    pending: mutation_tasks.len(),
-                };
-
-                for handle in mutation_tasks {
-                    handle.trigger();
-                }
-            }
-
-            Stage::Interruption { .. } => {}
+        if self.active_tasks.insert(id, info).is_some() {
+            unsafe { ld_unreachable!("Duplicate task id.") }
         }
     }
 
     #[inline(always)]
-    fn transit(&mut self, notifiers: &Notifiers) {
-        if self.stage.is_locked() {
+    fn interrupt_active_tasks(&mut self, threshold: TaskPriority) {
+        if threshold == 0 {
             return;
         }
 
-        if self.pending.mutations > 0 {
-            if let Stage::Mutation { .. } = &self.stage {
-                return;
+        for task_info in self.active_tasks.values() {
+            if task_info.priority < threshold {
+                task_info.shutdown.trigger();
             }
-
-            self.stage = Stage::Mutation {
-                mutation_tasks: new_tasks_set(),
-            };
-
-            notifiers.ready_for_mutation.notify_all();
-
-            return;
-        }
-
-        if self.pending.exclusive > 0 {
-            if let Stage::Exclusive { .. } = &self.stage {
-                return;
-            }
-
-            self.stage = Stage::Exclusive {
-                exclusive_task: None,
-            };
-
-            notifiers.ready_for_exclusive.notify_one();
-
-            return;
-        }
-
-        if self.pending.analysis > 0 {
-            if let Stage::Analysis { .. } = &self.stage {
-                return;
-            }
-
-            self.stage = Stage::Analysis {
-                analysis_tasks: new_tasks_set(),
-            };
-
-            notifiers.ready_for_analysis.notify_all();
-
-            return;
         }
     }
-}
 
-enum Stage<S> {
-    Analysis { analysis_tasks: HashSet<Handle, S> },
-    Exclusive { exclusive_task: Option<Handle> },
-    Mutation { mutation_tasks: HashSet<Handle, S> },
-    Interruption { pending: usize },
-}
-
-impl<S: SyncBuildHasher> Stage<S> {
     #[inline(always)]
-    fn is_locked(&self) -> bool {
-        match self {
-            Stage::Analysis { analysis_tasks } => !analysis_tasks.is_empty(),
-            Stage::Exclusive { exclusive_task } => exclusive_task.is_some(),
-            Stage::Mutation { mutation_tasks } => !mutation_tasks.is_empty(),
-            Stage::Interruption { pending } => *pending > 0,
+    fn cancel_pending_tasks(&mut self, threshold: TaskPriority) {
+        if threshold == 0 {
+            return;
         }
+
+        self.sleep_tasks.retain(|sleep_task| {
+            if sleep_task.priority > threshold {
+                return true;
+            }
+
+            if self
+                .awoke_tasks
+                .insert(sleep_task.id, WakeupKind::Cancel)
+                .is_some()
+            {
+                unsafe { ld_unreachable!("Duplicate task id.") }
+            }
+
+            sleep_task.waker.as_ref().notify_one();
+
+            false
+        })
+    }
+
+    #[inline(always)]
+    fn enqueue_task(
+        &mut self,
+        id: TaskId,
+        kind: TaskKind,
+        priority: TaskPriority,
+        handle: H,
+    ) -> TaskWaker {
+        let waker = Shared::new(Condvar::new());
+
+        self.sleep_tasks.push(SleepTaskInfo {
+            id,
+            kind,
+            priority,
+            handle,
+            waker: waker.clone(),
+        });
+
+        waker
+    }
+
+    #[inline(always)]
+    fn pending_priority(&self) -> TaskPriority {
+        let Some(peek) = self.sleep_tasks.peek() else {
+            return 0;
+        };
+
+        peek.priority
+    }
+
+    #[inline(always)]
+    fn gen_task_id(&mut self) -> TaskId {
+        self.next_task_id = match self.next_task_id.checked_add(1) {
+            Some(id) => id,
+            None => panic!("Too many tasks."),
+        };
+
+        self.next_task_id
     }
 }
 
-struct Notifiers {
-    ready_for_analysis: Condvar,
-    ready_for_exclusive: Condvar,
-    ready_for_mutation: Condvar,
+type TaskWaker = Shared<Condvar>;
+
+enum WakeupKind {
+    Activate,
+    Cancel,
 }
 
-struct Pending {
-    analysis: usize,
-    exclusive: usize,
-    mutations: usize,
+struct ActiveTaskInfo<H> {
+    priority: TaskPriority,
+    shutdown: H,
+}
+
+struct SleepTaskInfo<H> {
+    id: TaskId,
+    kind: TaskKind,
+    priority: TaskPriority,
+    handle: H,
+    waker: TaskWaker,
+}
+
+impl<H: TaskHandle> PartialEq for SleepTaskInfo<H> {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        self.priority.eq(&other.priority)
+    }
+}
+
+impl<H: TaskHandle> Eq for SleepTaskInfo<H> {}
+
+impl<H: TaskHandle> PartialOrd for SleepTaskInfo<H> {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<H: TaskHandle> Ord for SleepTaskInfo<H> {
+    #[inline(always)]
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.priority.cmp(&other.priority)
+    }
+}
+
+impl<H: TaskHandle> SleepTaskInfo<H> {
+    #[inline(always)]
+    fn is_cancelled(&self, cancel_threshold: TaskPriority) -> bool {
+        self.priority < cancel_threshold || self.handle.is_triggered()
+    }
 }
 
 #[inline(always)]
-fn new_tasks_set<S: SyncBuildHasher>() -> HashSet<Handle, S> {
-    HashSet::with_capacity_and_hasher(TASKS_CAPACITY, S::default())
+fn active_mode_fits(active_mode: TaskKind, task_kind: TaskKind) -> bool {
+    active_mode == task_kind && active_mode != TaskKind::Exclusive
 }

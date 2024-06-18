@@ -1,39 +1,38 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::fmt::{Debug, Display, Formatter};
 
 use crate::{
     arena::{Entry, Identifiable},
@@ -50,23 +49,50 @@ use crate::{
         TokenCount,
         TokenCursor,
     },
-    std::*,
-    syntax::{Capture, Node, NodeRef, PolyRef, PolyVariant, SyntaxTree},
+    syntax::{Capture, Node, NodeRef, PolyRef, PolyVariant, SyntaxError, SyntaxTree},
     units::{Document, ImmutableUnit, MutableUnit},
 };
 
+/// An object that grants access to the lexical and syntax structure of
+/// an individual file within the compilation project.
+///
+/// [Document], [ImmutableUnit] and [MutableUnit] are compilation units
+/// because they offer access to both components of the language grammar,
+/// but, for instance, [TokenBuffer] is not because it only provides an access
+/// to the lexical structure only.
+///
+/// CompilationUnit trait provides conventional functions to convert this unit
+/// into other types of units and some syntax analysis functions
+/// that require access to the full grammar structure of the file.
+///
+/// If you intend to implement this trait on your object, take a look at the
+/// [Lexis] and the [Syntax] facade-interfaces; they will assist you in exposing
+/// particular components of the grammar.
 pub trait CompilationUnit:
     SourceCode<Token = <<Self as SyntaxTree>::Node as Node>::Token> + SyntaxTree
 {
+    /// Returns `true` if the compilation unit allows document write operations
+    /// after creation.
     fn is_mutable(&self) -> bool;
 
+    /// Returns `true` if the compilation unit does not have write capabilities
+    /// after creation.
     #[inline(always)]
     fn is_immutable(&self) -> bool {
         !self.is_mutable()
     }
 
+    /// Extracts lexical structure of the compilation unit.
     fn into_token_buffer(self) -> TokenBuffer<<Self as SourceCode>::Token>;
 
+    /// Converts this compilation unit into [Document].
+    ///
+    /// The mutable capabilities of the returning document depend on the
+    /// [CompilationUnit::is_mutable] value.
+    ///
+    /// Depending on the implementation this function may require full
+    /// source code reparsing, but implementors typically make the best effort
+    /// to reduce overhead. In particular, [Document]'s into_document is noop.
     #[inline(always)]
     fn into_document(self) -> Document<<Self as SyntaxTree>::Node>
     where
@@ -78,6 +104,12 @@ pub trait CompilationUnit:
         }
     }
 
+    /// Converts this compilation unit [MutableUnit].
+    ///
+    /// Depending on the implementation this function may require full
+    /// source code reparsing, but implementors typically make the best effort
+    /// to reduce overhead. In particular, [MutableUnit]'s into_mutable_unit
+    /// is noop.
     #[inline(always)]
     fn into_mutable_unit(self) -> MutableUnit<<Self as SyntaxTree>::Node>
     where
@@ -86,6 +118,12 @@ pub trait CompilationUnit:
         self.into_token_buffer().into_mutable_unit()
     }
 
+    /// Converts this compilation unit [ImmutableUnit].
+    ///
+    /// Depending on the implementation this function may require full
+    /// source code reparsing, but implementors typically make the best effort
+    /// to reduce overhead. In particular, [ImmutableUnit]'s into_immutable_unit
+    /// is noop.
     #[inline(always)]
     fn into_immutable_unit(self) -> ImmutableUnit<<Self as SyntaxTree>::Node>
     where
@@ -94,6 +132,21 @@ pub trait CompilationUnit:
         self.into_token_buffer().into_immutable_unit()
     }
 
+    /// Searches for the top-most node in the syntax tree that fully covers
+    /// specified source code [span](ToSpan).
+    ///
+    /// For example, in the case of JSON `{"foo": [123]}`, the coverage of the
+    /// "123" token could be the `[123]` array, and the coverage of the ":"
+    /// token could be the `"foo": [bar]` entry of the JSON object.
+    ///
+    /// The result depends on the particular programming language grammar.
+    ///
+    /// In the worst case scenario, if the algorithm fails to find the top-most
+    /// node, it returns the reference to the root node.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the specified span is not valid for this compilation unit.
     #[inline(always)]
     fn cover(&self, span: impl ToSpan) -> NodeRef
     where
@@ -113,24 +166,63 @@ pub trait CompilationUnit:
         }
     }
 
+    /// Returns an object that prints the underlying grammar structure.
+    ///
+    /// The `poly_ref` parameter specifies a reference to a particular grammar
+    /// component to debug. It could be a [NodeRef],
+    /// [TokenRef](crate::lexis::TokenRef) or [PolyVariant].
+    ///
+    /// To print the entire syntax tree with all nodes and tokens metadata, you
+    /// can obtain a root NodeRef using [SyntaxTree::root_node_ref] function.
+    ///
+    /// The default implementation is infallible regardless of the `poly_ref`
+    /// validity.
     #[inline(always)]
-    fn debug_tree(
-        &self,
-        poly_ref: &(impl PolyRef + ?Sized),
-    ) -> DebugTree<<Self as SyntaxTree>::Node, <Self as SourceCode>::Cursor<'_>, Self>
+    fn display(&self, poly_ref: &(impl PolyRef + ?Sized)) -> impl Debug + Display + '_
     where
         Self: Sized,
     {
-        DebugTree {
+        DisplayTree {
             unit: self,
             variant: poly_ref.as_variant(),
         }
     }
 }
 
+/// A facade of the lexical structure.
+///
+/// This trait auto-implements [SourceCode] on the target object by delegating
+/// all calls to the required function [Lexis::lexis].
+///
+/// ```rust
+/// use lady_deirdre::units::Lexis;
+/// use lady_deirdre::arena::{Id, Identifiable};
+/// use lady_deirdre::lexis::{Token, TokenBuffer};
+///
+/// struct MyDocument<T: Token> {
+///     buf: TokenBuffer<T>,
+/// }
+///
+/// impl<T: Token> Identifiable for MyDocument<T> {
+///     fn id(&self) -> Id {
+///         self.buf.id()
+///     }
+/// }
+///
+/// impl<T: Token> Lexis for MyDocument<T> {
+///     type Lexis = TokenBuffer<T>;
+///
+///     fn lexis(&self) -> &Self::Lexis {
+///         &self.buf
+///     }
+/// }
+/// ```
 pub trait Lexis: Identifiable {
+    /// The target [SourceCode] delegation type.
     type Lexis: SourceCode;
 
+    /// This function fully exposes underlying [SourceCode] interface
+    /// of this object.
     fn lexis(&self) -> &Self::Lexis;
 }
 
@@ -195,11 +287,49 @@ impl<F: Lexis> SourceCode for F {
     }
 }
 
+/// A facade of the syntax structure.
+///
+/// This trait auto-implements [SyntaxTree] on the target object by delegating
+/// all calls to the required functions [Syntax::syntax]
+/// and [Syntax::syntax_mut].
+///
+/// ```rust
+/// use lady_deirdre::units::Syntax;
+/// use lady_deirdre::arena::{Id, Identifiable};
+/// use lady_deirdre::syntax::{Node, ImmutableSyntaxTree};
+///
+/// struct MyDocument<N: Node> {
+///     tree: ImmutableSyntaxTree<N>,
+/// }
+///
+/// impl<N: Node> Identifiable for MyDocument<N> {
+///     fn id(&self) -> Id {
+///         self.tree.id()
+///     }
+/// }
+///
+/// impl<N: Node> Syntax for MyDocument<N> {
+///     type Syntax = ImmutableSyntaxTree<N>;
+///
+///     fn syntax(&self) -> &Self::Syntax {
+///         &self.tree
+///     }
+///
+///     fn syntax_mut(&mut self) -> &mut Self::Syntax {
+///         &mut self.tree
+///     }
+/// }
+/// ```
 pub trait Syntax: Identifiable {
+    /// The target [SyntaxTree] delegation type.
     type Syntax: SyntaxTree;
 
+    /// This function fully exposes immutable access to the underlying
+    /// [SyntaxTree] interface of this object.
     fn syntax(&self) -> &Self::Syntax;
 
+    /// This function fully exposes mutable access to the underlying
+    /// [SyntaxTree] interface of this object.
     fn syntax_mut(&mut self) -> &mut Self::Syntax;
 }
 
@@ -246,12 +376,12 @@ impl<F: Syntax> SyntaxTree for F {
     }
 
     #[inline(always)]
-    fn get_error(&self, entry: &Entry) -> Option<&<Self::Node as Node>::Error> {
+    fn get_error(&self, entry: &Entry) -> Option<&SyntaxError> {
         self.syntax().get_error(entry)
     }
 }
 
-pub struct DebugTree<
+struct DisplayTree<
     'unit,
     N: Node,
     C: TokenCursor<'unit>,
@@ -261,25 +391,25 @@ pub struct DebugTree<
     variant: PolyVariant,
 }
 
-impl<'unit, N, C, U> Debug for DebugTree<'unit, N, C, U>
+impl<'unit, N, C, U> Debug for DisplayTree<'unit, N, C, U>
 where
     N: Node,
     C: TokenCursor<'unit>,
     U: CompilationUnit<Cursor<'unit> = C, Node = N>,
 {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         Display::fmt(self, formatter)
     }
 }
 
-impl<'unit, N, C, U> Display for DebugTree<'unit, N, C, U>
+impl<'unit, N, C, U> Display for DisplayTree<'unit, N, C, U>
 where
     N: Node,
     C: TokenCursor<'unit>,
     U: CompilationUnit<Cursor<'unit> = C, Node = N>,
 {
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match &self.variant {
             PolyVariant::Token(variant) => {
                 let chunk: Chunk<U::Token> = match variant.chunk(self.unit) {
@@ -330,15 +460,15 @@ where
                     match capture {
                         Capture::SingleNode(capture) => match alternate {
                             true => debug_struct
-                                .field(&key, &format_args!("{:#}", self.unit.debug_tree(capture))),
+                                .field(&key, &format_args!("{:#}", self.unit.display(capture))),
                             false => debug_struct
-                                .field(&key, &format_args!("{}", self.unit.debug_tree(capture))),
+                                .field(&key, &format_args!("{}", self.unit.display(capture))),
                         },
 
                         Capture::ManyNodes(capture) => {
                             let poly_refs = capture
                                 .into_iter()
-                                .map(|poly_ref| self.unit.debug_tree(poly_ref))
+                                .map(|poly_ref| self.unit.display(poly_ref))
                                 .collect::<Vec<_>>();
 
                             debug_struct.field(&key, &poly_refs)
@@ -346,15 +476,15 @@ where
 
                         Capture::SingleToken(capture) => match alternate {
                             true => debug_struct
-                                .field(&key, &format_args!("{:#}", self.unit.debug_tree(capture))),
+                                .field(&key, &format_args!("{:#}", self.unit.display(capture))),
                             false => debug_struct
-                                .field(&key, &format_args!("{}", self.unit.debug_tree(capture))),
+                                .field(&key, &format_args!("{}", self.unit.display(capture))),
                         },
 
                         Capture::ManyTokens(capture) => {
                             let poly_refs = capture
                                 .into_iter()
-                                .map(|poly_ref| self.unit.debug_tree(poly_ref))
+                                .map(|poly_ref| self.unit.display(poly_ref))
                                 .collect::<Vec<_>>();
 
                             debug_struct.field(&key, &poly_refs)

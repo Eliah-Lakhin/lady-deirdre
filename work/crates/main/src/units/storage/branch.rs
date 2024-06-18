@@ -1,45 +1,43 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{marker::PhantomData, ptr::NonNull};
 
 use crate::{
     lexis::Length,
     mem::{array_copy_to, array_shift},
-    report::{debug_assert, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_unreachable},
     syntax::Node,
     units::{
         storage::{
@@ -50,7 +48,7 @@ use crate::{
             BRANCH_B,
             BRANCH_CAP,
         },
-        Watch,
+        Watcher,
     },
 };
 
@@ -86,7 +84,7 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
         destination: ChildCount,
         count: ChildCount,
     ) {
-        debug_assert!(
+        ld_assert!(
             source + count <= self.inner.occupied,
             "An attempt to copy non occupied data in Branch.",
         );
@@ -113,15 +111,15 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
 
     #[inline(always)]
     unsafe fn inflate(&mut self, from: ChildIndex, count: ChildCount) {
-        debug_assert!(
+        ld_assert!(
             from <= self.inner.occupied,
             "An attempt to inflate from out of bounds child in Branch."
         );
-        debug_assert!(
+        ld_assert!(
             count + self.inner.occupied <= Self::CAP,
             "An attempt to inflate with overflow in Branch."
         );
-        debug_assert!(count > 0, "An attempt to inflate of empty range in Page.");
+        ld_assert!(count > 0, "An attempt to inflate of empty range in Page.");
 
         if from < self.inner.occupied {
             unsafe {
@@ -147,15 +145,15 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
 
     #[inline(always)]
     unsafe fn deflate(&mut self, from: ChildIndex, count: ChildCount) -> bool {
-        debug_assert!(
+        ld_assert!(
             from < self.inner.occupied,
             "An attempt to deflate from non occupied child in Branch."
         );
-        debug_assert!(
+        ld_assert!(
             from + count <= self.inner.occupied,
             "An attempt to deflate with overflow in Branch."
         );
-        debug_assert!(count > 0, "An attempt to deflate of empty range.");
+        ld_assert!(count > 0, "An attempt to deflate of empty range.");
 
         if from + count < self.inner.occupied {
             unsafe {
@@ -185,12 +183,12 @@ impl<ChildLayer: Layer, N: Node> Item for Branch<ChildLayer, N> {
 impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
     #[inline(always)]
     pub(super) fn new(occupied: ChildCount) -> BranchRef<ChildLayer, N> {
-        debug_assert!(
+        ld_assert!(
             occupied > 0,
             "An attempt to create Branch with zero occupied values."
         );
 
-        debug_assert!(
+        ld_assert!(
             occupied <= Self::CAP,
             "An attempt to create Branch with occupied value exceeding capacity."
         );
@@ -218,7 +216,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
         mut self,
         height: Height,
         refs: &mut TreeRefs<N>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
     ) -> ChildCount {
         let mut child_count = 0;
 
@@ -226,10 +224,10 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
             let child = unsafe { self.inner.children.get_unchecked_mut(index) };
 
             match height {
-                0 | 1 => unsafe { debug_unreachable!("Incorrect height.") },
+                0 | 1 => unsafe { ld_unreachable!("Incorrect height.") },
 
                 2 => {
-                    debug_assert!(
+                    ld_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Page),
                         "Incorrect height.",
                     );
@@ -238,11 +236,11 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let page = unsafe { page_ref.into_owned() };
 
-                    child_count += unsafe { page.free_subtree(refs, watch) };
+                    child_count += unsafe { page.free_subtree(refs, watcher) };
                 }
 
                 3 => {
-                    debug_assert!(
+                    ld_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
                         "Incorrect height.",
                     );
@@ -251,11 +249,11 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let branch = unsafe { branch_ref.into_owned() };
 
-                    child_count += unsafe { branch.free_subtree(height - 1, refs, watch) }
+                    child_count += unsafe { branch.free_subtree(height - 1, refs, watcher) }
                 }
 
                 _ => {
-                    debug_assert!(
+                    ld_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
                         "Incorrect height.",
                     );
@@ -264,7 +262,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
 
                     let branch = unsafe { branch_ref.into_owned() };
 
-                    child_count += unsafe { branch.free_subtree(height - 1, refs, watch) }
+                    child_count += unsafe { branch.free_subtree(height - 1, refs, watcher) }
                 }
             }
         }
@@ -280,10 +278,10 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
             let child = unsafe { self.inner.children.get_unchecked_mut(index) };
 
             match height {
-                0 | 1 => unsafe { debug_unreachable!("Incorrect height.") },
+                0 | 1 => unsafe { ld_unreachable!("Incorrect height.") },
 
                 2 => {
-                    debug_assert!(
+                    ld_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Page),
                         "Incorrect height.",
                     );
@@ -296,7 +294,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
                 }
 
                 3 => {
-                    debug_assert!(
+                    ld_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
                         "Incorrect height.",
                     );
@@ -309,7 +307,7 @@ impl<ChildLayer: Layer, N: Node> Branch<ChildLayer, N> {
                 }
 
                 _ => {
-                    debug_assert!(
+                    ld_assert!(
                         matches!(ChildLayer::descriptor(), LayerDescriptor::Branch),
                         "Incorrect height.",
                     );
@@ -428,7 +426,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
     unsafe fn parent_mut(&mut self) -> &mut BranchRef<BranchLayer, N> {
         let parent_entry_index = unsafe { &mut self.as_mut().inner.parent };
 
-        debug_assert!(
+        ld_assert!(
             !parent_entry_index.is_dangling(),
             "An attempt to get parent from root.",
         );
@@ -462,7 +460,7 @@ impl<ChildLayer: Layer, N: Node> ItemRef<ChildLayer, N> for BranchRef<ChildLayer
 
         let occupied = unsafe { self.as_ref().inner.occupied };
 
-        debug_assert!(from < occupied, "Split at position out of bounds.",);
+        ld_assert!(from < occupied, "Split at position out of bounds.",);
 
         match from == 0 {
             false => {
@@ -679,7 +677,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
         let parent_occupied = unsafe { self.as_ref().occupied() };
 
         match parent_occupied {
-            0 => unsafe { debug_unreachable!("Empty item.") },
+            0 => unsafe { ld_unreachable!("Empty item.") },
 
             1 => (true, unsafe { self.as_ref().inner.children[0] }),
 
@@ -801,7 +799,7 @@ impl<ChildLayer: Layer, N: Node> BranchRef<ChildLayer, N> {
         let parent_occupied = unsafe { self.as_ref().occupied() };
 
         match parent_occupied {
-            0 => unsafe { debug_unreachable!("Empty item.") },
+            0 => unsafe { ld_unreachable!("Empty item.") },
 
             1 => (true, unsafe { self.as_ref().inner.children[0] }),
 

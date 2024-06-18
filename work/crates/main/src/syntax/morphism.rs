@@ -1,59 +1,67 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::{
+    borrow::Borrow,
+    fmt::{Debug, Display, Formatter},
+};
+
 use crate::{
     arena::{Id, Identifiable},
-    format::{Priority, SnippetConfig, SnippetFormatter},
+    format::{AnnotationPriority, SnippetConfig, SnippetFormatter},
     lexis::{SiteSpan, ToSpan, Token, TokenRef, NIL_TOKEN_REF},
-    report::debug_unreachable,
-    std::*,
+    report::ld_unreachable,
     syntax::{AbstractNode, NodeRef, NIL_NODE_REF},
     units::CompilationUnit,
 };
 
+/// An owned wrapper of [NodeRef] and [TokenRef].
+///
+/// This is a helper object that wraps both kinds of syntax and lexical
+/// component references into a single one.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PolyVariant {
+    /// This polymorphic variant represents a [TokenRef] reference.
     Token(TokenRef),
+
+    /// This polymorphic variant represents a [NodeRef] reference.
     Node(NodeRef),
 }
 
 impl Debug for PolyVariant {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::Token(variant) => Debug::fmt(variant, formatter),
             Self::Node(variant) => Debug::fmt(variant, formatter),
@@ -132,23 +140,50 @@ impl PolyRef for PolyVariant {
     }
 }
 
+/// A generic interface for the [NodeRef] and the [TokenRef].
+///
+/// This trait is implemented for the [NodeRef], [TokenRef], and
+/// the [PolyVariant], and provides functions common to all of them.
 pub trait PolyRef: Identifiable + Debug + 'static {
+    /// Returns a discriminant of the underlying reference kind.
     fn kind(&self) -> RefKind;
 
+    /// Returns true, if the underlying reference intentionally does not refer
+    /// to any node or token within any compilation unit.
     fn is_nil(&self) -> bool;
 
+    /// Returns an owned wrapper of the [NodeRef] and [TokenRef].
     fn as_variant(&self) -> PolyVariant;
 
+    /// Returns a [TokenRef] if this PolyRef represents a TokenRef; otherwise
+    /// returns a [TokenRef::nil].
     fn as_token_ref(&self) -> &TokenRef;
 
+    /// Returns a [NodeRef] if this PolyRef represents a NodeRef; otherwise
+    /// returns a [NodeRef::nil].
     fn as_node_ref(&self) -> &NodeRef;
 
+    /// Computes a [site span](SiteSpan) of the underlying object.
+    ///
+    /// Returns None if the instance referred to by the underlying reference
+    /// does not exist in the `unit`.
+    ///
+    /// If the underlying object is a token, the function returns a span
+    /// of its char bounds.
+    ///
+    /// If the underlying object is a node, the function delegates span
+    /// computation to the [AbstractNode::span] function.
     fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan>
     where
         Self: Sized;
 
+    /// Returns a displayable object that prints the underlying object metadata
+    /// for debugging purposes.
+    ///
+    /// If the underlying reference is not valid for the specified `unit`,
+    /// the returning object would [Debug] the [NodeRef] or a [TokenRef].
     #[inline(always)]
-    fn display<'unit, U: CompilationUnit>(&self, unit: &'unit U) -> DisplayPolyRef<'unit, U>
+    fn display<'unit>(&self, unit: &'unit impl CompilationUnit) -> impl Debug + Display + 'unit
     where
         Self: Sized,
     {
@@ -168,13 +203,18 @@ impl ToOwned for dyn PolyRef {
     }
 }
 
+/// A discriminant of the [PolyRef].
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RefKind {
+    /// The underlying polymorphic reference is a [TokenRef].
     Token,
+
+    /// The underlying polymorphic reference is a [NodeRef].
     Node,
 }
 
 impl RefKind {
+    /// Returns true, if `self == Self::Token`.
     #[inline(always)]
     pub fn is_token(&self) -> bool {
         match self {
@@ -183,6 +223,7 @@ impl RefKind {
         }
     }
 
+    /// Returns true, if `self == Self::Node`.
     #[inline(always)]
     pub fn is_node(&self) -> bool {
         match self {
@@ -192,13 +233,20 @@ impl RefKind {
     }
 }
 
-pub struct DisplayPolyRef<'unit, U: CompilationUnit> {
+struct DisplayPolyRef<'unit, U: CompilationUnit> {
     unit: &'unit U,
     variant: PolyVariant,
 }
 
+impl<'unit, U: CompilationUnit> Debug for DisplayPolyRef<'unit, U> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, formatter)
+    }
+}
+
 impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         let mut summary = String::new();
         let span;
 
@@ -213,7 +261,7 @@ impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
                     Some(span) => span,
 
                     // Safety: Chunks are always valid spans.
-                    None => unsafe { debug_unreachable!("Invalid chunk span.") },
+                    None => unsafe { ld_unreachable!("Invalid chunk span.") },
                 };
 
                 let token = chunk.token;
@@ -266,7 +314,7 @@ impl<'unit, U: CompilationUnit> Display for DisplayPolyRef<'unit, U> {
             .set_config(&CONFIG)
             .set_caption(format!("Unit({})", self.unit.id()))
             .set_summary(summary)
-            .annotate(span, Priority::Default, "")
+            .annotate(span, AnnotationPriority::Default, "")
             .finish()
     }
 }

@@ -1,44 +1,74 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{report::system_panic, std::*};
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Display, Formatter},
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    mem::ManuallyDrop,
+    ptr::NonNull,
+    sync::{
+        atomic,
+        atomic::{fence, AtomicUsize},
+    },
+};
+
+use crate::report::system_panic;
 
 const REF_MAX: usize = usize::MAX - 1;
 
+/// A reference-counting pointer.
+///
+/// This object is similar to the standard [Arc](std::sync::Arc)
+/// reference-counting pointer, such that all clones of the same Shared instance
+/// point to the same data allocation and provide read-only access
+/// to this allocation. The allocation is freed once the last instance of
+/// a Shared is dropped.
+///
+/// There are two main differences between Arc and Shared:
+///
+///  1. Shared does not have a [Weak](std::sync::Weak) counterpart. All Shared
+///     clones are "strong" references. Therefore, the clone and drop operations
+///     are slightly cheaper, and Shared allocates one machine-word less than
+///     Arc.
+///  2. Shared provides read-access through the [AsRef] implementation rather
+///     than [Deref](std::ops::Deref). This makes its API more ergonomic to
+///     use as a "builder" because [Shared::get_mut] and [Shared::make_mut]
+///     operate on `&mut self`. However, it is less ergonomic for reading
+///     because the user has to call `my_shared.as_ref()` explicitly to read
+///     the underlying data.
 #[repr(transparent)]
 pub struct Shared<T: ?Sized> {
     inner: NonNull<SharedInner<T>>,
@@ -53,14 +83,14 @@ unsafe impl<T: Send + Sync> Sync for Shared<T> {}
 
 impl<T: Debug> Debug for Shared<T> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         Debug::fmt(self.as_ref(), formatter)
     }
 }
 
 impl<T: Display> Display for Shared<T> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(self.as_ref(), formatter)
     }
 }
@@ -116,7 +146,7 @@ impl<T> Clone for Shared<T> {
             // Safety: Shared owns a pointer to valid data leaked from the Box.
             let inner = unsafe { self.inner.as_ref() };
 
-            inner.counter.fetch_add(1, AtomicOrdering::Relaxed)
+            inner.counter.fetch_add(1, atomic::Ordering::Relaxed)
         };
 
         if counter > REF_MAX {
@@ -136,11 +166,11 @@ impl<T: ?Sized> Drop for Shared<T> {
             // Safety: Shared owns a pointer to valid data leaked from the Box.
             let inner = unsafe { self.inner.as_ref() };
 
-            inner.counter.fetch_sub(1, AtomicOrdering::Release)
+            inner.counter.fetch_sub(1, atomic::Ordering::Release)
         };
 
         if counter == 1 {
-            fence(AtomicOrdering::Acquire);
+            fence(atomic::Ordering::Acquire);
 
             // Safety:
             //   1. Shared owns a pointer to valid data leaked from the Box.
@@ -165,6 +195,7 @@ impl<T> AsRef<T> for Shared<T> {
 }
 
 impl<T> Shared<T> {
+    /// Creates a new Shared.
     #[inline(always)]
     pub fn new(data: T) -> Self {
         let inner = Box::new(SharedInner {
@@ -179,20 +210,24 @@ impl<T> Shared<T> {
         }
     }
 
+    /// Returns a mutable reference to the underlying data.
+    ///
+    /// Returns None if there are other live Shared instance to
+    /// the same allocation.
     #[inline(always)]
     pub fn get_mut(&mut self) -> Option<&mut T> {
         let counter = {
             // Safety: Shared owns a pointer to valid data leaked from the Box.
             let inner = unsafe { self.inner.as_ref() };
 
-            inner.counter.load(AtomicOrdering::Acquire)
+            inner.counter.load(atomic::Ordering::Acquire)
         };
 
         if counter == 1 {
             // Safety:
             //   1. Shared owns a pointer to valid data leaked from the Box.
             //   2. This ownership is unique because of the counter value.
-            //   3. No new Shared clones may be created in between,
+            //   3. No new Shared clones may be created in between
             //      because this Shared instance is borrowed mutably.
             let inner = unsafe { self.inner.as_mut() };
 
@@ -202,7 +237,12 @@ impl<T> Shared<T> {
         None
     }
 
-    // Safety: There are no active borrows into the inner data.
+    /// Returns a mutable reference to the underlying data without additional
+    /// checks.
+    ///
+    /// **Safety**
+    ///
+    /// There are no other live Shared instance to the same allocation.
     #[inline(always)]
     pub unsafe fn get_mut_unchecked(&mut self) -> &mut T {
         #[cfg(debug_assertions)]
@@ -211,7 +251,7 @@ impl<T> Shared<T> {
                 // Safety: Shared owns a pointer to valid data leaked from the Box.
                 let inner = unsafe { self.inner.as_ref() };
 
-                inner.counter.load(AtomicOrdering::Acquire)
+                inner.counter.load(atomic::Ordering::Acquire)
             };
 
             if counter == 1 {
@@ -222,13 +262,22 @@ impl<T> Shared<T> {
         // Safety:
         //   1. Shared owns a pointer to valid data leaked from the Box.
         //   2. Since there are no active borrows into the inner data (upheld by the caller).
-        //   3. No new Shared clones may be created in between,
+        //   3. No new Shared clones may be created in between
         //      because this Shared instance is borrowed mutably.
         let inner = unsafe { self.inner.as_mut() };
 
         &mut inner.data
     }
 
+    /// Makes a mutable reference to the underlying data.
+    ///
+    /// If there are no other live Shared instances to the same allocation,
+    /// returns a mutable reference to the current allocation
+    /// (similarly to [get_mut](Self::get_mut)).
+    ///
+    /// Otherwise, replaces this Shared instance with a new one by cloning
+    /// the underlying data into a new allocation. Then, returns a mutable
+    /// reference to this new independent allocation.
     pub fn make_mut(&mut self) -> &mut T
     where
         T: Clone,
@@ -239,7 +288,7 @@ impl<T> Shared<T> {
 
             inner
                 .counter
-                .compare_exchange(1, 0, AtomicOrdering::Acquire, AtomicOrdering::Relaxed)
+                .compare_exchange(1, 0, atomic::Ordering::Acquire, atomic::Ordering::Relaxed)
                 .is_ok()
         };
 
@@ -248,7 +297,7 @@ impl<T> Shared<T> {
                 // Safety: Shared owns a pointer to valid data leaked from the Box.
                 let inner = unsafe { self.inner.as_ref() };
 
-                inner.counter.store(1, AtomicOrdering::Release);
+                inner.counter.store(1, atomic::Ordering::Release);
             }
 
             false => {
@@ -259,13 +308,17 @@ impl<T> Shared<T> {
         // Safety:
         //   1. Shared owns a pointer to valid data leaked from the Box.
         //   2. Owner uniqueness ensured above.
-        //   3. No new Shared clones may be created in between,
+        //   3. No new Shared clones may be created in between
         //      because this Shared instance is borrowed mutably.
         let inner = unsafe { self.inner.as_mut() };
 
         &mut inner.data
     }
 
+    /// Takes data from this Shared instance.
+    ///
+    /// Returns None if there are other live Shared instance to
+    /// the same allocation.
     #[inline(always)]
     pub fn into_inner(self) -> Option<T> {
         let this = ManuallyDrop::new(self);
@@ -274,11 +327,11 @@ impl<T> Shared<T> {
             // Safety: Shared owns a pointer to valid data leaked from the Box.
             let inner = unsafe { this.inner.as_ref() };
 
-            inner.counter.fetch_sub(1, AtomicOrdering::Release)
+            inner.counter.fetch_sub(1, atomic::Ordering::Release)
         };
 
         if counter == 1 {
-            fence(AtomicOrdering::Acquire);
+            fence(atomic::Ordering::Acquire);
 
             // Safety:
             //   1. Shared owns a pointer to valid data leaked from the Box.
@@ -292,6 +345,7 @@ impl<T> Shared<T> {
         None
     }
 
+    /// Returns the address of the Shared allocation.
     #[inline(always)]
     pub fn addr(&self) -> usize {
         self.inner.as_ptr() as usize
@@ -305,8 +359,7 @@ struct SharedInner<T: ?Sized> {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::{std::*, sync::Shared};
+    use crate::sync::Shared;
 
     #[test]
     fn test_shared() {

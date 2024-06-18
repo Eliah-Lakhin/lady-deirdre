@@ -1,116 +1,103 @@
-# Lady Deirdre Examples, Benchmarks, Integration Test.
+<!------------------------------------------------------------------------------
+  This file is a part of the "Lady Deirdre" work,
+  a compiler front-end foundation technology.
 
-This subproject of the Lady Deirdre technology contains a simple example of the
-[Json incremental parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json),
-[performance Benchmarks](#benchmarks), and
-[Integration Tests](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/tests).
+  This work is proprietary software with source-available code.
 
-## Benchmarks.
+  To copy, use, distribute, and contribute to this work, you must agree to
+  the terms of the General License Agreement:
 
-### Setup.
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.
 
-The code of the Benchmark tests is under the
-[benches](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/benches)
-directory.
+  The agreement grants you a Commercial-Limited License that gives you
+  the right to use my work in non-commercial and limited commercial products
+  with a total gross revenue cap. To remove this commercial limit for one of
+  your products, you must acquire an Unrestricted Commercial License.
 
-These tests generate a set of random
-[JSON](https://en.wikipedia.org/wiki/JSON) files of different sizes and nesting
-complexity, and series of random edits(insertions, deletions and replacements)
-of also different sizes and nesting complexity for each JSON files.
+  If you contribute to the source code, documentation, or related materials
+  of this work, you must assign these changes to me. Contributions are
+  governed by the "Derivative Work" section of the General License
+  Agreement.
 
-The JSON files and each edit results are always valid JSONs, and the validity
-is verified automatically beforehand.
+  Copying the work in parts is strictly forbidden, except as permitted under
+  the terms of the General License Agreement.
 
-The Benchmarks test computational performance on each series of edits comparing
-three well-known Rust frameworks of different functional capabilities, and the
-two different instances of Lady Deirdre:
- - [Nom](https://crates.io/crates/nom). A parsers combinator library. This
-   combinator library is widely recognized as one of the best in performance
-   for non-incremental parsing, but Nom does not have any incremental reparsing
-   capabilities.
- - [Tree-Sitter](https://crates.io/crates/tree-sitter). An incremental parsers
-   generator tool. This library is one of the most widely recognizable solution
-   for incremental parsing.
- - [Ropey](https://crates.io/crates/ropey). A mutable text storage library.
-   This library does not provide any syntax or lexis parsing capabilities, but
-   Ropey has mutable text storage functionality similar to some Lady Deirdre
-   functions.
- - "Self Syntax" is an instance of the Json syntax and lexis incremental parser
-   that uses Lady Deirdre under the hood.
- - "Self Lexis" is an instance of the Json lexis only incremental parser
-   that uses Lady Deirdre under the hood.
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
 
-There are three series of tests on three independent JSON files of different
-sizes:
- - Large ~10Mb file (10791089 bytes, 178508 lines).
- - Medium ~4Mb file (4346095 bytes, 72072 lines).
- - Small ~82Kb file (84638 bytes, 1957 lines).
+  This work is provided "as is" without any warranties, express or implied,
+  except to the extent that such disclaimers are held to be legally invalid.
 
-For each file the benchmarks test initial loading time, independent edits time,
-and the series of edits(1100 total edits) applied sequentially.
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
 
-The series of edits is the most interesting performance indicator, because it
-shows actual performance of live editing of the text that in some way mimics
-end-user sequential edit actions.
+# Lady Deirdre Examples
 
-I used my mobile Intel NUC machine to perform benchmark tests:
-Intel Core i7-8809G CPU @ 3.10GHz × 8, 16Mb RAM.
+This crate contains examples showcasing the core features of Lady Deirdre.
 
-### Results.
+The source code of each example is accompanied by detailed explanations and
+comments in the [User Guide](todo). Therefore, it is recommended to explore them
+alongside the corresponding chapters of the guide.
 
-You can find complete Criterion report
-[here](https://6314c0d3ffd9447cb096168e--cheerful-malasada-35b65a.netlify.app/report/).
+Each example is located in its own crate module within the "src" directory.
+The root "mod.rs" file of each module includes runnable tests that demonstrate
+specific features of the example.
 
-1. **Incremental Reparsing.**
+- [Json Grammar](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_grammar).
 
-   Lady Deirdre shows almost the same performance on the Small file(82Kb)
-   sequential edits as Tree-Sitter: 12.1ms vs 11.25ms.
+  Demonstrates how to use the Token and Node derive macros on arbitrary
+  user-defined enums to establish programming language lexical and syntax
+  grammar using a simple JSON language example.
 
-   But Lady Deirdre demonstrates significantly better results than Tree-Sitter
-   on Medium(4Mb) and Large(10Mb) files: 18ms vs 58ms and 39.1ms vs 124.5ms
-   accordingly.
+  Relevant User Guide chapters: [Lexical Grammar](todo/lexis/lexical-grammar.html)
+  and [Syntax Grammar](todo/syntax/syntax.html)
 
-2. **Non-Incremental Parsing.**
+- [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/expr_parser).
 
-   Nom works significantly better than Tree-Sitter and Lady Deirdre for initial
-   parsing. For the Small file(82Kb) Nom has parsed the file in 0.87ms,
-   Lady Deirdre in 2.48ms, and Tree-Sitter in 5.91ms.
+  Shows how to implement a hand-written and error-resistant recursive descendant
+  syntax parser and how to use this parser together with the Node
+  macro-generated parsers.
 
-   For the Larger file(10Mb) Nom's demonstrates similar results:
-   87.25ms(Nom) vs 304ms(Lady Deirdre) vs 624ms(Tree-Sitter).
+  This example parses boolean expressions (e.g., `(true | false) & true`) using
+  the Pratt algorithm.
 
-   Even though non-incremental parser combinator Nom shows significantly
-   better results than incremental parsers, Lady Deirdre works up to 2 times
-   faster in these tests than Tree-Sitter.
+  Relevant User Guide chapter: [Hand-Written Parsers](todo/syntax/hand-written-parsers.html).
 
-   For non-incremental series of complete reparsing of the Small JSON file Nom
-   expectedly demonstrates performance degradation comparing to Lady Deirdre and
-   Tree-Sitter: ~2155ms for 1100 edits complete reparsing.
+- [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/chain_analysis).
 
-3. **Text Mutations.**
+  Illustrates how to set up and use the semantic analysis framework of Lady
+  Deirdre with simple variable introduction statements and nested code blocks,
+  such as: `{ let x = 10; { let y = x; } }`.
 
-   Ropey demonstrates significantly better results on all text edit tests
-   than Tree-Sitter and Lady Deirdre both (these tests not applicable to Nom).
-   To compare, on the Large JSON file(10Mb) a series of edits took
-   1.26ms(Ropey) vs 11.1ms(Lady Deirdre JSON lexis only parser).
+  This example incrementally infers the actual numeric values of introduced
+  variables by analyzing the chains of variable references in dynamically
+  evolving source code.
 
-   For fair comparison I would have to opt-out Lady Deirder's lexis parser
-   in these tests, but this is currently not possible.
+  Relevant User Guide chapter: [Semantics](todo/semantics/semantics.html).
 
-### Conclusion.
+- [JSON Formatter](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_formatter).
 
-Lady Deirdre demonstrates better performance than Tree-Sitter on initial data
-loading on all tests, comparable performance of incremental reparsing on small
-files, and better performance on incremental reparsing on medium to large files.
+  Shows how to use the source code formatter tools of Lady Deirdre to implement
+  a source code reformatting program based on the already defined syntax grammar
+  of the JSON language.
 
-These results allow me to conclude that in certain applications Lady Deirdre
-is competitive replacement of Tree-Sitter, a widely used production-ready
-incremental parsing solution. However, it is worth to mention that both solutions
-have different and sometimes incomparable functional capabilities, and
-the different goals. Moreover, the tests performed in these Benchmarks
-were applied on merely artificial snippets and relatively simple Json syntax.
+  Relevant User Guide chapter: [Code Formatters](todo/code-formatters/code-formatters.html).
 
-For non-incremental parsing Nom and solutions of the same class are
-more beneficial choice in performance for non-incremental compiler development,
-however both Tree-Sitter and Lady Deirdre are still applicable solutions for
-this type of parsing too.
+- [JSON Highlight](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_highlight).
+
+  Demonstrates how to print source code snippets with syntax highlighting and
+  annotated code fragments with user-defined messages to the terminal.
+  This feature is particularly useful for displaying compiler syntax errors to
+  the end user in the terminal.
+
+  Relevant User Guide chapter: [Snippets](todo/snippets.html).
+
+## Links
+
+- [Source Code](https://github.com/Eliah-Lakhin/lady-deirdre)
+- [Main Crate](https://crates.io/crates/lady-deirdre)
+- [API Documentation](https://docs.rs/lady-deirdre)
+- [User Guide](todo)
+- [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
+- [License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)

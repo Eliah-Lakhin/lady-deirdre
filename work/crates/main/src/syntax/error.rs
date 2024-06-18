@@ -1,43 +1,48 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    collections::HashSet,
+    fmt::{Debug, Display, Formatter},
+    marker::PhantomData,
+};
+
 use crate::{
     arena::{Entry, Id, Identifiable},
-    format::{Priority, SnippetFormatter},
+    format::{AnnotationPriority, SnippetFormatter},
     lexis::{
         Length,
         SiteRefSpan,
@@ -49,67 +54,59 @@ use crate::{
         TokenRule,
         TokenSet,
     },
-    std::*,
     syntax::{AbstractNode, Node, NodeRule, NodeSet, RecoveryResult, SyntaxTree, ROOT_RULE},
     units::CompilationUnit,
 };
 
+/// An [ErrorRef] reference that does not point to any syntax error.
+///
+/// The value of this static equals to the [ErrorRef::nil] value.
 pub static NIL_ERROR_REF: ErrorRef = ErrorRef::nil();
 
-/// A base syntax parse error object.
+/// A syntax error that may occur during the parsing process.
 ///
-/// All custom syntax/semantic errors must be [From](::std::convert::From) this object.
-///
-/// SyntaxError implements [Display](::std::fmt::Display) trait to provide default syntax error
-/// formatter, but an API user is encouraged to implement custom formatter to better represent
-/// semantic of particular programming language.
-///
-/// ```rust
-/// use lady_deirdre::syntax::ParseError;
-///
-/// enum CustomError {
-///     SyntaxError(ParseError),
-///     SemanticError(&'static str),
-/// }
-///
-/// impl From<ParseError> for CustomError {
-///     fn from(err: ParseError) -> Self {
-///         Self::SyntaxError(err)
-///     }
-/// }
-/// ```
+/// In Lady Deirdre syntax parsing is an
+/// [infallible](crate::syntax::SyntaxSession#parsing-algorithm-considerations)
+/// process. Hence, the syntax error object represents a report of the parser's
+/// error recovery attempt.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ParseError {
-    /// A [site](crate::lexis::Site) reference span of where the rule has failed.
+pub struct SyntaxError {
+    /// A [span of tokens](SiteRefSpan) where the error occurred.
     pub span: SiteRefSpan,
 
-    /// A name of the rule that has failed.
+    /// A parsing rule that reported the error.
     pub context: NodeRule,
 
+    /// A type of the recovery strategy that has been applied.
     pub recovery: RecoveryResult,
 
-    /// A set of tokens that the parser was expected.
-    ///
-    /// Possibly empty set.
+    /// A set of tokens that the parser expected in the [span](Self::span).
     pub expected_tokens: &'static TokenSet,
 
-    /// A set of named rules that the parser was expected to be descend to.
-    ///
-    /// Possibly empty set.
+    /// A set of nodes that the parser expected in the [span](Self::span).
     pub expected_nodes: &'static NodeSet,
 }
 
-impl ParseError {
+impl SyntaxError {
+    /// Returns a displayable object that prints a canonical title of
+    /// this syntax error.
     #[inline(always)]
     pub fn title<N: AbstractNode>(&self) -> impl Display + '_ {
         struct Title<'error, N> {
-            error: &'error ParseError,
+            error: &'error SyntaxError,
             _node: PhantomData<N>,
+        }
+
+        impl<'error, N: Node> Debug for Title<'error, N> {
+            #[inline(always)]
+            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                Display::fmt(self, formatter)
+            }
         }
 
         impl<'error, N: AbstractNode> Display for Title<'error, N> {
             #[inline(always)]
-            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 match N::rule_description(self.error.context, true) {
                     Some(context) => formatter.write_fmt(format_args!("{context} syntax error.")),
                     None => formatter.write_str("Syntax error."),
@@ -123,19 +120,31 @@ impl ParseError {
         }
     }
 
+    /// Returns a displayable object that prints a canonical message of
+    /// this syntax error.
+    ///
+    /// The `code` parameter provides access to the compilation unit's tokens
+    /// of where the error occurred.
     #[inline(always)]
     pub fn message<N: Node>(
         &self,
         code: &impl SourceCode<Token = <N as Node>::Token>,
-    ) -> impl Display + '_ {
+    ) -> impl Debug + Display + '_ {
         struct Message<'error, N> {
-            error: &'error ParseError,
+            error: &'error SyntaxError,
             empty_span: bool,
             _node: PhantomData<N>,
         }
 
+        impl<'error, N: Node> Debug for Message<'error, N> {
+            #[inline(always)]
+            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+                Display::fmt(self, formatter)
+            }
+        }
+
         impl<'error, N: Node> Display for Message<'error, N> {
-            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 const LENGTH_MAX: Length = 80;
 
                 #[derive(PartialEq, Eq)]
@@ -179,7 +188,7 @@ impl ParseError {
 
                 struct OutString {
                     alt: bool,
-                    set: StdSet<&'static str>,
+                    set: HashSet<&'static str>,
                     empty_span: bool,
                     context: Cow<'static, str>,
                     recovery: RecoveryResult,
@@ -195,7 +204,7 @@ impl ParseError {
                         context: NodeRule,
                         recovery: RecoveryResult,
                     ) -> Self {
-                        let set = StdSet::new_std_set_with_capacity(capacity);
+                        let set = HashSet::with_capacity(capacity);
 
                         let context = N::rule_description(context, true)
                             .filter(|_| context != ROOT_RULE)
@@ -396,7 +405,7 @@ impl ParseError {
 
                 let mut out = OutString::new::<N>(
                     formatter.alternate(),
-                    self.error.expected_tokens.length() + self.error.expected_nodes.length(),
+                    self.error.expected_tokens.len() + self.error.expected_nodes.len(),
                     self.empty_span,
                     self.error.context,
                     self.error.recovery,
@@ -435,16 +444,29 @@ impl ParseError {
         }
     }
 
+    /// Returns a displayable object that prints a
+    /// [Snippet](crate::format::Snippet) that annotates the source code span
+    /// with an error message.
+    ///
+    /// The `unit` parameter provides access to the compilation unit of where
+    /// the error occurred.
     #[inline(always)]
-    pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Display + '_ {
+    pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Debug + Display + '_ {
         struct DisplaySyntaxError<'a, U: CompilationUnit> {
-            error: &'a ParseError,
+            error: &'a SyntaxError,
             unit: &'a U,
+        }
+
+        impl<'a, U: CompilationUnit> Debug for DisplaySyntaxError<'a, U> {
+            #[inline(always)]
+            fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+                Display::fmt(self, formatter)
+            }
         }
 
         impl<'a, U: CompilationUnit> Display for DisplaySyntaxError<'a, U> {
             #[inline]
-            fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 let aligned_span = self.error.aligned_span(self.unit);
 
                 if !formatter.alternate() {
@@ -464,7 +486,7 @@ impl ParseError {
                     .set_summary(self.error.title::<U::Node>().to_string())
                     .annotate(
                         aligned_span,
-                        Priority::Primary,
+                        AnnotationPriority::Primary,
                         format!("{}", self.error.message::<U::Node>(self.unit)),
                     )
                     .finish()
@@ -474,6 +496,18 @@ impl ParseError {
         DisplaySyntaxError { error: self, unit }
     }
 
+    /// Computes a [token span](SiteRefSpan) from the syntax error's original
+    /// span such that the new span would be properly aligned in regards to
+    /// the whitespaces and the line breaks surrounding the original span.
+    ///
+    /// The `code` parameter provides access to the compilation unit's tokens
+    /// of where the error occurred.
+    ///
+    /// The exact details of the underlying algorithm are not specified,
+    /// and the algorithm is subject to improvements over time in the minor
+    /// versions of this crate, but the function attempts to generate a span
+    /// that would better fit for the end-user facing rather than the original
+    /// machine-generated span.
     #[inline(always)]
     pub fn aligned_span(&self, code: &impl SourceCode) -> SiteRefSpan {
         match self.recovery {
@@ -614,55 +648,44 @@ impl ParseError {
     }
 }
 
-/// A weak reference of the syntax/semantic error object inside the syntax tree.
+/// A globally unique reference of the [syntax error](SyntaxError) in the
+/// syntax tree.
 ///
-/// This objects represents a long-lived lifetime independent and type independent cheap to
-/// [Copy](::std::marker::Copy) safe weak reference into the syntax structure of the source code.
+/// Each [syntax tree's](SyntaxTree) syntax error could be uniquely
+/// addressed within a pair of the [Id] and [Entry], where the identifier
+/// uniquely addresses a specific compilation unit instance (syntax tree), and
+/// the entry part addresses a syntax error within this tree.
 ///
-/// ErrorRef is capable to survive source code incremental changes happening aside of a part of the
-/// syntax tree this error belongs to.
+/// Essentially, ErrorRef is a composite index.
 ///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     syntax::{
-///         SimpleNode,
-///         SyntaxTree,
-///         ParseError,
-///         RecoveryResult,
-///         NodeSet,
-///         ROOT_RULE,
-///         EMPTY_NODE_SET,
-///     },
-///     lexis::{SiteRef, TokenSet, EMPTY_TOKEN_SET},
-/// };
+/// Both components of this index form a unique pair
+/// (within the current process), because each compilation unit has a unique
+/// identifier, and the syntax errors within the syntax tree always receive
+/// unique [Entry] indices within the syntax tree.
 ///
-/// let mut doc = Document::<SimpleNode>::from("foo bar");
+/// If the syntax error instance has been removed from the syntax tree
+/// over time, new syntax error within this syntax tree will never occupy
+/// the same ErrorRef object, but the ErrorRef referred to the removed
+/// SyntaxError would become _invalid_.
 ///
-/// // This change touches "root" node of the syntax tree(the only node of the tree), as such
-/// // referred error will not survive.
-/// doc.write(0..0, "123");
-/// ```
+/// The [nil](ErrorRef::nil) ErrorRefs are special references that are
+/// considered to be always invalid (they intentionally don't refer
+/// to any syntax error within any syntax tree).
 ///
-/// An API user normally does not need to inspect ErrorRef inner fields manually or to construct
-/// an ErrorRef manually unless you are working on the Crate API Extension.
-///
-/// For details on the Weak references framework design see [Arena](crate::arena) module
-/// documentation.
+/// Two distinct instances of the nil ErrorRef are always equal.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ErrorRef {
-    /// An [identifier](crate::arena::Id) of the [SyntaxTree](crate::syntax::SyntaxTree) instance
-    /// this weakly referred error object belongs to.
+    /// An identifier of the syntax tree.
     pub id: Id,
 
-    /// An internal weak reference of the error object in the
-    /// [`Cluster::errors`](crate::syntax::Cluster::errors) repository.
+    /// A versioned index of the [syntax error](SyntaxError) instance
+    /// within the syntax tree.
     pub entry: Entry,
 }
 
 impl Debug for ErrorRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
                 "ErrorRef(id: {:?}, entry: {:?})",
@@ -681,9 +704,11 @@ impl Identifiable for ErrorRef {
 }
 
 impl ErrorRef {
-    /// Returns an invalid instance of the ErrorRef.
+    /// Returns an ErrorRef that intentionally does not refer
+    /// to any syntax error within any syntax tree.
     ///
-    /// This instance never resolves to valid error object.
+    /// If you need just a static reference to the nil ErrorRef, use
+    /// the predefined [NIL_ERROR_REF] static.
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
@@ -692,33 +717,22 @@ impl ErrorRef {
         }
     }
 
-    /// Returns `true` if this instance will never resolve to valid error object.
-    ///
-    /// It is guaranteed that `ErrorRef::nil().is_nil()` is always `true`, but in general if
-    /// this function returns `false` it is not guaranteed that provided instance is a valid
-    /// reference.
-    ///
-    /// To determine reference validity per specified [SyntaxTree](crate::syntax::SyntaxTree)
-    /// instance use [is_valid_ref](crate::syntax::ErrorRef::is_valid_ref) function instead.
+    /// Returns true, if the underlying reference intentionally does not refer
+    /// to any syntax error within any syntax tree.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
         self.id.is_nil() || self.entry.is_nil()
     }
 
-    /// Immutably dereferences weakly referred error object of specified
-    /// [SyntaxTree](crate::syntax::SyntaxTree).
+    /// Immutably borrows a syntax tree's syntax error referred to by
+    /// this ErrorRef.
     ///
-    /// Returns [None] if this ErrorRef is not valid reference for specified `tree` instance.
-    ///
-    /// Use [is_valid_ref](crate::syntax::ErrorRef::is_valid_ref) to check ErrorRef validity.
-    ///
-    /// This function uses [`SyntaxTree::get_cluster`](crate::syntax::SyntaxTree::get_cluster)
-    /// function under the hood.
+    /// Returns None if this ErrorRef is not valid for specified `tree`.
     #[inline(always)]
     pub fn deref<'tree, N: Node>(
         &self,
         tree: &'tree impl SyntaxTree<Node = N>,
-    ) -> Option<&'tree <N as Node>::Error> {
+    ) -> Option<&'tree SyntaxError> {
         if self.id != tree.id() {
             return None;
         }
@@ -726,15 +740,8 @@ impl ErrorRef {
         tree.get_error(&self.entry)
     }
 
-    /// Returns `true` if and only if weakly referred error object belongs to specified
-    /// [SyntaxTree](crate::syntax::SyntaxTree), and referred error object exists in this SyntaxTree
-    /// instance.
-    ///
-    /// If this function returns `true`, all dereference function would return meaningful [Some]
-    /// values, otherwise these functions return [None].
-    ///
-    /// This function uses [`SyntaxTree::get_cluster`](crate::syntax::SyntaxTree::get_cluster)
-    /// function under the hood.
+    /// Returns true if the syntax error referred to by this ErrorRef exists in
+    /// the specified `tree`.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
         if self.id != tree.id() {

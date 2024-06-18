@@ -1,44 +1,40 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    lexis::{SourceCode, Token, TokenBuffer},
-    std::*,
-};
+use std::cmp::Ordering;
+
+use crate::lexis::{SourceCode, Token, TokenBuffer};
 
 macro_rules! escape {
     ($($code:expr)?) => {
@@ -46,6 +42,20 @@ macro_rules! escape {
     };
 }
 
+/// A configuration of
+/// the [CSI](https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_(Control_Sequence_Introducer)_sequences)
+/// style sequence.
+///
+/// In particular, through this object, you can specify text background and
+/// foreground colors, and text emphasis such as bold, italic, underlined or
+/// inverted style.
+///
+/// The Style API implemented as a builder to be used in a call-chain style,
+/// such as each function consumes the instance of this object and returns
+/// a new instance with the applied configuration option.
+///
+/// Since Style methods are const functions, you can construct and store an
+/// instance of Style in static.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Style {
     fg: Option<Color>,
@@ -61,6 +71,7 @@ impl Default for Style {
 }
 
 impl Style {
+    /// Creates an instance of Style without any style configurations.
     #[inline(always)]
     pub const fn new() -> Self {
         Self {
@@ -70,96 +81,179 @@ impl Style {
         }
     }
 
+    /// Sets the text foreground color to Black.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn black(self) -> Self {
         self.fg(Color::Black)
     }
 
+    /// Sets the text foreground color to Red.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn red(self) -> Self {
         self.fg(Color::Red)
     }
 
+    /// Sets the text foreground color to Green.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn green(self) -> Self {
         self.fg(Color::Green)
     }
 
+    /// Sets the text foreground color to Yellow.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn yellow(self) -> Self {
         self.fg(Color::Yellow)
     }
 
+    /// Sets the text foreground color to Blue.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn blue(self) -> Self {
         self.fg(Color::Blue)
     }
 
+    /// Sets the text foreground color to Magenta.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn magenta(self) -> Self {
         self.fg(Color::Magenta)
     }
 
+    /// Sets the text foreground color to Cyan.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn cyan(self) -> Self {
         self.fg(Color::Cyan)
     }
 
+    /// Sets the text foreground color to White.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn white(self) -> Self {
         self.fg(Color::White)
     }
 
+    /// Sets the text foreground color to Bright Black.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_black(self) -> Self {
         self.fg(Color::BrightBlack)
     }
 
+    /// Sets the text foreground color to Bright Red.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_red(self) -> Self {
         self.fg(Color::BrightRed)
     }
 
+    /// Sets the text foreground color to Bright Green.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_green(self) -> Self {
         self.fg(Color::BrightGreen)
     }
 
+    /// Sets the text foreground color to Bright Yellow.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_yellow(self) -> Self {
         self.fg(Color::BrightYellow)
     }
 
+    /// Sets the text foreground color to Bright Blue.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_blue(self) -> Self {
         self.fg(Color::BrightBlue)
     }
 
+    /// Sets the text foreground color to Bright Magenta.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_magenta(self) -> Self {
         self.fg(Color::BrightMagenta)
     }
 
+    /// Sets the text foreground color to Bright Cyan.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_cyan(self) -> Self {
         self.fg(Color::BrightCyan)
     }
 
+    /// Sets the text foreground color to Bright White.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn bright_white(self) -> Self {
         self.fg(Color::BrightWhite)
     }
 
+    /// Sets the text foreground color to 8-bit RGB color.
+    ///
+    /// The scale of each parameter is from 0.0 to 1.0. Values outside of
+    /// this range will be clamped. The final 8-bit representation of the color
+    /// will be inferred to be as close to the floating-point components
+    /// representation as possible.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn rgb(self, red: f64, green: f64, blue: f64) -> Self {
         self.fg(Color::RGB { red, green, blue })
     }
 
+    /// Sets the text foreground color to 8-bit Grayscale color.
+    ///
+    /// The scale of the `shade` parameter is from 0.0 to 1.0. Values outside of
+    /// this range will be clamped. The final 8-bit representation of
+    /// the shade will be inferred to be as close to the floating-point shade
+    /// as possible.
+    ///
+    /// See [Ansi Color Table](https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit)
+    /// for details.
     #[inline(always)]
     pub const fn grayscale(self, shade: f64) -> Self {
         self.fg(Color::Grayscale(shade))
     }
 
+    /// Enables bold emphasis of the text.
     #[inline(always)]
     pub const fn bold(mut self) -> Self {
         self.emphasis.bold = true;
@@ -167,6 +261,7 @@ impl Style {
         self
     }
 
+    /// Enables italic emphasis of the text.
     #[inline(always)]
     pub const fn italic(mut self) -> Self {
         self.emphasis.italic = true;
@@ -174,6 +269,7 @@ impl Style {
         self
     }
 
+    /// Enables underlined emphasis of the text.
     #[inline(always)]
     pub const fn underline(mut self) -> Self {
         self.emphasis.underline = true;
@@ -181,6 +277,7 @@ impl Style {
         self
     }
 
+    /// Enables inverted emphasis of the text.
     #[inline(always)]
     pub const fn invert(mut self) -> Self {
         self.emphasis.invert = true;
@@ -188,6 +285,7 @@ impl Style {
         self
     }
 
+    /// Sets the text foreground color.
     #[inline(always)]
     pub const fn fg(mut self, color: Color) -> Self {
         self.fg = Some(color);
@@ -195,6 +293,7 @@ impl Style {
         self
     }
 
+    /// Sets the text background color.
     #[inline(always)]
     pub const fn bg(mut self, color: Color) -> Self {
         self.bg = Some(color);
@@ -238,7 +337,15 @@ impl Style {
     }
 }
 
+/// An extension of a string with functions that apply or erase
+/// [CSI](https://en.wikipedia.org/wiki/ANSI_escape_code#CSI_(Control_Sequence_Introducer)_sequences)
+/// style sequences.
+///
+/// This trait is auto-implemented for any object which is `AsRef<str>`.
 pub trait TerminalString: AsRef<str> {
+    /// Returns a new string from this one by surrounding it with CSI sequences
+    /// that apply the specified `style` at the beginning of the string and
+    /// erase these styles in the end of the string.
     fn apply(&self, style: Style) -> String {
         let source = self.as_ref();
         let mut target = String::with_capacity(source.len() + 20);
@@ -262,9 +369,10 @@ pub trait TerminalString: AsRef<str> {
         target
     }
 
+    /// Returns a new string from this one, removing any valid CSI sequence from
+    /// the string content.
     fn sanitize(&self) -> String {
         let mut target = String::with_capacity(self.as_ref().len());
-        let mut length = 0;
 
         let buffer = TokenBuffer::<Escaped>::from(self);
 
@@ -274,7 +382,6 @@ pub trait TerminalString: AsRef<str> {
             }
 
             target.push_str(chunk.string);
-            length += chunk.length;
         }
 
         target
@@ -283,25 +390,85 @@ pub trait TerminalString: AsRef<str> {
 
 impl<S: AsRef<str>> TerminalString for S {}
 
+/// An ANSI terminal color.
+///
+/// This object is capable of addressing 3-bit, 4-bit, and 8-bit
+/// [ANSI colors](https://en.wikipedia.org/wiki/ANSI_escape_code#Colors).
+///
+/// This enum is a part of the [Style] interface.
 #[derive(Clone, Copy, Debug)]
 pub enum Color {
+    /// A 3-bit black color.
     Black,
+
+    /// A 3-bit red color.
     Red,
+
+    /// A 3-bit green color.
     Green,
+
+    /// A 3-bit yellow color.
     Yellow,
+
+    /// A 3-bit blue color.
     Blue,
+
+    /// A 3-bit magenta color.
     Magenta,
+
+    /// A 3-bit cyan color.
     Cyan,
+
+    /// A 3-bit white color.
     White,
+
+    /// A 4-bit bright black color.
     BrightBlack,
+
+    /// A 4-bit bright red color.
     BrightRed,
+
+    /// A 4-bit bright green color.
     BrightGreen,
+
+    /// A 4-bit bright yellow color.
     BrightYellow,
+
+    /// A 4-bit bright blue color.
     BrightBlue,
+
+    /// A 4-bit bright magenta color.
     BrightMagenta,
+
+    /// A 4-bit bright cyan color.
     BrightCyan,
+
+    /// A 4-bit bright white color.
     BrightWhite,
-    RGB { red: f64, green: f64, blue: f64 },
+
+    /// A 8-bit RGB color.
+    ///
+    /// The scale of each component is from 0.0 to 1.0. Values outside of
+    /// this range will be clamped. The final 8-bit representation of the color
+    /// will be inferred to be as close to the floating-point components
+    /// representation as possible.
+    RGB {
+        /// A red component of the RGB color in range from 0.0 to 1.0.
+        red: f64,
+
+        /// A green component of the RGB color in range from 0.0 to 1.0.
+        green: f64,
+
+        /// A blue component of the RGB color in range from 0.0 to 1.0.
+        blue: f64,
+    },
+
+    /// A 8-bit Grayscale color.
+    ///
+    /// The scale of the inner shade component is from 0.0 to 1.0. Values
+    /// outside of this range will be clamped. The final 8-bit representation of
+    /// the grayscale color will be inferred to be as close to
+    /// the floating-point shade as possible.
     Grayscale(f64),
 }
 

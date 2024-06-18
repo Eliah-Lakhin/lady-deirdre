@@ -1,44 +1,42 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::mem::replace;
+
 use crate::{
     lexis::{ByteIndex, Length, Site, TokenCount},
-    report::{debug_assert, debug_assert_eq, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_assert_eq, ld_unreachable},
     syntax::Node,
     units::{
         storage::{
@@ -50,7 +48,7 @@ use crate::{
             refs::TreeRefs,
             spread::Spread,
         },
-        Watch,
+        Watcher,
     },
 };
 
@@ -75,7 +73,7 @@ impl<N: Node> Default for Tree<N> {
 
 impl<N: Node> Drop for Tree<N> {
     fn drop(&mut self) {
-        debug_assert_eq!(self.height, 0, "MutableUnit memory leak.");
+        ld_assert_eq!(self.height, 0, "MutableUnit memory leak.");
     }
 }
 
@@ -104,7 +102,7 @@ impl<N: Node> Tree<N> {
         let mut layer_size = spread.layer_size();
         let mut first_byte = 0;
 
-        debug_assert_eq!(count, spread.total_items(), "Partition failure.");
+        ld_assert_eq!(count, spread.total_items(), "Partition failure.");
 
         loop {
             let index = spread.advance();
@@ -115,19 +113,19 @@ impl<N: Node> Tree<N> {
 
             let span = match spans.next() {
                 Some(span) => span,
-                None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Spans iterator exceeded.") },
             };
 
-            debug_assert!(span > 0, "Zero input span.");
+            ld_assert!(span > 0, "Zero input span.");
 
             let byte_index = match indices.next() {
                 Some(byte_index) => byte_index,
-                None => unsafe { debug_unreachable!("Indices iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Indices iterator exceeded.") },
             };
 
             let token = match tokens.next() {
                 Some(token) => token,
-                None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Tokens iterator exceeded.") },
             };
 
             length += span;
@@ -162,7 +160,7 @@ impl<N: Node> Tree<N> {
 
                     let page = unsafe { page_ref.as_mut() };
 
-                    debug_assert!(index < page.occupied, "Partition failure.");
+                    ld_assert!(index < page.occupied, "Partition failure.");
 
                     unsafe { *page.spans.get_unchecked_mut(index) = span };
                     unsafe { page.string.set_byte_index(index, byte_index - first_byte) };
@@ -171,7 +169,7 @@ impl<N: Node> Tree<N> {
                     unsafe { page.caches.get_unchecked_mut(index).write(None) };
                 }
 
-                None => unsafe { debug_unreachable!("Missing last page.") },
+                None => unsafe { ld_unreachable!("Missing last page.") },
             }
         }
 
@@ -234,14 +232,14 @@ impl<N: Node> Tree<N> {
                                 current
                             }
 
-                            None => unsafe { debug_unreachable!("Missing last branch.") },
+                            None => unsafe { ld_unreachable!("Missing last branch.") },
                         };
 
                         unsafe { child_ref.as_mut().parent = ChildCursor { item: *last, index } };
 
                         let branch = unsafe { last.as_branch_mut::<PageLayer>().as_mut() };
 
-                        debug_assert!(index < branch.inner.occupied, "Partition failure.");
+                        ld_assert!(index < branch.inner.occupied, "Partition failure.");
 
                         let child_span = unsafe { child_ref.calculate_length() };
 
@@ -252,7 +250,7 @@ impl<N: Node> Tree<N> {
                         };
                     }
 
-                    None => unsafe { debug_unreachable!("Missing last branch.") },
+                    None => unsafe { ld_unreachable!("Missing last branch.") },
                 }
             }
         }
@@ -263,7 +261,7 @@ impl<N: Node> Tree<N> {
             let mut next = match first_item {
                 Some(first_item) => first_item,
 
-                None => unsafe { debug_unreachable!("Missing layer first item.") },
+                None => unsafe { ld_unreachable!("Missing layer first item.") },
             };
 
             first_item = None;
@@ -320,7 +318,7 @@ impl<N: Node> Tree<N> {
 
                         let branch = unsafe { last.as_branch_mut::<BranchLayer>().as_mut() };
 
-                        debug_assert!(index < branch.inner.occupied, "Partition failure.");
+                        ld_assert!(index < branch.inner.occupied, "Partition failure.");
 
                         let child_span = unsafe { child_ref.calculate_length() };
 
@@ -328,7 +326,7 @@ impl<N: Node> Tree<N> {
                         unsafe { *branch.inner.children.get_unchecked_mut(index) = child_variant };
                     }
 
-                    None => unsafe { debug_unreachable!("Missing last branch.") },
+                    None => unsafe { ld_unreachable!("Missing last branch.") },
                 }
             }
         }
@@ -336,13 +334,13 @@ impl<N: Node> Tree<N> {
         let first_page = match first_page {
             Some(first_page) => first_page,
 
-            None => unsafe { debug_unreachable!("Missing first page.") },
+            None => unsafe { ld_unreachable!("Missing first page.") },
         };
 
         let last_page = match last_page {
             Some(last_page) => last_page,
 
-            None => unsafe { debug_unreachable!("Missing last page.") },
+            None => unsafe { ld_unreachable!("Missing last page.") },
         };
 
         Self {
@@ -384,7 +382,7 @@ impl<N: Node> Tree<N> {
 
         let last_page = unsafe { self.pages.last.as_ref() };
 
-        debug_assert!(last_page.occupied > 0, "Empty page.");
+        ld_assert!(last_page.occupied > 0, "Empty page.");
 
         ChildCursor {
             item: unsafe { self.pages.last.into_variant() },
@@ -399,7 +397,7 @@ impl<N: Node> Tree<N> {
             return ChildCursor::dangling();
         }
 
-        debug_assert!(self.height > 0, "An attempt to search in the empty Tree.");
+        ld_assert!(self.height > 0, "An attempt to search in the empty Tree.");
 
         let mut item = self.root;
         let mut depth = self.height;
@@ -411,7 +409,7 @@ impl<N: Node> Tree<N> {
             let mut index = 0;
 
             loop {
-                debug_assert!(index < branch.inner.occupied, "Branch span inconsistency.");
+                ld_assert!(index < branch.inner.occupied, "Branch span inconsistency.");
 
                 let span = unsafe { *branch.inner.spans.get_unchecked(index) };
 
@@ -430,7 +428,7 @@ impl<N: Node> Tree<N> {
         let mut index = 0;
 
         loop {
-            debug_assert!(index < page.occupied, "Page span inconsistency.");
+            ld_assert!(index < page.occupied, "Page span inconsistency.");
 
             let span = unsafe { *page.spans.get_unchecked(index) };
 
@@ -454,7 +452,7 @@ impl<N: Node> Tree<N> {
             return self.length;
         }
 
-        debug_assert!(self.height > 0, "Empty tree.");
+        ld_assert!(self.height > 0, "Empty tree.");
 
         let page = unsafe { chunk_ref.item.as_page_ref().as_ref() };
 
@@ -462,7 +460,7 @@ impl<N: Node> Tree<N> {
         let mut index = chunk_ref.index;
 
         while index > 0 {
-            debug_assert!(index < page.occupied, "ChildRefIndex index out of bounds.");
+            ld_assert!(index < page.occupied, "ChildRefIndex index out of bounds.");
 
             index -= 1;
 
@@ -475,14 +473,14 @@ impl<N: Node> Tree<N> {
         while depth > 1 {
             depth -= 1;
 
-            debug_assert!(!branch_ref.is_dangling(), "Dangling parent ref.");
+            ld_assert!(!branch_ref.is_dangling(), "Dangling parent ref.");
 
             let branch = unsafe { branch_ref.item.as_branch_ref::<()>().as_ref() };
 
             index = branch_ref.index;
 
             while index > 0 {
-                debug_assert!(
+                ld_assert!(
                     index < branch.inner.occupied,
                     "ChildRefIndex index out of bounds.",
                 );
@@ -507,14 +505,14 @@ impl<N: Node> Tree<N> {
         remove: TokenCount,
         insert: TokenCount,
     ) -> bool {
-        debug_assert!(
+        ld_assert!(
             !chunk_ref.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { chunk_ref.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             chunk_ref.index < page.occupied,
             "ChildRefIndex index out of bounds.",
         );
@@ -524,7 +522,7 @@ impl<N: Node> Tree<N> {
         }
 
         match self.height {
-            0 => unsafe { debug_unreachable!("Incorrect height.") },
+            0 => unsafe { ld_unreachable!("Incorrect height.") },
 
             1 => {
                 page.occupied + insert >= remove
@@ -547,7 +545,7 @@ impl<N: Node> Tree<N> {
     pub(crate) unsafe fn write(
         &mut self,
         refs: &mut TreeRefs<N>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
         mut chunk_ref: ChildCursor<N>,
         remove: TokenCount,
         insert: TokenCount,
@@ -556,9 +554,9 @@ impl<N: Node> Tree<N> {
         mut tokens: impl Iterator<Item = N::Token>,
         text: &str,
     ) -> (ChildCursor<N>, Length) {
-        debug_assert!(self.height > 0, "Empty tree.");
+        ld_assert!(self.height > 0, "Empty tree.");
 
-        debug_assert!(
+        ld_assert!(
             !chunk_ref.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
         );
@@ -569,9 +567,9 @@ impl<N: Node> Tree<N> {
         if self.height == 1 && insert == 0 && remove == occupied {
             let mut tree = replace(self, Self::default());
 
-            let removed_count = unsafe { tree.free_as_subtree(refs, watch) };
+            let removed_count = unsafe { tree.free_as_subtree(refs, watcher) };
 
-            debug_assert_eq!(remove, removed_count, "Token count inconsistency.");
+            ld_assert_eq!(remove, removed_count, "Token count inconsistency.");
 
             return (ChildCursor::dangling(), 0);
         }
@@ -582,7 +580,7 @@ impl<N: Node> Tree<N> {
             true => unsafe {
                 page_ref.rewrite(
                     refs,
-                    watch,
+                    watcher,
                     chunk_ref.index,
                     rewrite,
                     &mut spans,
@@ -598,7 +596,7 @@ impl<N: Node> Tree<N> {
         if remove > rewrite {
             unsafe {
                 span_dec +=
-                    page_ref.remove(refs, watch, chunk_ref.index + rewrite, remove - rewrite)
+                    page_ref.remove(refs, watcher, chunk_ref.index + rewrite, remove - rewrite)
             };
         }
 
@@ -623,7 +621,7 @@ impl<N: Node> Tree<N> {
 
             let span = unsafe { branch.inner.spans.get_unchecked_mut(parent.index) };
 
-            debug_assert!(*span + span_inc > span_dec, "Span inconsistency.");
+            ld_assert!(*span + span_inc > span_dec, "Span inconsistency.");
 
             *span += span_inc;
             *span -= span_dec;
@@ -631,7 +629,7 @@ impl<N: Node> Tree<N> {
             parent = &mut branch.inner.parent;
         }
 
-        debug_assert!(self.length + span_inc > span_dec, "Length inconsistency.");
+        ld_assert!(self.length + span_inc > span_dec, "Length inconsistency.");
 
         self.length += span_inc;
         self.length -= span_dec;
@@ -662,7 +660,7 @@ impl<N: Node> Tree<N> {
             return Self::default();
         }
 
-        debug_assert!(self.height > 0, "An attempt to split empty Tree.");
+        ld_assert!(self.height > 0, "An attempt to split empty Tree.");
 
         if self.height == 1 {
             return match chunk_ref.index == 0 {
@@ -819,7 +817,7 @@ impl<N: Node> Tree<N> {
     pub(crate) unsafe fn free_as_subtree(
         &mut self,
         refs: &mut TreeRefs<N>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
     ) -> TokenCount {
         if self.height == 0 {
             return 0;
@@ -828,20 +826,20 @@ impl<N: Node> Tree<N> {
         let root = &mut self.root;
 
         let token_count = match self.height {
-            1 => unsafe { root.as_page_ref().into_owned().free_subtree(refs, watch) },
+            1 => unsafe { root.as_page_ref().into_owned().free_subtree(refs, watcher) },
 
             2 => unsafe {
                 root.as_branch_ref::<PageLayer>().into_owned().free_subtree(
                     self.height,
                     refs,
-                    watch,
+                    watcher,
                 )
             },
 
             _ => unsafe {
                 root.as_branch_ref::<BranchLayer>()
                     .into_owned()
-                    .free_subtree(self.height, refs, watch)
+                    .free_subtree(self.height, refs, watcher)
             },
         };
 
@@ -880,7 +878,7 @@ impl<N: Node> Tree<N> {
     // 1. `self.height >= 2`.
     // 2. All references belong to `refs` instance.
     unsafe fn fix_leftmost_balance(&mut self, refs: &mut TreeRefs<N>) -> bool {
-        debug_assert!(self.height >= 2, "Incorrect height.");
+        ld_assert!(self.height >= 2, "Incorrect height.");
 
         let mut depth = 1;
         let mut leftmost_variant = self.root;
@@ -910,7 +908,7 @@ impl<N: Node> Tree<N> {
             balanced = balanced && is_balanced;
         }
 
-        debug_assert_eq!(depth, self.height - 1, "Depth mismatch.");
+        ld_assert_eq!(depth, self.height - 1, "Depth mismatch.");
 
         self.pages.first = {
             let leftmost_ref = unsafe { leftmost_variant.as_branch_mut::<PageLayer>() };
@@ -936,7 +934,7 @@ impl<N: Node> Tree<N> {
     // 2. All references belong to `refs` instance.
     #[inline]
     unsafe fn fix_rightmost_balance(&mut self, refs: &mut TreeRefs<N>) -> bool {
-        debug_assert!(self.height >= 2, "Incorrect height.");
+        ld_assert!(self.height >= 2, "Incorrect height.");
 
         let mut depth = 1;
         let mut rightmost_variant = self.root;
@@ -966,7 +964,7 @@ impl<N: Node> Tree<N> {
             balanced = balanced && is_balanced;
         }
 
-        debug_assert_eq!(depth, self.height - 1, "Depth mismatch.");
+        ld_assert_eq!(depth, self.height - 1, "Depth mismatch.");
 
         self.pages.last = {
             let rightmost_ref = unsafe { rightmost_variant.as_branch_mut::<PageLayer>() };
@@ -1006,7 +1004,7 @@ impl<N: Node> Tree<N> {
         }
 
         match self.height {
-            0 => unsafe { debug_unreachable!("Incorrect height.") },
+            0 => unsafe { ld_unreachable!("Incorrect height.") },
 
             1 => unsafe { self.root.as_page_mut().as_mut().parent.make_dangle() },
 
@@ -1045,7 +1043,7 @@ impl<N: Node> Tree<N> {
         let right = &mut other.root;
 
         let new_root = match depth {
-            0 => unsafe { debug_unreachable!("Incorrect height.") },
+            0 => unsafe { ld_unreachable!("Incorrect height.") },
 
             1 => {
                 let left_ref = unsafe { left.as_page_mut() };
@@ -1128,7 +1126,7 @@ impl<N: Node> Tree<N> {
         let left = &mut self.root;
 
         let new_root = match depth {
-            0 => unsafe { debug_unreachable!("Incorrect height.") },
+            0 => unsafe { ld_unreachable!("Incorrect height.") },
 
             1 => {
                 let left_ref = unsafe { left.as_page_mut() };
@@ -1205,7 +1203,7 @@ impl<N: Node> Tree<N> {
         other.height = 0;
 
         let new_root = match self.height {
-            0 => unsafe { debug_unreachable!("Incorrect height.") },
+            0 => unsafe { ld_unreachable!("Incorrect height.") },
 
             1 => {
                 let left_ref = unsafe { left.as_page_mut() };

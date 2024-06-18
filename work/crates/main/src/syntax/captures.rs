@@ -1,56 +1,61 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::{
+    fmt::{Display, Formatter},
+    iter::{Flatten, FusedIterator, Map},
+};
+
 use crate::{
     lexis::{Site, SiteSpan, TokenRef},
-    std::*,
     syntax::{AbstractNode, NodeRef, PolyRef, RefKind},
     units::CompilationUnit,
 };
 
+/// A polymorphic key that is either a string or a numeric key.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Key<'a> {
+    /// A string key. Usually denotes the enum variant field name.
     Name(&'a str),
+
+    /// A numeric key. Usually denotes the index of the variant field.
     Index(usize),
 }
 
 impl<'a> Display for Key<'a> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Name(key) => Display::fmt(key, formatter),
             Self::Index(key) => Display::fmt(key, formatter),
@@ -72,11 +77,57 @@ impl<'a> From<usize> for Key<'a> {
     }
 }
 
+/// A set of the node children grouped together.
+///
+/// During the syntax tree node parsing, the parser usually captures
+/// individual tokens and descends into other rules, capturing their node
+/// products.
+///
+/// The parser groups these objects' [TokenRef] and [NodeRef] references
+/// together, and puts these groups under the Node's enum variant fields.
+///
+/// Lady Deirdre refers to these groups as "captures".
+///
+/// The "Single*" variants of this enum represent captures when the parser
+/// captures exactly one child (`foo: bar`), or zero or one
+/// child (`foo: bar?`).
+///
+/// The "Many*" variants of this enum represent captures when the parser
+/// captures an array of children (`foo: bar*`).
+///
+/// Any captured references within this object could be
+/// [nil](PolyRef::is_nil) references, and the arrays of children could be empty
+/// arrays.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Capture<'a> {
+    /// A single node capture.
+    ///
+    /// Represents zero or one node (`foo: Bar?`), or exactly one
+    /// node (`foo: Bar`).
+    ///
+    /// If the parsing rule didn't capture anything, the value is
+    /// [NodeRef::nil].
     SingleNode(&'a NodeRef),
+
+    /// A capture of an array of nodes.
+    ///
+    /// Represents zero or many nodes (`foo: Bar*`), or one or many nodes
+    /// (`foo: Bar+`).
     ManyNodes(&'a Vec<NodeRef>),
+
+    /// A single token capture.
+    ///
+    /// Represents zero or one token (`foo: $Bar?`), or exactly one
+    /// token (`foo: $Bar`).
+    ///
+    /// If the parsing rule didn't capture anything, the value is
+    /// [TokenRef::nil].
     SingleToken(&'a TokenRef),
+
+    /// A capture of an array of tokens.
+    ///
+    /// Represents zero or many tokens (`foo: $Bar*`), or one or many tokens
+    /// (`foo: $Bar+`).
     ManyTokens(&'a Vec<TokenRef>),
 }
 
@@ -119,6 +170,7 @@ impl<'a> IntoIterator for Capture<'a> {
 }
 
 impl<'a> Capture<'a> {
+    /// Describes captured children kind.
     #[inline(always)]
     pub fn kind(&self) -> RefKind {
         match self {
@@ -127,6 +179,7 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Returns true, if the Capture represents a "Single*" child.
     #[inline(always)]
     pub fn is_single(&self) -> bool {
         match self {
@@ -135,11 +188,14 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Returns true, if the Capture represents "Many*" children.
     #[inline(always)]
     pub fn is_many(&self) -> bool {
         !self.is_single()
     }
 
+    /// Returns the total number of children in this Capture (including the
+    /// [nil](PolyRef::is_nil) entities).
     #[inline(always)]
     pub fn len(&self) -> usize {
         match self {
@@ -149,6 +205,7 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Returns true, if `self.len() == 0`.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         match self {
@@ -158,6 +215,11 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Returns a child within this Capture by `index`.
+    ///
+    /// If the child is inside the "Single*" capture, the only valid index is 0.
+    ///
+    /// Returns None if the index is out of bounds.
     #[inline(always)]
     pub fn get(&self, index: usize) -> Option<&'a dyn PolyRef> {
         match self {
@@ -169,6 +231,7 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Returns the same as `self.get(0)`.
     #[inline(always)]
     pub fn first(&self) -> Option<&'a dyn PolyRef> {
         match self {
@@ -179,6 +242,8 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Returns the same as `self.get(self.len() - 1)`
+    /// or None if the Capture is empty.
     #[inline(always)]
     pub fn last(&self) -> Option<&'a dyn PolyRef> {
         match self {
@@ -189,6 +254,13 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Computes the [site span](SiteSpan) from the [first child](Self::first)
+    /// start site to the [last child](Self::last) end site.
+    ///
+    /// If the Capture is empty, or the corresponding child instance does not
+    /// exist in the `unit`, or the corresponding sites cannot be inferred
+    /// (e.g., if the Node's [span](AbstractNode::span) returns None),
+    /// the function returns None.
     pub fn site_span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
         let start_site = self.start(unit)?;
         let end_site = self.end(unit)?;
@@ -196,6 +268,12 @@ impl<'a> Capture<'a> {
         Some(start_site..end_site)
     }
 
+    /// Computes the start [site](Site) of the first child in this Capture.
+    ///
+    /// If the Capture is empty, or the corresponding child instance does not
+    /// exist in the `unit`, or the corresponding site cannot be inferred
+    /// (e.g., if the Node's [start](AbstractNode::start) returns None),
+    /// the function returns None.
     pub fn start(&self, unit: &impl CompilationUnit) -> Option<Site> {
         match self {
             Capture::SingleNode(capture) => (*capture).deref(unit)?.start(unit),
@@ -205,6 +283,12 @@ impl<'a> Capture<'a> {
         }
     }
 
+    /// Computes the end [site](Site) of the last child in this Capture.
+    ///
+    /// If the Capture is empty, or the corresponding child instance does not
+    /// exist in the `unit`, or the corresponding site cannot be inferred
+    /// (e.g., if the Node's [end](AbstractNode::end) returns None),
+    /// the function returns None.
     pub fn end(&self, unit: &impl CompilationUnit) -> Option<Site> {
         match self {
             Capture::SingleNode(capture) => (*capture).deref(unit)?.end(unit),
@@ -215,6 +299,9 @@ impl<'a> Capture<'a> {
     }
 }
 
+/// An owned iterator over the [Capture] children.
+///
+/// This object is created by the `into_iter` function of the Capture.
 pub struct CaptureIntoIter<'a> {
     front: usize,
     back: usize,
@@ -272,6 +359,10 @@ impl<'a> CaptureIntoIter<'a> {
     }
 }
 
+/// An iterator over all [captures](Capture) of the [Node](crate::syntax::Node)
+/// interface.
+///
+/// This object is created by the [AbstractNode::captures_iter] function.
 pub struct CapturesIter<'a, N: AbstractNode + ?Sized> {
     front: usize,
     back: usize,
@@ -329,6 +420,10 @@ impl<'a, N: AbstractNode + ?Sized> CapturesIter<'a, N> {
     }
 }
 
+/// An iterator over all children of the [Node](crate::syntax::Node)
+/// interface.
+///
+/// This object is created by the [AbstractNode::children_iter] function.
 #[repr(transparent)]
 pub struct ChildrenIter<'a, N: AbstractNode + ?Sized> {
     inner: Flatten<Map<CapturesIter<'a, N>, fn(Capture) -> CaptureIntoIter>>,

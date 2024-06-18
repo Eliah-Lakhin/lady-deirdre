@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,8 +36,7 @@
 use crate::report::system_panic;
 use crate::{
     lexis::{ByteIndex, Length, LexisSession, Site, Token, TokenCount, CHUNK_SIZE},
-    report::{debug_assert, debug_assert_ne, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_assert_ne, ld_unreachable},
     syntax::Node,
     units::storage::ChildCursor,
 };
@@ -117,7 +113,7 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
     ) -> SessionOutput<N> {
         let last = match input.len().checked_sub(1) {
             Some(last) => last,
-            None => debug_unreachable!("Empty input buffer."),
+            None => ld_unreachable!("Empty input buffer."),
         };
 
         let cursor = Cursor {
@@ -146,7 +142,7 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
         };
 
         loop {
-            let token = <N::Token as Token>::parse(&mut session);
+            let token = <N::Token as Token>::scan(&mut session);
 
             if session.begin.site != session.end.site {
                 session
@@ -192,7 +188,7 @@ impl<'source, N: Node> MutableLexisSession<'source, N> {
             self.end = self.begin;
             self.current = self.begin;
 
-            let token = <N::Token as Token>::parse(self);
+            let token = <N::Token as Token>::scan(self);
 
             if self.begin.site == self.end.site {
                 continue;
@@ -275,7 +271,7 @@ impl<N: Node> SessionOutput<N> {
     fn push(&mut self, input: SessionInput, token: N::Token, from: &Cursor<N>, to: &Cursor<N>) {
         let span = to.site - from.site;
 
-        debug_assert!(span > 0, "Empty span.");
+        ld_assert!(span > 0, "Empty span.");
 
         self.length += span;
         self.spans.push(span);
@@ -312,7 +308,7 @@ impl<N: Node> Cursor<N> {
             true => {
                 let string = *unsafe { input.get_unchecked(self.index) };
 
-                debug_assert!(!string.is_empty(), "Empty input string.");
+                ld_assert!(!string.is_empty(), "Empty input string.");
 
                 if self.byte < string.len() {
                     let point = *unsafe { string.as_bytes().get_unchecked(self.byte) };
@@ -331,7 +327,7 @@ impl<N: Node> Cursor<N> {
                 if self.index < input.len() {
                     let string = *unsafe { input.get_unchecked(self.index) };
 
-                    debug_assert!(!string.is_empty(), "Empty input string.");
+                    ld_assert!(!string.is_empty(), "Empty input string.");
 
                     let point = *unsafe { string.as_bytes().get_unchecked(0) };
 
@@ -419,7 +415,7 @@ impl<N: Node> Cursor<N> {
             }
         };
 
-        debug_assert!(
+        ld_assert!(
             *byte > 0,
             "Incorrect use of the LexisSession::consume function.\nCurrent \
             cursor is in the beginning of the input stream.",
@@ -427,7 +423,7 @@ impl<N: Node> Cursor<N> {
 
         let point = string.as_bytes()[*byte - 1];
 
-        debug_assert_ne!(
+        ld_assert_ne!(
             point & 0xC0,
             0x80,
             "Incorrect use of the LexisSession::consume function.\nA byte \
@@ -475,7 +471,7 @@ impl<N: Node> Cursor<N> {
             }
         };
 
-        debug_assert!(
+        ld_assert!(
             *byte > 0,
             "Incorrect use of the LexisSession::read function.\nCurrent cursor \
             is in the beginning of the input stream."
@@ -514,18 +510,30 @@ fn substring_to<N: Node>(
     target: &mut String,
 ) {
     if from.index == to.index {
-        debug_assert!(from.byte <= to.byte, "From cursor is ahead of To cursor.",);
+        ld_assert!(from.byte <= to.byte, "From cursor is ahead of To cursor.",);
 
         let string = match from.index < input.len() {
             true => unsafe { *input.get_unchecked(from.index) },
 
             false => match from.tail.is_dangling() {
-                true => unsafe { from.tail.string() },
-                false => "",
+                false => unsafe { from.tail.string() },
+                true => "",
             },
         };
 
-        target.push_str(unsafe { string.get_unchecked(from.byte..to.byte) });
+        let range = from.byte..to.byte;
+
+        ld_assert!(
+            range.start < string.len(),
+            "From cursor is out of string {string:?} bounds.",
+        );
+
+        ld_assert!(
+            range.end <= string.len(),
+            "To cursor is out of string {string:?} bounds.",
+        );
+
+        target.push_str(unsafe { string.get_unchecked(range) });
 
         return;
     }

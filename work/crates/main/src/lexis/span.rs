@@ -1,101 +1,80 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    arena::{Id, Identifiable},
-    format::{Priority, SnippetFormatter},
-    lexis::{Position, Site, SiteRef, SourceCode, ToSite},
-    report::debug_unreachable,
-    std::*,
+use std::{
+    fmt::{Debug, Display, Formatter},
+    ops::{Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
 };
 
-/// A range of [Sites](crate::lexis::Site).
+use crate::{
+    arena::{Id, Identifiable},
+    format::{AnnotationPriority, SnippetFormatter},
+    lexis::{Position, Site, SiteRef, SourceCode, ToSite},
+    report::ld_unreachable,
+};
+
+/// A span between two Unicode characters.
 ///
-/// The [ToSpan](crate::lexis::ToSpan) trait is auto-implemented for this object, and as such it
-/// can be used to specify Spans.
+/// For example, `10..18` is a site span that starts from the 10nth character
+/// (inclusive) and lasts until the 18th character (exclusive). The total
+/// length of such a span is 8 Unicode chars.
 ///
-/// Also, SiteSpan is a base Span representation. Any valid ToSpan object casts to SiteSpan.
+/// A **SiteSpan is considered valid for any [SourceCode]** as long as the
+/// end bound of the range is greater or equal to the start bound. If the bounds
+/// exceed source code length, they will be clamped.
 ///
-/// SiteSpan bounds are zero-based index ranges. Bound value `0` means the first character, bound
-/// value `1` is the second character, and so on up to the source code text
-/// [length](crate::lexis::SourceCode::length).
-///
-/// SiteSpan may be an empty span(start bound equals to end bound). In this case the Span
-/// represents a single [Site](crate::lexis::Site) inside the source code text. For example, if
-/// an API user [writes](crate::Document::write) a text into the Document specifying empty span,
-/// the Write operation becomes Insertion operations to specified Site.
-///
-/// SiteSpan is a valid span for any [SourceCode](crate::lexis::SourceCode) as long as its start
-/// bound is lesser or equal to the end bound. If any of the Range bounds greater than the source
-/// code text length, this bound will be clamped to the text character length value. This behavior
-/// stems from the [ToSite](crate::lexis::ToSite) trait specification.
-///
-/// You can think about SiteSpan as a range of the text selected inside the code editor.
-///
-/// ```rust
-/// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::SourceCode};
-///
-/// let doc = Document::<SimpleNode>::from("foo bar baz");
-///
-/// /// A substring of all characters starting from character number 4 inclusive till character
-/// /// 7 exclusive.
-/// assert_eq!(doc.substring(4..7), "bar");
-/// ```
+/// See [ToSpan] for details.
 pub type SiteSpan = Range<Site>;
 
-/// A range of [SiteRefs](crate::lexis::SiteRef).
+/// A span between two [pinned sites](SiteRef).
 ///
-/// The [ToSpan](crate::lexis::ToSpan) trait is auto-implemented for this object, and as such it
-/// can be used to specify Spans.
+/// This kind of span between two SiteRefs resolves to the [SiteSpan] of the
+/// sites of these SiteRefs.
 ///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     syntax::SimpleNode,
-///     lexis::{SourceCode, TokenCursor},
-/// };
+/// This object allows you to specify a span between two pinned points in the
+/// source code rather than the absolute Unicode character [sites](Site).
 ///
-/// let doc = Document::<SimpleNode>::from("foo bar baz");
+/// Whenever the end user writes text to the underlying compilation unit
+/// outside of the span or inside the span, but the text edit does not include
+/// the SiteRefSpan bounds, the SiteRefSpan bounds automatically adjust in
+/// accordance with the source code edits: the absolute site of the bound will
+/// be shifted left or right accordingly.
 ///
-/// let start = doc.cursor(..).site_ref(2);
-/// let end = doc.cursor(..).site_ref(3);
+/// However, if the edit affects the SiteRefSpan bound tokens during
+/// incremental reparsing, the entire object may become invalid.
 ///
-/// assert_eq!(doc.substring(start..end), "bar");
-/// ```
+/// See [ToSpan] for details.
 pub type SiteRefSpan = Range<SiteRef>;
 
 impl Identifiable for SiteRefSpan {
@@ -111,131 +90,113 @@ impl Identifiable for SiteRefSpan {
     }
 }
 
-/// A range of [Positions](crate::lexis::Position).
+/// A span between two Unicode characters addressed by the text
+/// [line-column positions](Position).
 ///
-/// The [ToSpan](crate::lexis::ToSpan) trait is auto-implemented for this object, and as such it
-/// can be used to specify Spans.
+/// For example, `Position::new(2, 10)..Position(2, 18)` is a position span that
+/// starts from the 9nth character of the second line (inclusive) and lasts
+/// until the 17th character of the second line (exclusive). The total
+/// length of such a span is 8 Unicode chars.
 ///
-/// ```rust
-/// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::{SourceCode, Position}};
+/// A PositionSpan is considered valid for any [SourceCode] as long as the
+/// end bound of the range is greater or equal to the start bound. If the bounds
+/// exceed source code length, they will be clamped.
 ///
-/// let doc = Document::<SimpleNode>::from("foo bar baz");
-///
-/// assert_eq!(doc.substring(Position::new(1, 5)..Position::new(1, 8)), "bar");
-/// ```
+/// See [ToSpan] for details.
 pub type PositionSpan = Range<Position>;
 
-/// An interface of the source code character index range("Span").
+/// An object that addresses a fragment of the source code text.
 ///
-/// The underlying object may be a valid or invalid Span representation for particular
-/// [SourceCode](crate::lexis::SourceCode) instance. If the object considered to be not valid,
-/// [is_valid_span](ToSpan::is_valid_span) function returns `false`, and
-/// [to_span](ToSpan::to_site_span) function returns [None]. Otherwise "is_valid_span" returns `true`,
-/// and "to_span" returns meaningful [SiteSpan](crate::lexis::SiteSpan) value.
+/// In Lady Deirdre, a minimal unit of text measurement is a Unicode character.
 ///
-/// It is up to implementation to decide whether particular instance considered to be valid or not.
+/// Addressing code ranges ("spans") just by the ranges of the Unicode
+/// absolute indices ([SiteSpan]) would be inconvenient.
 ///
-/// This trait is implemented for the [RangeFull](::std::ops::RangeFull) object(a `..` shortcut)
-/// that is always valid and always resolves to the SiteSpan covering the entire source code text.
+/// The ToSpan trait is a generic interface that provides conversion between
+/// custom types of spans and the SiteSpans.
 ///
-/// For any type that implements a [ToSite](crate::lexis::ToSite) trait, the ToSpan trait is
-/// auto-implemented for all variants of Rust's standard ranges(Range, RangeFrom, etc) over
-/// this type. As such if an API user implements ToSite trait, the user receives ToSpan range
-/// implementations over this type out of the box. Such ToSpan auto-implementations considered to be
-/// valid Spans as long as the original range bounds are
-/// [`site-valid`](crate::lexis::ToSite::is_valid_site) values, and if the start Site bound
-/// does not exceed the end Site bound.
+/// In particular, Lady Deirdre provides the following custom span types that
+/// implement the ToSpan trait:
 ///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     syntax::SimpleNode,
-///     lexis::{ToSpan, ToSite, SourceCode, SiteSpan, Site},
-/// };
+///  - The [SiteSpan] itself, which is a range of absolute Unicode char
+///    indices: `10..20`.
+///  - The [PositionSpan], which is a range in terms of the line-column indices:
+///    `Position::new(10, 20)..Position::new(15, 28)`
+///  - The [SiteRefSpan], which is a range between the
+///    [TokenRef](crate::lexis::TokenRef) bounds.
 ///
-/// let doc = Document::<SimpleNode>::from("foo bar baz");
+/// You are encouraged to provide your own implementations of the [ToSpan] on
+/// custom span types depending on the needs.
 ///
-/// /// A substring of all characters starting from character number 4 inclusive till character
-/// /// 7 exclusive.
-/// assert_eq!(doc.substring(4..7), "bar");
+/// For convenient purposes, for any type that implements [ToSite] trait, which
+/// is a trait of custom text indices, standard Rust ranges with the bounds
+/// of this type implement the ToSpan trait: `10..=20`, `Position::new(8, 6)..`
+/// are all valid span types.
 ///
-/// /// A custom Span implementation that resolves to the first half of the source code text.
-/// struct Half;
+/// Additionally, the `..` ([RangeFull]) implements the [ToSpan] trait and
+/// denotes the full source code text range.
 ///
-/// // This is safe because "to_span" always returns SiteSpan within the source code text
-/// // character bounds.
-/// unsafe impl ToSpan for Half {
-///     fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan> {
-///         Some(0..code.length() / 2)
-///     }
+/// Also, if the type `T` implements to ToSpan, its referential type `&T`
+/// implements ToSpan too.
 ///
-///     fn is_valid_span(&self, _code: &impl SourceCode) -> bool { true }
-/// }
+/// **Safety**
 ///
-/// assert_eq!(doc.substring(Half), "foo b");
+/// The implementor of the trait guarantees the following:
 ///
-/// // A custom one-based Site index.
-/// struct OneBaseSite(usize);
+///  1. If the [ToSpan::to_site_span] function returns Some site span, the
+///     lower range bound is less than or equal to the upper bound, and
+///     the upper bound is less than or equal to the `code`'s
+///     [length](SourceCode::length).
+///     In other words, the function returns a valid span within the source
+///     code text bounds.
 ///
-/// // This is safe because "to_site" implementation checks underlying value .
-/// unsafe impl ToSite for OneBaseSite {
-///     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
-///         if self.0 == 0 || self.0 > code.length() { return None; }
-///
-///         Some(self.0 - 1)
-///     }
-///
-///     fn is_valid_site(&self, code: &impl SourceCode) -> bool {
-///         self.0 > 0 && self.0 <= code.length()
-///     }
-/// }
-///
-/// // Since ToSite implemented for the OneBaseSite object, all types of ranges over this
-/// // object are ToSpan as well.
-/// assert_eq!(doc.substring(OneBaseSite(5)..OneBaseSite(8)), "bar");
-/// assert_eq!(doc.substring(OneBaseSite(5)..=OneBaseSite(7)), "bar");
-/// ```
-///
-/// **Safety:**
-///   - If the [to_span](ToSite::to_span) function returns [Some] range, the range start bound value
-///     does not exceed range end bound value, and the range's end bound value does not exceed
-///     [`SourceCode::length`](crate::lexis::SourceCode::length) value.
+///  2. The [ToSpan::to_site_span] and [ToSpan::to_position_span] return Some
+///     value if and only if the [ToSpan::is_valid_span] returns true for
+///     the same source code.
 pub unsafe trait ToSpan {
-    /// Returns valid [SiteSpan](crate::lexis::SiteSpan) representation of this Span object
-    /// if the Span object is valid Span for specified `code` parameter. Otherwise returns [None].
+    /// Returns a [SiteSpan] representation of this span object.
     ///
-    /// The validity of the Span object is implementation specific.
+    /// The `code` parameter specifies a source code to which this span object
+    /// belongs.
     ///
-    /// The returning SiteSpan [Range](::std::ops::Range) start bound value does not exceed end
-    /// bound value, and the range's end bound does not exceed `SourceCode::length(code)` value.   
+    /// The returning SiteSpan is a valid range within the [SourceCode] bounds.
+    ///
+    /// Returns None, if the span object is not [valid](Self::is_valid_span).
     fn to_site_span(&self, code: &impl SourceCode) -> Option<SiteSpan>;
 
+    /// Returns a [line-column range](PositionSpan) representation of this span
+    /// object.
+    ///
+    /// The `code` parameter specifies a source code to which this span object
+    /// belongs.
+    ///
+    /// Returns None, if the span object is not [valid](Self::is_valid_span).
     fn to_position_span(&self, code: &impl SourceCode) -> Option<PositionSpan> {
         let span = self.to_site_span(code)?;
 
         Some(span.start.to_position(code)?..span.end.to_position(code)?)
     }
 
-    /// Returns `true` if and only if the [to_span](ToSpan::to_site_span) function would return
-    /// [Some] value for specified `code` parameter.
+    /// Returns true if this span object considered valid within the `code`
+    /// [SourceCode].
+    ///
+    /// The span validity is implementation dependent.
+    ///
+    /// For the range-like spans (such as [Range], [RangeTo], etc), the range
+    /// considered valid as long as the range bounds
+    /// are [valid sites](ToSite::is_valid_site), and the start site of
+    /// the range does not exceed the range's end site.
+    ///
+    /// Note that the [SiteSpan] range (with the start bound less than or equal
+    /// to the end bound) is always valid span because the [ToSite]
+    /// implementation of the [Site] always clamps the site to the SourceCode
+    /// [length](SourceCode::length).
     fn is_valid_span(&self, code: &impl SourceCode) -> bool;
 
-    /// A helper function to format specified Span.
-    ///
-    /// This function tries to resolve spanned object and to format its bounds in form of
-    /// [PositionSpan](crate::lexis::PositionSpan). If resolution is not possible the function
-    /// returns `"?"` string.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{units::Document, syntax::SimpleNode, lexis::{ToSpan, SourceCode}};
-    ///
-    /// let doc = Document::<SimpleNode>::from("foo\nbar baz");
-    ///
-    /// assert_eq!(doc.substring(2..7), "o\nbar");
-    /// assert_eq!((2..7).display(&doc).to_string(), "1:3 (5 chars, 1 line break)");
-    /// ```
+    /// Returns a displayable object that prints the underlying span object
+    /// for debugging purposes.
     #[inline(always)]
-    fn display<'a, Code: SourceCode>(&self, code: &'a Code) -> DisplaySpan<'a, Code> {
+    fn display<'a>(&self, code: &'a impl SourceCode) -> impl Debug + Display + 'a {
         DisplaySpan {
             code,
             span: self.to_site_span(code),
@@ -380,7 +341,7 @@ unsafe impl<Site: ToSite> ToSpan for RangeToInclusive<Site> {
     }
 }
 
-pub struct DisplaySpan<'a, Code: SourceCode> {
+struct DisplaySpan<'a, Code: SourceCode> {
     code: &'a Code,
     span: Option<SiteSpan>,
 }
@@ -390,7 +351,7 @@ where
     Code: SourceCode,
 {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         Display::fmt(self, formatter)
     }
 }
@@ -399,7 +360,7 @@ impl<'a, Code> Display for DisplaySpan<'a, Code>
 where
     Code: SourceCode,
 {
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         let span = match &self.span {
             None => return formatter.write_str("?"),
             Some(span) => span.clone(),
@@ -413,7 +374,7 @@ where
                 Some(span) => span,
 
                 // Safety: Site spans are always valid to resolve.
-                None => unsafe { debug_unreachable!("Invalid position span.") },
+                None => unsafe { ld_unreachable!("Invalid position span.") },
             };
 
             formatter.write_fmt(format_args!("{}", span.start))?;
@@ -447,7 +408,7 @@ where
                 span.end,
                 span.display(self.code),
             ))
-            .annotate(span, Priority::Default, "")
+            .annotate(span, AnnotationPriority::Default, "")
             .finish()
     }
 }

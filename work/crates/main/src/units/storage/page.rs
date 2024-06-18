@@ -1,46 +1,48 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    mem::{replace, take, MaybeUninit},
+    ptr::NonNull,
+    str::from_utf8_unchecked,
+};
 
 use crate::{
     arena::EntryIndex,
     lexis::{ByteIndex, Length},
     mem::{array_copy_to, array_shift},
-    report::{debug_assert, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_unreachable},
     syntax::Node,
     units::{
         storage::{
@@ -54,7 +56,7 @@ use crate::{
             PAGE_B,
             PAGE_CAP,
         },
-        Watch,
+        Watcher,
     },
 };
 
@@ -89,7 +91,7 @@ impl<N: Node> Item for Page<N> {
         destination: ChildCount,
         count: ChildCount,
     ) {
-        debug_assert!(
+        ld_assert!(
             source + count <= self.occupied,
             "An attempt to copy non occupied data in Page.",
         );
@@ -116,15 +118,15 @@ impl<N: Node> Item for Page<N> {
 
     #[inline(always)]
     unsafe fn inflate(&mut self, from: ChildIndex, count: ChildCount) {
-        debug_assert!(
+        ld_assert!(
             from <= self.occupied,
             "An attempt to inflate from out of bounds child in Page."
         );
-        debug_assert!(
+        ld_assert!(
             count + self.occupied <= Self::CAP,
             "An attempt to inflate with overflow in Page."
         );
-        debug_assert!(count > 0, "An attempt to inflate of empty range in Page.");
+        ld_assert!(count > 0, "An attempt to inflate of empty range in Page.");
 
         if from < self.occupied {
             unsafe { array_shift(&mut self.spans, from, from + count, self.occupied - from) };
@@ -140,15 +142,15 @@ impl<N: Node> Item for Page<N> {
 
     #[inline(always)]
     unsafe fn deflate(&mut self, from: ChildIndex, count: ChildCount) -> bool {
-        debug_assert!(
+        ld_assert!(
             from < self.occupied,
             "An attempt to deflate from non occupied child in Page."
         );
-        debug_assert!(
+        ld_assert!(
             from + count <= self.occupied,
             "An attempt to deflate with overflow in Page."
         );
-        debug_assert!(count > 0, "An attempt to deflate of empty range.");
+        ld_assert!(count > 0, "An attempt to deflate of empty range.");
 
         unsafe { self.string.deflate(self.occupied, from, count) };
 
@@ -196,12 +198,12 @@ impl<N: Node> Item for Page<N> {
 impl<N: Node> Page<N> {
     #[inline(always)]
     pub(super) fn new(occupied: ChildCount) -> PageRef<N> {
-        debug_assert!(
+        ld_assert!(
             occupied > 0,
             "An attempt to create Page with zero occupied values."
         );
 
-        debug_assert!(
+        ld_assert!(
             occupied <= Self::CAP,
             "An attempt to create Page with occupied value exceeding capacity."
         );
@@ -261,7 +263,7 @@ impl<N: Node> Page<N> {
     pub(super) unsafe fn free_subtree(
         mut self,
         refs: &mut TreeRefs<N>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
     ) -> ChildCount {
         for index in 0..self.occupied {
             let token = unsafe { self.tokens.get_unchecked_mut(index) };
@@ -275,7 +277,7 @@ impl<N: Node> Page<N> {
             let cache = take(unsafe { self.caches.get_unchecked_mut(index).assume_init_mut() });
 
             if let Some(cache) = cache {
-                cache.free(refs, watch);
+                cache.free(refs, watcher);
             }
         }
 
@@ -375,7 +377,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
     unsafe fn parent_mut(&mut self) -> &mut BranchRef<Self::SelfLayer, N> {
         let parent_entry_index = unsafe { &mut self.as_mut().parent };
 
-        debug_assert!(
+        ld_assert!(
             !parent_entry_index.is_dangling(),
             "An attempt to get parent from root.",
         );
@@ -393,7 +395,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
         let page = unsafe { self.as_mut() };
 
-        debug_assert!(
+        ld_assert!(
             from + count <= page.occupied,
             "An attempt to update refs in non occupied data in Page.",
         );
@@ -427,7 +429,7 @@ impl<N: Node> ItemRef<(), N> for PageRef<N> {
 
         let occupied = unsafe { self.as_ref().occupied };
 
-        debug_assert!(from < occupied, "Split at position out of bounds.",);
+        ld_assert!(from < occupied, "Split at position out of bounds.",);
 
         match from == 0 {
             true => {
@@ -526,7 +528,7 @@ impl<N: Node> PageRef<N> {
     pub(super) unsafe fn rewrite(
         &mut self,
         refs: &mut TreeRefs<N>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
         from: ChildIndex,
         count: ChildCount,
         spans: &mut impl Iterator<Item = Length>,
@@ -536,15 +538,15 @@ impl<N: Node> PageRef<N> {
     ) -> (Length, Length) {
         let page = unsafe { self.as_mut() };
 
-        debug_assert!(
+        ld_assert!(
             from < page.occupied,
             "An attempt to rewrite from non occupied child in Page."
         );
-        debug_assert!(
+        ld_assert!(
             from + count <= page.occupied,
             "An attempt to rewrite with overflow in Page."
         );
-        debug_assert!(count > 0, "An attempt to rewrite of empty range.");
+        ld_assert!(count > 0, "An attempt to rewrite of empty range.");
 
         let mut dec = 0;
         let mut inc = 0;
@@ -559,18 +561,18 @@ impl<N: Node> PageRef<N> {
         *indices = unsafe { &indices[count..] };
 
         for index in from..(from + count) {
-            debug_assert!(index < Page::<N>::CAP, "Chunk index is out of bounds.",);
+            ld_assert!(index < Page::<N>::CAP, "Chunk index is out of bounds.",);
 
             let new_span = match spans.next() {
                 Some(span) => span,
-                None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Spans iterator exceeded.") },
             };
 
-            debug_assert!(new_span > 0, "Zero input span.");
+            ld_assert!(new_span > 0, "Zero input span.");
 
             let new_token = match tokens.next() {
                 Some(token) => token,
-                None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Tokens iterator exceeded.") },
             };
 
             let span = unsafe { page.spans.get_unchecked_mut(index) };
@@ -587,7 +589,7 @@ impl<N: Node> PageRef<N> {
             unsafe { refs.chunks.upgrade(chunk_index) };
 
             if let Some(cache) = cache {
-                cache.free(refs, watch);
+                cache.free(refs, watcher);
             }
         }
 
@@ -604,21 +606,21 @@ impl<N: Node> PageRef<N> {
     pub(super) unsafe fn remove(
         &mut self,
         refs: &mut TreeRefs<N>,
-        watch: &mut impl Watch,
+        watcher: &mut impl Watcher,
         from: ChildIndex,
         count: ChildCount,
     ) -> Length {
         let page = unsafe { self.as_mut() };
 
-        debug_assert!(
+        ld_assert!(
             from < page.occupied,
             "An attempt to remove from non occupied child in Page."
         );
-        debug_assert!(
+        ld_assert!(
             from + count <= page.occupied,
             "An attempt to remove with overflow in Page."
         );
-        debug_assert!(count > 0, "An attempt to remove of empty range.");
+        ld_assert!(count > 0, "An attempt to remove of empty range.");
 
         let mut length = 0;
 
@@ -634,7 +636,7 @@ impl<N: Node> PageRef<N> {
             let cache = take(unsafe { page.caches.get_unchecked_mut(index).assume_init_mut() });
 
             if let Some(cache) = cache {
-                cache.free(refs, watch);
+                cache.free(refs, watcher);
             }
 
             length += span;
@@ -712,15 +714,15 @@ impl<N: Node> PageRef<N> {
 
         let page = unsafe { self.as_mut() };
 
-        debug_assert!(
+        ld_assert!(
             from <= page.occupied,
             "An attempt to insert from non occupied child in Page."
         );
-        debug_assert!(
+        ld_assert!(
             from + count <= Page::<N>::CAP,
             "An attempt to insert with overflow in Page."
         );
-        debug_assert!(count > 0, "An attempt to insert of empty range.");
+        ld_assert!(count > 0, "An attempt to insert of empty range.");
 
         unsafe { page.inflate(from, count) };
 
@@ -734,19 +736,19 @@ impl<N: Node> PageRef<N> {
         let mut length = 0;
 
         for index in from..(from + count) {
-            debug_assert!(index < Page::<N>::CAP, "Chunk index is out of bounds.",);
+            ld_assert!(index < Page::<N>::CAP, "Chunk index is out of bounds.",);
 
             let new_span = match spans.next() {
                 Some(span) => span,
 
-                None => unsafe { debug_unreachable!("Spans iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Spans iterator exceeded.") },
             };
 
-            debug_assert!(new_span > 0, "Zero input span.");
+            ld_assert!(new_span > 0, "Zero input span.");
 
             let new_token = match tokens.next() {
                 Some(token) => token,
-                None => unsafe { debug_unreachable!("Tokens iterator exceeded.") },
+                None => unsafe { ld_unreachable!("Tokens iterator exceeded.") },
             };
 
             length += new_span;

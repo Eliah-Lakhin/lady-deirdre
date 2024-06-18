@@ -1,45 +1,47 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    mem::{replace, take},
+    ops::Deref,
+    str::from_utf8_unchecked,
+};
 
 use crate::{
     arena::EntryIndex,
     lexis::{ByteIndex, Length, TokenCount},
-    report::{debug_assert, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_unreachable},
     syntax::Node,
     units::storage::{
         item::{Item, ItemRef, ItemRefVariant},
@@ -104,7 +106,7 @@ impl<N: Node> ChildCursor<N> {
     // 4. `self` is not dangling.
     #[inline]
     pub(crate) unsafe fn continuous_to(&self, tail: &Self) -> Option<TokenCount> {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
         );
@@ -112,7 +114,7 @@ impl<N: Node> ChildCursor<N> {
         let head_page_ref = unsafe { self.item.as_page_ref() };
         let head_page = unsafe { head_page_ref.as_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < head_page.occupied,
             "ChildRefIndex index out of bounds.",
         );
@@ -123,7 +125,7 @@ impl<N: Node> ChildCursor<N> {
 
                 match head_page_ref == tail_page_ref {
                     true => {
-                        debug_assert!(
+                        ld_assert!(
                             tail.index < head_page.occupied,
                             "ChildRefIndex index out of bounds.",
                         );
@@ -131,7 +133,7 @@ impl<N: Node> ChildCursor<N> {
                         match self.index <= tail.index {
                             true => Some(tail.index - self.index),
 
-                            false => unsafe { debug_unreachable!("Head is ahead of tail.") },
+                            false => unsafe { ld_unreachable!("Head is ahead of tail.") },
                         }
                     }
 
@@ -171,21 +173,21 @@ impl<N: Node> ChildCursor<N> {
     // 4. There are no other mutable references to this span.
     #[inline(always)]
     pub(crate) unsafe fn span<'a>(&self) -> &'a Length {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildRefIndex.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildRefIndex index out of bounds.",
         );
 
         let span = unsafe { page.spans.get_unchecked(self.index) };
 
-        debug_assert!(*span > 0, "Zero span in Page.");
+        ld_assert!(*span > 0, "Zero span in Page.");
 
         span
     }
@@ -197,14 +199,14 @@ impl<N: Node> ChildCursor<N> {
     // 4. There are no other mutable references to this String.
     #[inline(always)]
     pub(crate) unsafe fn string<'a>(&self) -> &'a str {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -213,7 +215,7 @@ impl<N: Node> ChildCursor<N> {
 
         let string = unsafe { from_utf8_unchecked(slice) };
 
-        debug_assert!(!string.is_empty(), "Empty string in Page.");
+        ld_assert!(!string.is_empty(), "Empty string in Page.");
 
         string
     }
@@ -225,14 +227,14 @@ impl<N: Node> ChildCursor<N> {
     // 4. There are no mutable references to this String.
     #[inline(always)]
     pub(crate) unsafe fn page_string<'a>(&self) -> &'a str {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -244,7 +246,7 @@ impl<N: Node> ChildCursor<N> {
 
         let string = unsafe { from_utf8_unchecked(slice) };
 
-        debug_assert!(!string.is_empty(), "Empty string in Page.");
+        ld_assert!(!string.is_empty(), "Empty string in Page.");
 
         string
     }
@@ -255,14 +257,14 @@ impl<N: Node> ChildCursor<N> {
     // 3. There are no other mutable references to this Token.
     #[inline(always)]
     pub(crate) unsafe fn token(&self) -> <N as Node>::Token {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -276,14 +278,14 @@ impl<N: Node> ChildCursor<N> {
     // 3. `'a` does not outlive corresponding Page instance.
     #[inline(always)]
     pub(crate) unsafe fn cache<'a>(&self) -> Option<&'a Cache> {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -302,14 +304,14 @@ impl<N: Node> ChildCursor<N> {
     // 4. There are no other references to this cache.
     #[inline(always)]
     pub(crate) unsafe fn release_cache(&self) -> Cache {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -317,7 +319,7 @@ impl<N: Node> ChildCursor<N> {
         match unsafe { take(page.caches.get_unchecked_mut(self.index).assume_init_mut()) } {
             Some(cache) => *cache,
 
-            None => unsafe { debug_unreachable!("An attempt to release unset cache.") },
+            None => unsafe { ld_unreachable!("An attempt to release unset cache.") },
         }
     }
 
@@ -327,14 +329,14 @@ impl<N: Node> ChildCursor<N> {
     // 3. Referred item does not have a cache.
     #[inline(always)]
     pub(crate) unsafe fn install_cache(&self, cache: Cache) {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -345,7 +347,7 @@ impl<N: Node> ChildCursor<N> {
         );
 
         if previous.is_some() {
-            unsafe { debug_unreachable!("An attempt to replace unreleased cache.") }
+            unsafe { ld_unreachable!("An attempt to replace unreleased cache.") }
         }
     }
 
@@ -354,14 +356,14 @@ impl<N: Node> ChildCursor<N> {
     // 2. `self.item` is a Page reference.
     #[inline(always)]
     pub(crate) unsafe fn chunk_entry_index(&self) -> EntryIndex {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -374,14 +376,14 @@ impl<N: Node> ChildCursor<N> {
     // 2. `self.item` is a Page reference.
     #[inline(always)]
     pub(crate) unsafe fn is_first(&self) -> bool {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -395,14 +397,14 @@ impl<N: Node> ChildCursor<N> {
     #[inline(always)]
     #[allow(unused)]
     pub(crate) unsafe fn is_last(&self) -> bool {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -415,14 +417,14 @@ impl<N: Node> ChildCursor<N> {
     // 2. `self.item` is a Page reference.
     #[inline(always)]
     pub(crate) unsafe fn next(&mut self) {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -437,7 +439,7 @@ impl<N: Node> ChildCursor<N> {
             return;
         };
 
-        debug_assert!(
+        ld_assert!(
             unsafe { next_ref.as_ref().occupied } >= Page::<N>::B,
             "Incorrect Page balance."
         );
@@ -451,7 +453,7 @@ impl<N: Node> ChildCursor<N> {
     // 2. `self.item` is a Page reference.
     #[inline(always)]
     pub(crate) unsafe fn next_page(&mut self) {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
@@ -463,7 +465,7 @@ impl<N: Node> ChildCursor<N> {
             return;
         };
 
-        debug_assert!(
+        ld_assert!(
             unsafe { next_ref.as_ref().occupied } >= Page::<N>::B,
             "Incorrect Page balance."
         );
@@ -477,14 +479,14 @@ impl<N: Node> ChildCursor<N> {
     // 2. `self.item` is a Page reference.
     #[inline(always)]
     pub(crate) unsafe fn back(&mut self) {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -502,7 +504,7 @@ impl<N: Node> ChildCursor<N> {
             Some(previous_ref) => {
                 let previous_occupied = unsafe { previous_ref.as_ref().occupied };
 
-                debug_assert!(previous_occupied >= Page::<N>::B, "Incorrect Page balance.");
+                ld_assert!(previous_occupied >= Page::<N>::B, "Incorrect Page balance.");
 
                 self.item = unsafe { previous_ref.into_variant() };
                 self.index = previous_occupied - 1;
@@ -524,14 +526,14 @@ impl<N: Node> ChildCursor<N> {
         indices: &mut Vec<ByteIndex>,
         text: &mut String,
     ) {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to access dangling ChildCursor.",
         );
 
         let page = unsafe { self.item.as_page_ref().as_external_mut() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < page.occupied,
             "ChildCursor index out of bounds.",
         );
@@ -544,14 +546,14 @@ impl<N: Node> ChildCursor<N> {
     // 2. `self.item` is a Branch reference.
     #[inline(always)]
     pub(super) unsafe fn branch_span(&self) -> Length {
-        debug_assert!(
+        ld_assert!(
             !self.is_dangling(),
             "An attempt to get span from dangling ChildCursor.",
         );
 
         let branch = unsafe { self.item.as_branch_ref::<()>().as_ref() };
 
-        debug_assert!(
+        ld_assert!(
             self.index < branch.inner.occupied,
             "ChildCursor index is out of bounds.",
         );

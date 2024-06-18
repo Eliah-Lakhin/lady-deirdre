@@ -1,39 +1,43 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    fmt::{Debug, Formatter},
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 use crate::{
     analysis::{
@@ -45,20 +49,42 @@ use crate::{
         AttrRef,
         Computable,
         Grammar,
-        Handle,
         Revision,
+        TaskHandle,
     },
     arena::Repo,
-    report::debug_unreachable,
-    std::*,
+    report::ld_unreachable,
     sync::{Shared, SyncBuildHasher},
     syntax::NodeRef,
     units::Document,
 };
 
+/// A type alias of the `Attr<Scope<N>>` type that denotes a built-in
+/// attribute that resolves to the scope node of the current node.
+///
+/// See [Scope] for details.
 pub type ScopeAttr<N> = Attr<Scope<N>>;
 
+/// A [computable](Computable) object that infers the scope of the current node.
+///
+/// Scopes are the syntax tree nodes for which the [Grammar::is_scope]
+/// function returns true.
+///
+/// The scope of the current node is the closest ancestor of the current
+/// node which is a scope. If there is no such ancestor, the scope
+/// of the current is the root node of the syntax tree.
+///
+/// Scope attributes are special built-in attributes.
+///
+/// You don't have to specify them explicitly in
+/// the [Feature](crate::analysis::Feature) objects that build up the node
+/// semantics. Instead, every [Semantics](crate::analysis::Semantics) object
+/// has a built-in scope attribute instance, and
+/// the [Analyzer](crate::analysis::Analyzer) is responsible to keep its value
+/// up to date.
 pub struct Scope<N: Grammar> {
+    /// A [NodeRef] reference to the syntax tree node that represents a scope
+    /// node of the current node.
     pub scope_ref: NodeRef,
     _grammar: PhantomData<N>,
 }
@@ -74,7 +100,7 @@ impl<N: Grammar> Eq for Scope<N> {}
 
 impl<N: Grammar> Debug for Scope<N> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Scope")
             .field("scope_ref", &self.scope_ref)
@@ -104,7 +130,9 @@ impl<N: Grammar> Default for Scope<N> {
 impl<N: Grammar> Computable for Scope<N> {
     type Node = N;
 
-    fn compute<S: SyncBuildHasher>(context: &mut AttrContext<Self::Node, S>) -> AnalysisResult<Self>
+    fn compute<H: TaskHandle, S: SyncBuildHasher>(
+        context: &mut AttrContext<Self::Node, H, S>,
+    ) -> AnalysisResult<Self>
     where
         Self: Sized,
     {
@@ -136,11 +164,11 @@ impl<N: Grammar> Computable for Scope<N> {
 
 impl<N: Grammar> ScopeAttr<N> {
     // Safety: `attr_ref` refers ScopeAttr.
-    pub(super) unsafe fn snapshot_manually<S: SyncBuildHasher>(
+    pub(super) unsafe fn snapshot_manually<H: TaskHandle, S: SyncBuildHasher>(
         attr_ref: &AttrRef,
-        handle: &Handle,
+        handle: &H,
         doc: &Document<N>,
-        records: &Repo<Record<N, S>>,
+        records: &Repo<Record<N, H, S>>,
         revision: Revision,
     ) -> AnalysisResult<NodeRef> {
         let Some(record) = records.get(&attr_ref.entry) else {
@@ -159,7 +187,7 @@ impl<N: Grammar> ScopeAttr<N> {
                 }
 
                 // Records with `verified_at > 0` always have cache.
-                unsafe { debug_unreachable!("Verified scope attribute without cache.") };
+                unsafe { ld_unreachable!("Verified scope attribute without cache.") };
             }
 
             drop(record_read_guard);
@@ -292,11 +320,11 @@ impl<N: Grammar> ScopeAttr<N> {
     }
 
     #[inline]
-    fn compute_manually<S: SyncBuildHasher>(
+    fn compute_manually<H: TaskHandle, S: SyncBuildHasher>(
         node_ref: &NodeRef,
-        handle: &Handle,
+        handle: &H,
         doc: &Document<N>,
-        records: &Repo<Record<N, S>>,
+        records: &Repo<Record<N, H, S>>,
         revision: Revision,
     ) -> AnalysisResult<(Option<AttrRef>, NodeRef)> {
         let Some(node) = node_ref.deref(doc) else {

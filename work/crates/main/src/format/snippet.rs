@@ -1,39 +1,43 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    borrow::Cow,
+    fmt::{Display, Formatter},
+    iter::repeat,
+    mem::{replace, take},
+};
 
 use crate::{
     format::{terminal::Escaped, Style},
@@ -51,19 +55,42 @@ use crate::{
         Token,
         TokenBuffer,
     },
-    report::debug_unreachable,
-    std::*,
+    report::ld_unreachable,
 };
 
+/// A configuration of the [Snippet] look and feel features.
+///
+/// This structure is non-exhaustive; new configuration options may be added
+/// in future minor versions of this crate.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[non_exhaustive]
 pub struct SnippetConfig {
+    /// Whether the line numbers shall be shown on the left of the code content.
     pub show_numbers: bool,
+
+    /// Whether the boxed frame shall surround the code content from all sides.
     pub draw_frame: bool,
+
+    /// If the code annotations are present in the snippet, whether
+    /// the non-annotated parts of the source code text shall be rendered
+    /// dimmed to focus the user on annotations.
     pub dim_code: bool,
+
+    /// Whether the box drawing characters shall be rendered using ASCII
+    /// symbols only.
     pub ascii_drawing: bool,
+
+    /// Whether the CSI [styles](Style) shall be applied.
+    ///
+    /// When set to false, the renderer does not apply built-in styles
+    /// to annotations and other parts of the output, and the syntax
+    /// highlighter will disabled too.
     pub style: bool,
+
+    /// Whether the snippet caption (header) shall be rendered or disabled.
     pub caption: bool,
+
+    /// Whether the snippet summary (footer) shall be rendered or disabled.
     pub summary: bool,
 }
 
@@ -75,6 +102,7 @@ impl Default for SnippetConfig {
 }
 
 impl SnippetConfig {
+    /// Returns a snippet configuration with all visual features being enabled.
     #[inline(always)]
     pub const fn verbose() -> Self {
         Self {
@@ -88,6 +116,10 @@ impl SnippetConfig {
         }
     }
 
+    /// Returns a snippet configuration with all visual features being disabled.
+    ///
+    /// In this mode, the [Snippet] will output the source code text without
+    /// annotations as it is.
     #[inline(always)]
     pub const fn minimal() -> Self {
         Self {
@@ -125,16 +157,16 @@ impl SnippetConfig {
     }
 
     #[inline(always)]
-    fn annotation_style(&self, priority: Priority) -> Style {
+    fn annotation_style(&self, priority: AnnotationPriority) -> Style {
         if !self.style {
             return Style::default();
         }
 
         match priority {
-            Priority::Default => Style::default().invert(),
-            Priority::Primary => Style::default().invert().red(),
-            Priority::Secondary => Style::default().invert().blue(),
-            Priority::Note => Style::default().invert().yellow(),
+            AnnotationPriority::Default => Style::default().invert(),
+            AnnotationPriority::Primary => Style::default().invert().red(),
+            AnnotationPriority::Secondary => Style::default().invert().blue(),
+            AnnotationPriority::Note => Style::default().invert().yellow(),
         }
     }
 
@@ -335,7 +367,24 @@ impl SnippetConfig {
     }
 }
 
+/// An extension trait of the [Formatter] object that provides a constructor
+/// of the [Snippet].
 pub trait SnippetFormatter<'f> {
+    /// Returns a [Snippet] builder.
+    ///
+    /// Via this builder, you can annotate the source code, configure
+    /// caption (header), and summary (footer) parts of the snippet, and
+    /// configure other snippet rendering features.
+    ///
+    /// Calling the [Snippet::finish] function prints the snippet to
+    /// the Formatter's output.
+    ///
+    /// The `code` parameter specifies a [SourceCode] that needs to be printed.
+    ///
+    /// By default, the snippet uses [minimal](SnippetConfig::minimal) rendering
+    /// configuration in the non-[alternate](Formatter::alternate) mode,
+    /// and the [verbose](SnippetConfig::verbose) configuration in
+    /// the alternate mode.
     fn snippet<'a, C: SourceCode>(&'a mut self, code: &'a C) -> Snippet<'a, 'f, C>;
 }
 
@@ -362,6 +411,23 @@ impl<'f> SnippetFormatter<'f> for Formatter<'f> {
     }
 }
 
+/// A builder of the source code snippet.
+///
+/// Through the methods of the builder, you can configure snippet's rendering
+/// features and annotate the source code fragments.
+///
+/// The snippets are intended to be used in the custom objects'
+/// [Debug](std::fmt::Debug) and [Display] implementations.
+///
+/// The object is created by calling a [snippet](SnippetFormatter::snippet)
+/// function on the [Formatter] instance (via the [SnippetFormatter] trait).
+///
+/// The [finish](Snippet::finish) method finishes the builder and renders
+/// the snippet into the Formatter's output.
+///
+/// Note that the exact representation of the snippet rendering is not specified
+/// and is a subject to changes and improvements in future minor versions
+/// of this crate.
 pub struct Snippet<'a, 'f, C: SourceCode> {
     formatter: &'a mut Formatter<'f>,
     code: &'a C,
@@ -373,6 +439,7 @@ pub struct Snippet<'a, 'f, C: SourceCode> {
 }
 
 impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
+    /// Sets snippet's general look and feel configuration options.
     #[inline(always)]
     pub fn set_config(&mut self, config: &'a SnippetConfig) -> &mut Self {
         self.config = config;
@@ -380,6 +447,11 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self
     }
 
+    /// Sets snippet's header caption.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the caption contains more than one line (delimited by `\n`).
     #[inline(always)]
     pub fn set_caption(&mut self, caption: impl Into<Cow<'a, str>>) -> &mut Self {
         let caption = caption.into();
@@ -393,6 +465,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self
     }
 
+    /// Sets snippet's footer summary text.
     #[inline(always)]
     pub fn set_summary(&mut self, summary: impl Into<Cow<'a, str>>) -> &mut Self {
         self.summary = PrintString::from_cow(summary.into());
@@ -400,6 +473,13 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self
     }
 
+    /// Sets the syntax highlighter that tells the renderer how to stylize
+    /// individual tokens of the source code.
+    ///
+    /// Note that since the [Highlighter] is a stateful object, the Snippet
+    /// renderer cannot use it more than once. Therefore, calling the
+    /// [finish](Self::finish) function a second time will not highlight
+    /// the source code.
     #[inline(always)]
     pub fn set_highlighter(&mut self, highlighter: impl Highlighter<C::Token> + 'a) -> &mut Self {
         self.highlighter = Some(Box::new(highlighter));
@@ -407,10 +487,32 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self
     }
 
+    /// Adds an annotation to the source code.
+    ///
+    /// Annotations are the [spans](ToSpan) of source code that you want
+    /// to highlight for the end user, with or without a message,
+    /// such as syntax errors.
+    ///
+    /// The `span` parameter specifies the annotation span.
+    ///
+    /// The `priority` parameter specifies the importance of the annotation.
+    ///
+    /// The `message` parameter specifies a message that will be shown near the
+    /// annotated span. This parameter can be omitted (set to an empty string),
+    /// but the message string must be one line (it should not contain
+    /// `\n` chars).
+    ///
+    /// When the snippet has annotations, the renderer will only show the source
+    /// code lines where the annotations are present, plus a few lines
+    /// surrounding the annotated spans.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the message has `\n` characters.
     pub fn annotate(
         &mut self,
         span: impl ToSpan,
-        priority: Priority,
+        priority: AnnotationPriority,
         message: impl Into<Cow<'a, str>>,
     ) -> &mut Self {
         let message = message.into();
@@ -434,7 +536,13 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self
     }
 
-    pub fn finish(&mut self) -> FmtResult {
+    /// Finishes the snippet builder and renders the snippet into
+    /// the Formatter's output.
+    ///
+    /// This function returns a format result with any format errors that may
+    /// occur during interactions with the Formatter. Normally, this function
+    /// returns an Ok result.
+    pub fn finish(&mut self) -> std::fmt::Result {
         // PREPARE
 
         let (cover, mut lines) = self.scan();
@@ -664,7 +772,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                             Some(span) => span,
 
                             // Safety: Site spans are always valid to resolve.
-                            None => unsafe { debug_unreachable!("Invalid site span.") },
+                            None => unsafe { ld_unreachable!("Invalid site span.") },
                         };
 
                         cover.start.line = cover
@@ -694,7 +802,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                             }
 
                             // Safety: Sites are always valid to resolve.
-                            None => unsafe { debug_unreachable!("Invalid end site.") },
+                            None => unsafe { ld_unreachable!("Invalid end site.") },
                         };
 
                         Position::default()..end
@@ -708,7 +816,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                 let site_cover = match position_cover.to_site_span(snippet.code) {
                     Some(span) => span,
                     // Safety: Position spans are always valid to resolve.
-                    None => unsafe { debug_unreachable!("Invalid position span.") },
+                    None => unsafe { ld_unreachable!("Invalid position span.") },
                 };
 
                 Self {
@@ -813,7 +921,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                             Some(annotation) => annotation.priority,
 
                             // Safety: Annotation stack is well-formed.
-                            None => unsafe { debug_unreachable!("Missing annotation.") },
+                            None => unsafe { ld_unreachable!("Missing annotation.") },
                         };
 
                         scanner.pending.annotated = true;
@@ -869,20 +977,49 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
     }
 }
 
+/// A syntax highlighter for the [Snippet]'s source code.
+///
+/// The Snippet's renderer sequentially feeds tokens to the Highlighter, and
+/// the Highlighter decides how this token should be stylized.
+///
+/// The implementor could be a stateful object that makes decisions based on
+/// the prior token's context.
 pub trait Highlighter<T: Token> {
+    /// Returns a [style](Style) of the token.
+    ///
+    /// The `dim` flag specifies if the token style is assumed to be dimmed,
+    /// with lesser contrast than usual. In other words, if the end user
+    /// attention should not be focused on this token.
+    ///
+    /// The `token` parameter specifies a token that needs to be stylized.
+    ///
+    /// This function can take into account the previous tokens based on the
+    /// implementor's inner state, and the function can change the inner state
+    /// for the future token styles.
+    ///
+    /// If the function returns None, the token style is left to the renderer's
+    /// defaults.
     fn token_style(&mut self, dim: bool, token: T) -> Option<Style>;
 }
 
+/// A degree of importance of the [Snippet]'s annotation.
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Priority {
+pub enum AnnotationPriority {
+    /// An annotation without extra user attention priority.
     #[default]
     Default,
+
+    /// An annotation with the highest user attention priority.
     Primary,
+
+    /// An annotation with moderate user attention priority.
     Secondary,
+
+    /// An annotation with the lowest user attention priority.
     Note,
 }
 
-impl Priority {
+impl AnnotationPriority {
     #[inline(always)]
     fn order(&self) -> usize {
         match self {
@@ -919,7 +1056,10 @@ impl ScanLine {
     fn expand(&mut self, config: &SnippetConfig) {
         enum Segment {
             End(Message),
-            Middle { offset: Column, priority: Priority },
+            Middle {
+                offset: Column,
+                priority: AnnotationPriority,
+            },
         }
 
         impl Segment {
@@ -942,7 +1082,7 @@ impl ScanLine {
         if left > 1 {
             for message in pending.iter_mut() {
                 if let Some(message) = message {
-                    if message.priority == Priority::Primary {
+                    if message.priority == AnnotationPriority::Primary {
                         continue;
                     }
                 }
@@ -951,7 +1091,7 @@ impl ScanLine {
                     Some(message) => message,
 
                     // Safety: All messages initialized in the beginning.
-                    None => unsafe { debug_unreachable!("Unset first message.") },
+                    None => unsafe { ld_unreachable!("Unset first message.") },
                 };
 
                 left -= 1;
@@ -1005,7 +1145,7 @@ impl ScanLine {
                     Some(message) => Segment::End(message),
 
                     // Safety: Discriminant checked above.
-                    None => unsafe { debug_unreachable!("Missing pending item.") },
+                    None => unsafe { ld_unreachable!("Missing pending item.") },
                 };
 
                 left -= 1;
@@ -1082,7 +1222,7 @@ impl ScanLine {
 
 struct Annotation<'a> {
     span: SiteSpan,
-    priority: Priority,
+    priority: AnnotationPriority,
     message: PrintString<'a>,
 }
 
@@ -1099,7 +1239,7 @@ impl<'a> Annotation<'a> {
 
 struct Message {
     offset: Column,
-    priority: Priority,
+    priority: AnnotationPriority,
     string: StyleString,
 }
 
@@ -1137,7 +1277,7 @@ struct StyleString {
 
 impl Display for StyleString {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         formatter.write_str(&self.text)
     }
 }
@@ -1375,7 +1515,7 @@ impl StyleString {
     }
 
     #[inline]
-    fn end(mut self, is_first: &mut bool, formatter: &mut Formatter) -> FmtResult {
+    fn end(mut self, is_first: &mut bool, formatter: &mut Formatter) -> std::fmt::Result {
         if self.length == 0 {
             return Ok(());
         }
@@ -1559,10 +1699,7 @@ impl<'a> PrintString<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        format::{snippet::StyleString, SnippetConfig, Style, TerminalString},
-        std::*,
-    };
+    use crate::format::{snippet::StyleString, SnippetConfig, Style, TerminalString};
 
     #[test]
     fn test_csi_detection() {

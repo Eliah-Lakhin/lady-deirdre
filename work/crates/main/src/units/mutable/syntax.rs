@@ -1,56 +1,63 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::mem::replace;
 
 use crate::{
     arena::{Entry, EntryIndex, Id, Identifiable},
     lexis::{Length, Site, SiteRef, Token, TokenCount, TokenCursor, TokenRef},
-    report::{debug_assert, debug_unreachable},
-    std::*,
-    syntax::{is_void_syntax, ErrorRef, Node, NodeRef, NodeRule, SyntaxSession, ROOT_RULE},
+    report::{ld_assert, ld_unreachable},
+    syntax::{
+        is_void_syntax,
+        ErrorRef,
+        Node,
+        NodeRef,
+        NodeRule,
+        SyntaxError,
+        SyntaxSession,
+        ROOT_RULE,
+    },
     units::{
         storage::{Cache, ChildCursor, Tree, TreeRefs},
-        Watch,
+        Watcher,
     },
 };
 
-pub struct MutableSyntaxSession<'unit, N: Node, W: Watch> {
+pub struct MutableSyntaxSession<'unit, N: Node, W: Watcher> {
     tree: &'unit mut Tree<N>,
     refs: &'unit mut TreeRefs<N>,
-    watch: &'unit mut W,
+    watcher: &'unit mut W,
     context: Vec<Entry>,
     pending: Pending,
     failing: bool,
@@ -63,14 +70,14 @@ pub struct MutableSyntaxSession<'unit, N: Node, W: Watch> {
     end_site: Site,
 }
 
-impl<'unit, N: Node, W: Watch> Identifiable for MutableSyntaxSession<'unit, N, W> {
+impl<'unit, N: Node, W: Watcher> Identifiable for MutableSyntaxSession<'unit, N, W> {
     #[inline(always)]
     fn id(&self) -> Id {
         self.refs.id
     }
 }
 
-impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit, N, W> {
+impl<'unit, N: Node, W: Watcher> TokenCursor<'unit> for MutableSyntaxSession<'unit, N, W> {
     type Token = N::Token;
 
     fn advance(&mut self) -> bool {
@@ -85,7 +92,7 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
         if has_cache {
             let cache = unsafe { self.next_chunk_cursor.release_cache() };
 
-            cache.free(self.refs, self.watch)
+            cache.free(self.refs, self.watcher)
         }
 
         unsafe { self.next_chunk_cursor.next() };
@@ -95,7 +102,7 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
                 self.peek_chunk_cursor = self.next_chunk_cursor;
                 self.peek_site = self.next_site;
 
-                debug_assert!(self.peek_caches == 0, "Incorrect cache counter.");
+                ld_assert!(self.peek_caches == 0, "Incorrect cache counter.");
             }
 
             false => {
@@ -124,7 +131,7 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
                     #[allow(unused)]
                     let advanced = self.advance();
 
-                    debug_assert!(advanced, "Skip advancing failure.");
+                    ld_assert!(advanced, "Skip advancing failure.");
                 }
 
                 self.next_chunk_cursor = self.peek_chunk_cursor;
@@ -283,7 +290,7 @@ impl<'unit, N: Node, W: Watch> TokenCursor<'unit> for MutableSyntaxSession<'unit
     }
 }
 
-impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N, W> {
+impl<'unit, N: Node, W: Watcher> SyntaxSession<'unit> for MutableSyntaxSession<'unit, N, W> {
     type Node = N;
 
     fn descend(&mut self, rule: NodeRule) -> NodeRef {
@@ -327,7 +334,7 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
                     entry: unsafe { self.refs.nodes.entry_of_unchecked(cache.primary_node) },
                 };
 
-                self.watch.report_node(&result);
+                self.watcher.report_node(&result);
 
                 return result;
             }
@@ -336,7 +343,7 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
 
             let cache = unsafe { self.next_chunk_cursor.release_cache() };
 
-            cache.free(self.refs, self.watch);
+            cache.free(self.refs, self.watcher);
         };
 
         let inner_start_cursor = self.next_chunk_cursor;
@@ -360,7 +367,7 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
             entry,
         };
 
-        self.watch.report_node(&node_ref);
+        self.watcher.report_node(&node_ref);
 
         self.context.push(entry);
 
@@ -406,7 +413,7 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
             entry,
         };
 
-        self.watch.report_node(&node_ref);
+        self.watcher.report_node(&node_ref);
 
         node_ref
     }
@@ -468,7 +475,7 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
 
         node.set_parent_ref(parent_ref);
 
-        self.watch.report_node(node_ref);
+        self.watcher.report_node(node_ref);
     }
 
     #[inline(always)]
@@ -522,14 +529,14 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
     }
 
     #[inline(always)]
-    fn failure(&mut self, error: impl Into<<Self::Node as Node>::Error>) -> ErrorRef {
+    fn failure(&mut self, error: SyntaxError) -> ErrorRef {
         if self.failing {
             return ErrorRef::nil();
         }
 
         self.failing = true;
 
-        let entry_index = self.refs.errors.insert_raw(error.into());
+        let entry_index = self.refs.errors.insert_raw(error);
 
         self.pending.errors.push(entry_index);
 
@@ -538,13 +545,13 @@ impl<'unit, N: Node, W: Watch> SyntaxSession<'unit> for MutableSyntaxSession<'un
             entry: unsafe { self.refs.errors.entry_of_unchecked(entry_index) },
         };
 
-        self.watch.report_error(&error_ref);
+        self.watcher.report_error(&error_ref);
 
         error_ref
     }
 }
 
-impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
+impl<'unit, N: Node, W: Watcher> MutableSyntaxSession<'unit, N, W> {
     // Safety:
     // 1. `head` belongs to the `tree` instance.
     // 2. All references of the `tree` belong to `refs` instance.
@@ -554,14 +561,14 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
     pub(super) unsafe fn run(
         tree: &'unit mut Tree<N>,
         refs: &'unit mut TreeRefs<N>,
-        watch: &'unit mut W,
+        watcher: &'unit mut W,
         start: Site,
         head: ChildCursor<N>,
         rule: NodeRule,
         primary_node: EntryIndex,
     ) -> (Cache, Site) {
         if is_void_syntax::<N>() {
-            unsafe { debug_unreachable!("An attempt to reparse void syntax") }
+            unsafe { ld_unreachable!("An attempt to reparse void syntax") }
         }
 
         let context = {
@@ -607,7 +614,7 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
         let mut session = Self {
             tree,
             refs,
-            watch,
+            watcher,
             context,
             pending,
             failing: false,
@@ -692,7 +699,7 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
 
                 unsafe { self.peek_chunk_cursor.next() };
 
-                debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
+                ld_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
             }
 
             return false;
@@ -707,7 +714,7 @@ impl<'unit, N: Node, W: Watch> MutableSyntaxSession<'unit, N, W> {
 
             unsafe { self.peek_chunk_cursor.back() }
 
-            debug_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
+            ld_assert!(!self.peek_chunk_cursor.is_dangling(), "Dangling peek ref.");
 
             self.peek_distance -= 1;
             self.peek_site -= unsafe { *self.peek_chunk_cursor.span() };

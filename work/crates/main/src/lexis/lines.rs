@@ -1,51 +1,61 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::fmt::{Debug, Formatter};
 
 use crate::{
     lexis::{Length, Line, Site, SiteSpan},
     mem::{slice_copy_to, slice_shift},
-    report::{debug_assert, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_unreachable},
 };
 
 const LINE_LENGTH: Length = 40;
 const SEARCH_THRESHOLD: usize = 10;
 const CAPACITY_THRESHOLD: usize = 100;
 
+/// An index of the text line spans.
+///
+/// This object represents a bidirectional map between the text line numbers and
+/// the absolute [sites](Site) of the line beginnings.
+///
+/// The object provides functions to quickly fetch the line of the character
+/// site, and the line start and end sites (line spans) by the line number.
+///
+/// The [write](LineIndex::write) function provides a way to modify the index.
+///
+/// The inner algorithm considers the `\n` character as the line delimiter
+/// and includes both the `\r` and `\n` characters as parts of the line endings.
 #[derive(Clone)]
 pub struct LineIndex {
     index: Vec<Site>,
@@ -53,7 +63,7 @@ pub struct LineIndex {
 }
 
 impl Debug for LineIndex {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         let width = (self.index.len().ilog10() + 1) as usize;
 
         let total = self.index.len();
@@ -87,11 +97,17 @@ impl Default for LineIndex {
 }
 
 impl LineIndex {
+    /// Constructs a new LineIndex for the empty string.
     #[inline(always)]
     pub fn new() -> Self {
         Self::with_capacity(0)
     }
 
+    /// Constructs a new LineIndex for the empty string, but preallocates
+    /// the inner index to address the text of `capacity` length.
+    ///
+    /// The allocation is amortized based on heuristics assumptions about
+    /// the average line lengths.
     #[inline(always)]
     pub fn with_capacity(capacity: Length) -> Self {
         Self::with_capacity_from(capacity, 0, 0)
@@ -106,6 +122,9 @@ impl LineIndex {
         Self { index, length }
     }
 
+    /// Returns the start [site](Site) of the `line`.
+    ///
+    /// See [Line] specification for details.
     #[inline(always)]
     pub fn line_start(&self, mut line: Line) -> Site {
         line = line
@@ -113,12 +132,18 @@ impl LineIndex {
             .checked_sub(1)
             .unwrap_or_default();
 
-        debug_assert!(line < self.index.len(), "Empty index.");
+        ld_assert!(line < self.index.len(), "Empty index.");
 
         // Safety: `self.index` is never empty.
         unsafe { *self.index.get_unchecked(line) }
     }
 
+    /// Returns the end [site](Site) of the `line`.
+    ///
+    /// The end sites points to the first character of the next line or points
+    /// to the end of the text content.
+    ///
+    /// See [Line] specification for details.
     #[inline(always)]
     pub fn line_end(&self, mut line: Line) -> Site {
         line = line.clamp(1, self.index.len());
@@ -126,16 +151,29 @@ impl LineIndex {
         self.index.get(line).copied().unwrap_or(self.length)
     }
 
+    /// Returns a [site span](SiteSpan) of the line.
+    ///
+    /// The returning value equals the range between
+    /// the [line_start](Self::line_start) and the [line_end](Self::line_end).
     #[inline(always)]
     pub fn line_span(&self, line: Line) -> SiteSpan {
         self.line_start(line)..self.line_end(line)
     }
 
+    /// Returns the [length](Length) of the line.
+    ///
+    /// The returning value equals the difference between
+    /// the [line_start](Self::line_start) and the [line_end](Self::line_end).
     #[inline(always)]
     pub fn line_length(&self, line: Line) -> Length {
         self.line_end(line) - self.line_start(line)
     }
 
+    /// Returns the [line index](Line) of a character addressed by the `site`
+    /// parameter.
+    ///
+    /// If the `site` exceeds the text content length, this function returns
+    /// the last line index.
     #[inline(always)]
     pub fn line_of(&self, site: Site) -> Line {
         match self.index.binary_search(&site) {
@@ -144,17 +182,35 @@ impl LineIndex {
         }
     }
 
+    /// Returns the total number of lines in the text.
+    ///
+    /// This value is always positive because an empty text is a text of
+    /// one line.
     #[inline(always)]
     pub fn lines_count(&self) -> usize {
         self.index.len()
     }
 
+    /// Reserves capacity for the inner index to address the lines of a text of
+    /// at least `additional` length.
+    ///
+    /// The allocation is amortized based on heuristics assumptions about
+    /// the average line lengths.
     #[inline(always)]
     pub fn reserve(&mut self, additional: Length) {
         self.index
             .reserve((additional / LINE_LENGTH).max(CAPACITY_THRESHOLD));
     }
 
+    /// Modifies this LineIndex to reflect the edit in the source code content.
+    ///
+    /// The meaning of the `span` and the `text` parameters is the same as
+    /// in the [Document::write](crate::units::Document::write) function. Refer
+    /// to its specification for details.
+    ///
+    /// Note that the LineIndex does not store the text content internally, but
+    /// the write function iterates through the `text` string to look up for the
+    /// line delimiter sites.
     #[inline(always)]
     pub fn write(&mut self, span: SiteSpan, text: impl AsRef<str>) {
         if span.start > span.end || span.end > self.length {
@@ -164,11 +220,13 @@ impl LineIndex {
         unsafe { self.write_unchecked(span, text.as_ref()) }
     }
 
+    /// Shrinks the allocation capacity of the LineIndex as much as possible.
     #[inline(always)]
     pub fn shrink_to_fit(&mut self) {
         self.index.shrink_to_fit();
     }
 
+    /// Clears the LineIndex while preserving allocated memory.
     #[inline(always)]
     pub fn clear(&mut self) {
         unsafe { self.index.set_len(1) }
@@ -199,14 +257,14 @@ impl LineIndex {
     #[allow(dead_code)]
     // Safety: `span <= self.length()`
     pub(crate) unsafe fn shrink_unchecked(&mut self, span: Length) {
-        debug_assert!(span <= self.length, "Shrink overflow.");
+        ld_assert!(span <= self.length, "Shrink overflow.");
 
         self.length -= span;
 
         loop {
             let Some(last) = self.index.last() else {
                 // Safety: index is never empty.
-                unsafe { debug_unreachable!("Empty index.") }
+                unsafe { ld_unreachable!("Empty index.") }
             };
 
             if *last <= self.length {
@@ -215,7 +273,7 @@ impl LineIndex {
 
             unsafe { self.index.set_len(self.index.len() - 1) };
 
-            debug_assert!(self.index.len() > 0, "Empty index.");
+            ld_assert!(self.index.len() > 0, "Empty index.");
         }
     }
 
@@ -223,7 +281,7 @@ impl LineIndex {
     //   1. `span.start() <= span.end()`
     //   2. `span.end() <= self.length()`
     pub(crate) unsafe fn write_unchecked(&mut self, span: SiteSpan, text: &str) {
-        debug_assert!(
+        ld_assert!(
             span.start <= span.end && span.end <= self.length,
             "Invalid span.",
         );
@@ -237,8 +295,8 @@ impl LineIndex {
 
         let start_line = self.line_of(span.start);
 
-        debug_assert!(start_line >= 1, "Invalid index.");
-        debug_assert!(start_line <= self.index.len(), "Invalid index.");
+        ld_assert!(start_line >= 1, "Invalid index.");
+        ld_assert!(start_line <= self.index.len(), "Invalid index.");
 
         if start_line == self.index.len() {
             self.length -= remove_length;
@@ -275,7 +333,7 @@ impl LineIndex {
             }
         };
 
-        debug_assert!(
+        ld_assert!(
             start_line + remove_lines - 1 <= self.index.len(),
             "Invalid index.",
         );
@@ -352,7 +410,7 @@ impl LineIndex {
             self.length -= remove_length;
             self.length += replace_length;
 
-            debug_assert!(
+            ld_assert!(
                 start_line + replace_lines - 1 < self.index.len(),
                 "Invalid index.",
             );
@@ -377,7 +435,7 @@ impl LineIndex {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lexis::LineIndex, std::*};
+    use crate::lexis::LineIndex;
 
     #[test]
     fn test_line_index() {

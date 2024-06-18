@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -76,7 +73,6 @@ pub struct NodeInput {
     pub(super) generics: ParserGenerics,
     pub(super) token: Type,
     pub(super) classifier: Option<Type>,
-    pub(super) error: Type,
     pub(super) trivia: Option<Rule>,
     pub(super) recovery: Option<Recovery>,
     pub(crate) dump: Dump,
@@ -135,7 +131,6 @@ impl TryFrom<DeriveInput> for NodeInput {
 
         let mut token = None;
         let mut classifier = None;
-        let mut error = None;
         let mut trivia = None;
         let mut recovery = None;
         let mut dump = Dump::None;
@@ -168,14 +163,6 @@ impl TryFrom<DeriveInput> for NodeInput {
                     }
 
                     classifier = Some(attr.parse_args::<Type>()?);
-                }
-
-                "error" => {
-                    if error.is_some() {
-                        return Err(error!(span, "Duplicate Token attribute.",));
-                    }
-
-                    error = Some(attr.parse_args::<Type>()?);
                 }
 
                 "trivia" => {
@@ -255,18 +242,6 @@ impl TryFrom<DeriveInput> for NodeInput {
                     ident.span(),
                     "Token type was not specified.\nUse #[token(<token type>)] \
                     attribute on the derived type to specify Token type.",
-                ));
-            }
-        };
-
-        let error = match error {
-            Some(ty) => ty,
-
-            None => {
-                return Err(error!(
-                    ident.span(),
-                    "Error type was not specified.\nUse #[error(<error type>)] \
-                    attribute on the derived type to specify Error type.",
                 ));
             }
         };
@@ -398,8 +373,8 @@ impl TryFrom<DeriveInput> for NodeInput {
                     if variants.contains_key(name) {
                         return Err(error!(
                             name.span(),
-                            "This index name already used as a Variant \
-                            name.\nIndex names must be unique in the \
+                            "This denotation name already used as a Variant \
+                            name.\nDenotation names must be unique in the \
                             type namespace.",
                         ));
                     }
@@ -448,12 +423,13 @@ impl TryFrom<DeriveInput> for NodeInput {
                     rule.span,
                     "This rule is abandoned.\n\nEach parsable rule except the \
                     Root rule (annotated with #[root]), trivia \
-                    expressions,\nand the rules with Overridden index \
-                    (annotated with #[index(...)]) must be referred\ndirectly or \
-                    indirectly from the Root rule, or trivia expressions.\n\n\
+                    expressions,\nand the rules with overridden index \
+                    (annotated with #[denote(...)]) must be referred\ndirectly \
+                    or indirectly from the Root rule, or trivia \
+                    expressions.\n\n\
                     If this is intending (e.g. if you want to descend into \
                     this rule manually),\nconsider annotating this rule with \
-                    #[index(<number>)] attribute.\nLater on you can \
+                    #[denote(<number>)] attribute.\nLater on you can \
                     descend into this rule using that index number.",
                 ));
             }
@@ -590,7 +566,6 @@ impl TryFrom<DeriveInput> for NodeInput {
             generics,
             token,
             classifier,
-            error,
             trivia,
             recovery,
             dump,
@@ -614,7 +589,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
             return Err(error!(
                 span,
-                " -- Macro System Debug Dump --\n\nNode \"{ident}\" \
+                " -- Macro Debug Dump --\n\nNode \"{ident}\" \
                 metadata:\nAnalysis time: {analysis:?}.\nCode generation \
                 time: {build:?}.\nLines of code: {lines}.\n",
             ));
@@ -626,7 +601,7 @@ impl TryFrom<DeriveInput> for NodeInput {
                 None => {
                     return Err(error!(
                         span,
-                        "Trivia dump is not applicable here, because global \
+                        "Trivia dump is not applicable here because the global \
                         Trivia expression is not specified.\nUse \
                         #[trivia(...)] attribute to specify trivia expression.",
                     ))
@@ -653,7 +628,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
             return Err(error!(
                 span,
-                " -- Macro System Debug Dump --\n\nNode \"{node}\" global \
+                " -- Macro Debug Dump --\n\nNode \"{node}\" common \
                 trivia parser function is:\n\n{output_string}",
             ));
         }
@@ -670,7 +645,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
             return Err(error!(
                 span,
-                " -- Macro System Debug Dump --\n\nNode \"{ident}\" \
+                " -- Macro Debug Dump --\n\nNode \"{ident}\" \
                 implementation code:\n\n{output_string}",
             ));
         }
@@ -695,7 +670,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
                     return Err(error!(
                         span,
-                        " -- Macro System Debug Dump --\n\nRule \
+                        " -- Macro Debug Dump --\n\nRule \
                         \"{node}::{ident}\" trivia parser function \
                         is:\n\n{output_string}",
                     ));
@@ -718,7 +693,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
                     return Err(error!(
                         span,
-                        " -- Macro System Debug Dump --\n\nRule \
+                        " -- Macro Debug Dump --\n\nRule \
                         \"{node}::{ident}\" parser function \
                         is:\n\n{output_string}",
                     ));

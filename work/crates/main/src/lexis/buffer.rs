@@ -1,39 +1,44 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display, Formatter},
+    iter::{FusedIterator, Peekable, Take},
+    slice::Iter,
+    str::Chars,
+};
 
 use crate::{
     arena::{Entry, Id, Identifiable},
@@ -52,72 +57,24 @@ use crate::{
         TokenCount,
         CHUNK_SIZE,
     },
-    report::{debug_assert, debug_unreachable},
-    std::*,
+    report::{ld_assert, ld_unreachable},
 };
 
-/// A growable buffer of the source code lexical data.
+/// A growable buffer of tokens.
 ///
-/// This buffer is a default implementation of the [SourceCode](crate::lexis::SourceCode) trait that
-/// holds the source code of a compilation unit, and the lexical structure of the code(tokens and
-/// token metadata).
+/// This object provides canonical implementation of the [SourceCode] trait
+/// specifically optimized for the one-time scanning of the source code text.
 ///
-/// In contrast to [Document](crate::Document), TokenBuffer provides an
-/// [append](TokenBuffer::append) function to write strings to the end of underlying source code
-/// only, but this operation works faster than the random-access
-/// [`Document::write`](crate::Document::write) function.
+/// The TokenBuffer parses the lexical structure of the source code text and
+/// provides a way to append text to the buffer, but it does not offer
+/// incremental reparsing capabilities when the user edits random ranges
+/// of the source code text.
 ///
-/// An API user is encouraged to use TokenBuffer together with Rust's [BufRead](::std::io::BufRead)
-/// and similar objects to preload source code files by sequentially reading strings from the source
-/// and feeding them to the TokenBuffer using Append function.
-///
-/// Later on a TokenBuffer can either be turned into a Document instance using
-/// [into_document](TokenBuffer::into_document) function, or to be used by itself as
-/// a non-incremental storage of the lexical data of compilation unit.
-///
-/// For non-incremental usage an API user can also obtain a non-incremental syntax structure of the
-/// Unit using [SyntaxBuffer](crate::syntax::ImmutableSyntaxTree).
-///
-/// ```rust
-/// use lady_deirdre::{
-///     units::Document,
-///     lexis::{TokenBuffer, SimpleToken, SourceCode, Chunk},
-///     syntax::{ImmutableSyntaxTree, SimpleNode, Node},
-/// };
-///
-/// // Alternatively, you can use
-/// //  - `TokenBuffer::from("head string")` providing an initial String to parse;
-/// //  - or a shortcut function `SimpleToken::parse("head string")`;
-/// //  - or a `TokenBuffer::with_capacity(10)` function to specify buffer's token capacity.
-/// let mut token_buf = TokenBuffer::<SimpleToken>::default();
-///
-/// token_buf.append("First line\n");
-/// token_buf.append("Second line\n");
-///
-/// // Turning the TokenBuffer to incremental Document.
-/// let _doc = token_buf.into_document::<SimpleNode>();
-///
-/// let mut token_buf = TokenBuffer::<SimpleToken>::default();
-///
-/// token_buf.append("First line\n");
-/// token_buf.append("Second line\n");
-///
-/// // Obtaining a non-incremental syntax structure of the entire compilation unit.
-/// let _syntax_tree: ImmutableSyntaxTree<SimpleNode> = ImmutableSyntaxTree::parse(token_buf.cursor(..));
-///
-/// // TokenBuffer is traversable structure of Chunk references.
-/// let token_strings = (&token_buf)
-///     .into_iter()
-///     .map(|chunk: Chunk<SimpleToken>| chunk.string)
-///     .collect::<Vec<&str>>();
-///
-/// assert_eq!(token_strings, ["First", " ", "line", "\n", "Second", " ", "line", "\n"]);
-///
-/// // An API user can iterate through the TokenBuffer Chunks.
-/// let chunks = (&token_buf).into_iter().collect::<Vec<Chunk<SimpleToken>>>();
-///
-/// assert_eq!(chunks[4].string, "Second");
-/// ```
+/// If you need a compilation unit with the incremental reparsing capabilities
+/// but without the syntax tree parser, consider using the mutable
+/// [Document](crate::units::Document) or
+/// [MutableUnit](crate::units::MutableUnit) specifying the type of the Node
+/// to `VoidSyntax<T>` (see [VoidSyntax](crate::syntax::VoidSyntax)).
 pub struct TokenBuffer<T: Token> {
     id: Id,
     pub(crate) tokens: Vec<T>,
@@ -130,7 +87,7 @@ pub struct TokenBuffer<T: Token> {
 
 impl<T: Token> Debug for TokenBuffer<T> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         formatter
             .debug_struct("TokenBuffer")
             .field("id", &self.id)
@@ -141,7 +98,7 @@ impl<T: Token> Debug for TokenBuffer<T> {
 
 impl<T: Token> Display for TokenBuffer<T> {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         formatter
             .snippet(self)
             .set_caption(format!("TokenBuffer({})", self.id))
@@ -198,13 +155,13 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
 
         let rest = match self.search(span.start) {
             Ok(byte_index) => {
-                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+                ld_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
 
                 unsafe { self.text.get_unchecked(byte_index..) }.chars()
             }
 
             Err((byte_index, mut remaining)) => {
-                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+                ld_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
 
                 let mut rest = unsafe { self.text.get_unchecked(byte_index..) }.chars();
 
@@ -236,12 +193,12 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
             Ok(byte_index) => byte_index,
 
             Err((byte_index, remaining)) => {
-                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+                ld_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
 
                 let rest = unsafe { self.text.get_unchecked(byte_index..) }.char_indices();
 
                 let Some((offset, _)) = rest.take(remaining + 1).last() else {
-                    unsafe { debug_unreachable!("Empty tail.") };
+                    unsafe { ld_unreachable!("Empty tail.") };
                 };
 
                 byte_index + offset
@@ -252,20 +209,20 @@ impl<T: Token> SourceCode for TokenBuffer<T> {
             Ok(byte_index) => byte_index,
 
             Err((byte_index, remaining)) => {
-                debug_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
+                ld_assert!(byte_index < self.text.len(), "Byte index out of bounds.");
 
                 let rest = unsafe { self.text.get_unchecked(byte_index..) }.char_indices();
 
                 let Some((offset, _)) = rest.take(remaining + 1).last() else {
-                    unsafe { debug_unreachable!("Empty tail.") };
+                    unsafe { ld_unreachable!("Empty tail.") };
                 };
 
                 byte_index + offset
             }
         };
 
-        debug_assert!(start <= end, "Invalid byte bounds.");
-        debug_assert!(end <= self.text.len(), "Invalid byte bounds.");
+        ld_assert!(start <= end, "Invalid byte bounds.");
+        ld_assert!(end <= self.text.len(), "Invalid byte bounds.");
 
         unsafe { Cow::from(self.text.get_unchecked(start..end)) }
     }
@@ -373,11 +330,16 @@ impl<'buffer, T: Token> IntoIterator for &'buffer TokenBuffer<T> {
 }
 
 impl<T: Token> TokenBuffer<T> {
+    /// Creates a TokenBuffer by scanning the specified source code `text`.
     #[inline(always)]
-    pub fn parse(string: impl AsRef<str>) -> Self {
-        Self::from(string)
+    pub fn parse(text: impl AsRef<str>) -> Self {
+        Self::from(text)
     }
 
+    /// Creates an empty TokenBuffer.
+    ///
+    /// You can append and scan the source code text later using
+    /// the [append](Self::append) function.
     #[inline(always)]
     pub fn new() -> Self {
         Self {
@@ -391,8 +353,9 @@ impl<T: Token> TokenBuffer<T> {
         }
     }
 
-    /// Creates a new TokenBuffer instance with pre-allocated memory for at least `capacity` token
-    /// chunks to be stored in.
+    /// Creates an empty TokenBuffer but preallocates memory to store
+    /// at least `tokens` number of the source code tokens, and the `text`
+    /// number of bytes to store the source code text.
     #[inline(always)]
     pub fn with_capacity(tokens: TokenCount, text: usize) -> Self {
         Self {
@@ -406,13 +369,8 @@ impl<T: Token> TokenBuffer<T> {
         }
     }
 
-    /// Writes `text` to the end of the buffer's source code, lexically parses source code tail
-    /// in accordance to these changes.
-    ///
-    /// Performance of this operation is relative to the `text` size.
-    ///
-    /// An intended use of this function is to feed strings(e.g. lines) of the source code file
-    /// from the Rust's  [BufRead](::std::io::BufRead).
+    /// Appends the `text` to the end of the buffer by rescanning the tail of
+    /// the former buffer (if non-empty) and the appendable text.
     pub fn append(&mut self, text: impl AsRef<str>) {
         let text = text.as_ref();
 
@@ -435,14 +393,14 @@ impl<T: Token> TokenBuffer<T> {
             if self.tokens.pop().is_none() {
                 // Safety: Underlying TokenBuffer collections represent
                 //         a sequence of Chunks.
-                unsafe { debug_unreachable!("TokenBuffer inconsistency.") };
+                unsafe { ld_unreachable!("TokenBuffer inconsistency.") };
             }
 
             byte = match self.indices.pop() {
                 Some(index) => index,
                 // Safety: Underlying TokenBuffer collections represent
                 //         a sequence of Chunks.
-                None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
+                None => unsafe { ld_unreachable!("TokenBuffer inconsistency.") },
             };
 
             site = match self.sites.pop() {
@@ -450,7 +408,7 @@ impl<T: Token> TokenBuffer<T> {
 
                 // Safety: Underlying TokenBuffer collections represent
                 //         a sequence of Chunks.
-                None => unsafe { debug_unreachable!("TokenBuffer inconsistency.") },
+                None => unsafe { ld_unreachable!("TokenBuffer inconsistency.") },
             }
         }
 
@@ -460,8 +418,8 @@ impl<T: Token> TokenBuffer<T> {
         BufferLexisSession::run(self, byte, site);
     }
 
-    /// Reserves capacity to store at least `additional` token chunks to be inserted on top of this
-    /// buffer.
+    /// Reserves capacity to store at least `tokens` number of the source code
+    /// tokens, and the `text` number of bytes to store the source code text.
     pub fn reserve(&mut self, tokens: TokenCount, text: usize) {
         self.tokens.reserve(tokens);
         self.sites.reserve(tokens);
@@ -471,6 +429,7 @@ impl<T: Token> TokenBuffer<T> {
         self.lines.reserve(text);
     }
 
+    /// Shrinks the allocation capacity of the TokenBuffer as much as possible.
     pub fn shrink_to_fit(&mut self) {
         self.tokens.shrink_to_fit();
         self.sites.shrink_to_fit();
@@ -480,6 +439,7 @@ impl<T: Token> TokenBuffer<T> {
         self.lines.shrink_to_fit();
     }
 
+    /// Clears the TokenBuffer while preserving allocated memory.
     pub fn clear(&mut self) {
         self.tokens.clear();
         self.sites.clear();
@@ -504,7 +464,7 @@ impl<T: Token> TokenBuffer<T> {
     pub(super) fn push(&mut self, token: T, from: &Cursor, to: &Cursor) {
         let span = to.site - from.site;
 
-        debug_assert!(span > 0, "Empty span.");
+        ld_assert!(span > 0, "Empty span.");
 
         let _ = self.tokens.push(token);
         let _ = self.sites.push(from.site);
@@ -520,7 +480,7 @@ impl<T: Token> TokenBuffer<T> {
 
         match self.sites.binary_search(&site) {
             Ok(index) => {
-                debug_assert!(index < self.indices.len(), "Index out of bounds.");
+                ld_assert!(index < self.indices.len(), "Index out of bounds.");
 
                 let byte_index = unsafe { self.indices.get_unchecked(index) };
 
@@ -528,12 +488,12 @@ impl<T: Token> TokenBuffer<T> {
             }
 
             Err(mut index) => {
-                debug_assert!(index > 0, "Index out of bounds.");
+                ld_assert!(index > 0, "Index out of bounds.");
 
                 index -= 1;
 
-                debug_assert!(index < self.indices.len(), "Index out of bounds.");
-                debug_assert!(index < self.sites.len(), "Index out of bounds.");
+                ld_assert!(index < self.indices.len(), "Index out of bounds.");
+                ld_assert!(index < self.sites.len(), "Index out of bounds.");
 
                 let byte_index = unsafe { self.indices.get_unchecked(index) };
                 let nearest_site = unsafe { self.sites.get_unchecked(index) };

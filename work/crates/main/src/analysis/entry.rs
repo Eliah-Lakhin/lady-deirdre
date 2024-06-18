@@ -1,39 +1,43 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    collections::{hash_map, HashMap, HashSet},
+    hash::RandomState,
+    ops::{Deref, DerefMut},
+    sync::{Arc, Weak},
+};
 
 use crate::{
     analysis::{
@@ -43,28 +47,61 @@ use crate::{
         Classifier,
         Feature,
         Grammar,
-        Handle,
         Initializer,
         Invalidator,
         Revision,
         ScopeAttr,
+        TaskHandle,
     },
     arena::{Entry, Id, Identifiable, Repo},
     lexis::ToSpan,
-    report::debug_unreachable,
-    std::*,
+    report::ld_unreachable,
     sync::{Shared, SyncBuildHasher, TableReadGuard},
     syntax::{ErrorRef, NodeRef, PolyRef, SyntaxTree},
-    units::{Document, Watch},
+    units::{Document, Watcher},
 };
 
+/// A type of the [Analyzer]-wide event.
+///
+/// The values lesser than [CUSTOM_EVENT_START_RANGE] are reserved by the crate.
+/// Other values are custom user-defined events.
 pub type Event = u16;
 
+/// A built-in [Analyzer] event indicating the the document has been added
+/// to the Analyzer.
 pub const DOC_ADDED_EVENT: Event = 1;
+
+/// A built-in [Analyzer] event indicating that the document has been
+/// [removed](crate::analysis::MutationAccess::remove_doc) from the Analyzer.
 pub const DOC_REMOVED_EVENT: Event = 2;
+
+/// A built-in [Analyzer] event indicating that the document's content has been
+/// [edited](crate::analysis::MutationAccess::write_to_doc).
 pub const DOC_UPDATED_EVENT: Event = 3;
+
+/// A built-in [Analyzer] event indicating that
+/// the [syntax error](crate::syntax::SyntaxError) has occurred or been removed
+/// from the [syntax tree](SyntaxTree) of the Analyzer's document.
 pub const DOC_ERRORS_EVENT: Event = 4;
 
+/// A start of the custom user-defined [events](Event) range.
+pub const CUSTOM_EVENT_START_RANGE: Event = 0x100;
+
+/// A RAII guard that provides read-only access to the [Analyzer]'s document.
+///
+/// The underlying document can be accessed through the [Deref] implementation
+/// of this object.
+///
+/// The document is locked for read until the last remaining DocumentReadGuard
+/// is dropped. If a task attempts
+/// to [write](crate::analysis::MutationAccess::write_to_doc) into the document
+/// while the document is locked for read, the writer thread will be blocked.
+///
+/// Note the Analyzer allows reading document's
+/// [attributes](crate::analysis::Attr) while document is locked for read.
+///
+/// Also, the Analyzer allows parallel writing to independent documents
+/// without blocking if these documents are not locked for read.
 #[repr(transparent)]
 pub struct DocumentReadGuard<'a, N: Grammar, S: SyncBuildHasher = RandomState> {
     guard: TableReadGuard<'a, Id, DocEntry<N, S>, S>,
@@ -103,7 +140,7 @@ pub(super) struct NodeToClasses<N: Grammar, S> {
     pub(super) classes: HashSet<<N::Classifier as Classifier>::Class, S>,
 }
 
-impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
+impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
     pub(super) fn register_doc(&self, mut doc: Document<N>) -> Id {
         let id = doc.id();
 
@@ -139,20 +176,18 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
                 for class in &classes {
                     match classes_to_nodes.entry(class.clone()) {
-                        HashMapEntry::Occupied(mut entry) => {
+                        hash_map::Entry::Occupied(mut entry) => {
                             let Some(nodes) = entry.get_mut().nodes.get_mut() else {
                                 // Shared is localized within this function during initialization.
                                 unsafe {
-                                    debug_unreachable!(
-                                        "Class nodes are shared during initialization"
-                                    )
+                                    ld_unreachable!("Class nodes are shared during initialization")
                                 }
                             };
 
                             let _ = nodes.insert(node_ref);
                         }
 
-                        HashMapEntry::Vacant(entry) => {
+                        hash_map::Entry::Vacant(entry) => {
                             let mut nodes = HashSet::default();
 
                             let _ = nodes.insert(node_ref);
@@ -187,18 +222,18 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
     pub(super) fn write_to_doc(
         &self,
-        handle: &Handle,
+        handle: &H,
         id: Id,
         span: impl ToSpan,
         text: impl AsRef<str>,
     ) -> AnalysisResult<()> {
         #[derive(Default)]
-        struct DocWatch<S> {
+        struct DocWatcher<S> {
             node_refs: HashSet<NodeRef, S>,
             errors_signal: bool,
         }
 
-        impl<S: SyncBuildHasher> Watch for DocWatch<S> {
+        impl<S: SyncBuildHasher> Watcher for DocWatcher<S> {
             #[inline(always)]
             fn report_node(&mut self, node_ref: &NodeRef) {
                 let _ = self.node_refs.insert(*node_ref);
@@ -227,7 +262,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
             return Err(AnalysisError::InvalidSpan);
         };
 
-        let mut report = DocWatch::<S>::default();
+        let mut report = DocWatcher::<S>::default();
 
         unit.write_and_watch(span, text, &mut report);
 
@@ -247,7 +282,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
             // Safety:
             //   1. Records are always in sync with documents.
             //   2. Document is locked.
-            unsafe { debug_unreachable!("Missing database entry.") }
+            unsafe { ld_unreachable!("Missing database entry.") }
         };
 
         let mut initializer = Initializer {
@@ -268,7 +303,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
                         //   1. Nodes and classes are always in sync.
                         //   2. Both collections locked.
                         unsafe {
-                            debug_unreachable!("Nodes and classes resynchronization.");
+                            ld_unreachable!("Nodes and classes resynchronization.");
                         }
                     };
 
@@ -281,7 +316,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
                         //   1. Nodes and classes are always in sync.
                         //   2. Both collections locked.
                         unsafe {
-                            debug_unreachable!("Nodes and classes resynchronization.");
+                            ld_unreachable!("Nodes and classes resynchronization.");
                         }
                     }
                 }
@@ -319,7 +354,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
                     if !nodes.insert(*node_ref) {
                         // Safety: `nodes` is a fresh new collection.
                         unsafe {
-                            debug_unreachable!("Duplicate entry.");
+                            ld_unreachable!("Duplicate entry.");
                         }
                     }
 
@@ -334,7 +369,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
                     if previous.is_some() {
                         // Safety: Existence checked above.
                         unsafe {
-                            debug_unreachable!("Duplicate entry.");
+                            ld_unreachable!("Duplicate entry.");
                         }
                     }
 
@@ -348,7 +383,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
                     //   1. Nodes and classes are always in sync.
                     //   2. Both collections locked.
                     unsafe {
-                        debug_unreachable!("Nodes and classes resynchronization.");
+                        ld_unreachable!("Nodes and classes resynchronization.");
                     }
                 }
 
@@ -361,7 +396,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
             {
                 // Safety: Existence checked above.
                 unsafe {
-                    debug_unreachable!("Duplicate entry.");
+                    ld_unreachable!("Duplicate entry.");
                 }
             }
         }
@@ -417,7 +452,7 @@ impl<N: Grammar, S: SyncBuildHasher> Analyzer<N, S> {
 
         if self.db.records.remove(&id).is_none() {
             // Safety: records are always in sync with documents.
-            unsafe { debug_unreachable!("Missing database entry.") }
+            unsafe { ld_unreachable!("Missing database entry.") }
         }
 
         let revision = self.db.commit_revision();

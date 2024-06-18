@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,9 +38,9 @@ use std::{
     ops::RangeInclusive,
 };
 
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
-use syn::{LitByte, LitStr};
+use syn::{spanned::Spanned, LitByte, LitStr};
 
 use crate::{
     token::{automata::Terminal, chars::Class, TokenInput},
@@ -61,6 +58,7 @@ use crate::{
 };
 
 pub(super) struct Output<'a> {
+    ident: &'a Ident,
     input: &'a TokenInput,
     buffering: bool,
     pending: BTreeSet<State>,
@@ -81,6 +79,7 @@ pub(super) struct Output<'a> {
 impl<'a> Output<'a> {
     pub(super) fn compile(input: &'a TokenInput, buffer: bool) -> Vec<TokenStream> {
         let mut output = Output {
+            ident: &input.ident,
             input,
             buffering: buffer,
             pending: BTreeSet::new(),
@@ -359,9 +358,18 @@ impl<'a> Output<'a> {
                 Some(constructor) => {
                     let span = constructor.span();
                     let string = span.face_string();
+                    let ident = self.ident;
 
                     statements.push(quote_spanned!(span=>
-                        token = Self::#constructor(#string::as_str(&buffer))
+                        token = {
+                            #[allow(unused)]
+                            #[inline(always)]
+                            fn __construct(fragment: &str) -> #ident {
+                                #constructor
+                            }
+
+                            __construct(#string::as_str(&buffer))
+                        }
                     ))
                 }
             }
@@ -663,7 +671,7 @@ impl TokenInput {
         let transitions = Output::compile(self, buffer.is_some());
 
         quote_spanned!(span=>
-            fn parse(session: &mut impl #core::lexis::LexisSession) -> Self {
+            fn scan(session: &mut impl #core::lexis::LexisSession) -> Self {
                 #[allow(unused_mut)]
                 let mut state = #start;
 

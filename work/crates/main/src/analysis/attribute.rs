@@ -1,39 +1,45 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
+
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Formatter},
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    ops::Deref,
+    sync::Weak,
+};
 
 use crate::{
     analysis::{
@@ -52,15 +58,50 @@ use crate::{
         MutationAccess,
         Revision,
         SemanticAccess,
+        TaskHandle,
     },
     arena::{Entry, Id, Identifiable},
-    std::*,
     sync::SyncBuildHasher,
     syntax::{Key, NodeRef},
 };
 
+/// An [AttrRef] reference that does not point to any [attribute](Attr).
+///
+/// The value of this static equals to the [AttrRef::nil] value.
 pub static NIL_ATTR_REF: AttrRef = AttrRef::nil();
 
+/// A node of the [Analyzer](crate::analysis::Analyzer)'s semantics graph.
+///
+/// The purpose of the attribute is to represent a subset of the user-defined
+/// semantic model (via the value of the attribute) of the programming language
+/// that is assume to belong to a particular node of the syntax tree.
+///
+/// For example, one attribute could represent a programming language type
+/// of the variable introduced in the source code, while another attribute could
+/// represent a set of references of a function parameter in the source code.
+///
+/// The type of the value, denoted by `T`, implements a [Computable] trait,
+/// which is a function that computes the value from the syntax tree and other
+/// attribute values.
+///
+/// Under the hood, the value and the attribute metadata are owned by
+/// the Analyzer, but the Attr object acts as a formal owner of this data.
+/// Whenever the Attr instance is dropped, this data is removed from
+/// the semantics graph.
+///
+/// Attr objects, in turn, are owned by the instances of the syntax tree nodes
+/// (through the system of [features](Feature)) of the documents managed by
+/// the Analyzer. Therefore, attribute creation and deletion are inherently
+/// managed by the Analyzer too.
+///
+/// The Attr object does not implement the [Clone] trait, and normally it should
+/// not be moved from the node that owns the instance. However, since
+/// the attribute's data is owned by the Analyzer, you can use the [AttrRef]
+/// referential object that points to this data inside the Analyzer's semantics
+/// graph.
+///
+/// The [AttrRef] can be obtained using the [AsRef] and the [Feature]
+/// implementations of the Attr.
 #[repr(transparent)]
 pub struct Attr<C: Computable> {
     inner: AttrInner,
@@ -69,7 +110,7 @@ pub struct Attr<C: Computable> {
 
 impl<C: Computable> Debug for Attr<C> {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         let attr_ref = self.as_ref();
 
         match attr_ref.is_nil() {
@@ -173,7 +214,10 @@ impl<C: Computable + Eq> Feature for Attr<C> {
         }
     }
 
-    fn init<S: SyncBuildHasher>(&mut self, initializer: &mut Initializer<Self::Node, S>) {
+    fn init<H: TaskHandle, S: SyncBuildHasher>(
+        &mut self,
+        initializer: &mut Initializer<Self::Node, H, S>,
+    ) {
         let AttrInner::Uninit(node_ref) = &self.inner else {
             return;
         };
@@ -195,7 +239,10 @@ impl<C: Computable + Eq> Feature for Attr<C> {
         };
     }
 
-    fn invalidate<S: SyncBuildHasher>(&self, invalidator: &mut Invalidator<Self::Node, S>) {
+    fn invalidate<H: TaskHandle, S: SyncBuildHasher>(
+        &self,
+        invalidator: &mut Invalidator<Self::Node, H, S>,
+    ) {
         let AttrInner::Init { attr_ref, .. } = &self.inner else {
             return;
         };
@@ -210,10 +257,43 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 }
 
 impl<C: Computable> Attr<C> {
+    /// Requests a copy of the attribute's value.
+    ///
+    /// Returns a pair of two elements:
+    ///  1. The [revision](Revision) under which the attribute's value has been
+    ///    computed.
+    ///  2. A copy of the attribute's value.
+    ///
+    /// This function is supposed to be called **outside** of
+    /// the [computation context](Computable::compute).
+    ///
+    /// As a general rule, if the returning revision number equals the revision
+    /// number of the previous call to the snapshot function, you can treat
+    /// both copies of the attribute value as equal. Otherwise, the equality is
+    /// not guaranteed.
+    ///
+    /// Depending on the current semantic graph state, the Analyzer could
+    /// return the value from the cache or recompute a subset of
+    /// the semantics graph required to validate the cache.
+    ///
+    /// The `task` parameter grants access to the Analyzer's semantics and
+    /// could be either an [AnalysisTask](crate::analysis::AnalysisTask) or
+    /// an [ExclusiveTask](crate::analysis::ExclusiveTask).
+    ///
+    /// If the specified task has been interrupted, the function returns
+    /// an [Interrupted](AnalysisError::Interrupted) error.
+    ///
+    /// If the value takes too long to compute, or if the semantic graphs
+    /// contains cycles (which is an issue in the graph design), the function
+    /// returns a [Timeout](AnalysisError::Timeout) error.
+    ///
+    /// The function can also return any [AnalysisError] yielded by
+    /// the underling [Computable::compute] functions involved in this
+    /// attribute's value computation process.
     #[inline(always)]
-    pub fn snapshot<S: SyncBuildHasher>(
+    pub fn snapshot<H: TaskHandle, S: SyncBuildHasher>(
         &self,
-        task: &impl SemanticAccess<C::Node, S>,
+        task: &impl SemanticAccess<C::Node, H, S>,
     ) -> AnalysisResult<(Revision, C)>
     where
         C: Clone,
@@ -227,11 +307,39 @@ impl<C: Computable> Attr<C> {
         Ok((revision, data))
     }
 
+    /// Provides read-only access to the attribute's value.
+    ///
+    /// This function is supposed to be called **inside** of
+    /// the computation context.
+    ///
+    /// The `context` parameter is the "context" argument of the current
+    /// [computable function](Computable::compute).
+    ///
+    /// By calling this function, the computable attribute **subscribes** to
+    /// changes in this attribute, establishing relations between semantics
+    /// graph nodes.
+    ///
+    /// Note that you should ensure that the attribute currently being computed
+    /// will never read its own value using the read function, neither directly
+    /// nor indirectly through other attributes. Cyclic relations in
+    /// the semantics graph are forbidden and will lead to errors, such as
+    /// [Timeout](AnalysisError::Timeout) errors.
+    ///
+    /// If the specified task has been interrupted, the function returns
+    /// an [Interrupted](AnalysisError::Interrupted) error, which should be
+    /// further returned from the current computable function.
+    ///
+    /// Otherwise, if the function returns any other type of error, which is
+    /// an [abnormal](AnalysisError::is_abnormal) error, it is recommended
+    /// to panic in place to indicate the issue as early as possible.
+    /// You are encouraged to use
+    /// the [AnalysisResultEx](crate::analysis::AnalysisResultEx) helper trait
+    /// for this purpose.
     #[inline(always)]
-    pub fn read<'a, S: SyncBuildHasher>(
+    pub fn read<'a, H: TaskHandle, S: SyncBuildHasher>(
         &self,
-        context: &mut AttrContext<'a, C::Node, S>,
-    ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
+        context: &mut AttrContext<'a, C::Node, H, S>,
+    ) -> AnalysisResult<AttrReadGuard<'a, C, H, S>> {
         let attr_ref = self.as_ref();
 
         if attr_ref.is_nil() {
@@ -239,19 +347,48 @@ impl<C: Computable> Attr<C> {
         }
 
         // Safety: Attributes data came from the C::compute function.
-        unsafe { attr_ref.fetch::<false, C, S>(context) }
+        unsafe { attr_ref.fetch::<false, C, H, S>(context) }
     }
 }
 
+/// A reference of the [attribute](Attr) in the Analyzer's semantics graph.
+///
+/// Essentially, AttrRef is a composite index within the Analyzer’s inner
+/// database. Both components of this index form a unique pair within
+/// the lifetime of the Analyzer.
+///
+/// If the attribute instance has been removed from the Analyzer's semantics
+/// graph over time, new attributes within this Analyzer will never occupy
+/// the same AttrRef object. However, the AttrRef referred to the removed
+/// attribute would become _invalid_.
+///
+/// You can obtain a copy of the AttrRef using the [AsRef] and
+/// the [Feature] implementations of the [Attr] object.
+///
+/// In general, it is recommended to read attribute values directly using
+/// the [Attr::snapshot] and [Attr::read] functions to avoid extra checks.
+/// However, you can use similar [AttrRef::snapshot] and [AttrRef::read]
+/// functions that require specifying the type of the attribute's value
+/// explicitly and involve extra checks of the type (even though these checks
+/// are relatively cheap to perform).
+///
+/// The [nil](AttrRef::nil) AttrRefs are special references that are considered
+/// to be always invalid. They intentionally don't refer any attribute within
+/// any Analyzer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AttrRef {
+    /// An identifier of the document managed by the Analyzer to which
+    /// the attribute belongs.
     pub id: Id,
+
+    /// A versioned index of the attribute instance within the Analyzer's inner
+    /// database.
     pub entry: Entry,
 }
 
 impl Debug for AttrRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self.is_nil() {
             false => formatter.write_fmt(format_args!(
                 "AttrRef(id: {:?}, entry: {:?})",
@@ -277,6 +414,11 @@ impl Default for AttrRef {
 }
 
 impl AttrRef {
+    /// Returns an AttrRef that intentionally does not refer to any attribute
+    /// within any Analyzer.
+    ///
+    /// If you need just a static reference to the nil AttrRef, use
+    /// the predefined [NIL_ATTR_REF] static.
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
@@ -285,35 +427,91 @@ impl AttrRef {
         }
     }
 
+    /// Returns true, if the AttrRef intentionally does not refer to any
+    /// attribute within any Analyzer.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
         self.id.is_nil() || self.entry.is_nil()
     }
 
+    /// Requests a copy of the attribute's value.
+    ///
+    /// This function is similar to the [Attr::snapshot] function, but requires
+    /// an additional generic parameter `C` that specifies the type of
+    /// the [Attr]'s value.
+    ///
+    /// If the `C` parameter does not match the Attr's value type, the function
+    /// returns a [TypeMismatch](AnalysisError::TypeMismatch) error.
     #[inline(always)]
-    pub fn snapshot<C: Computable + Clone, S: SyncBuildHasher>(
+    pub fn snapshot<C: Computable + Clone, H: TaskHandle, S: SyncBuildHasher>(
         &self,
-        task: &impl SemanticAccess<C::Node, S>,
+        task: &impl SemanticAccess<C::Node, H, S>,
     ) -> AnalysisResult<(Revision, C)> {
         let mut reader = AttrContext::new(task.analyzer(), task.revision(), task.handle());
 
-        let result = self.read::<C, S>(&mut reader)?;
+        let result = self.read::<C, H, S>(&mut reader)?;
         let revision = result.attr_revision();
         let data = result.deref().clone();
 
         Ok((revision, data))
     }
 
+    /// Provides read-only access to the attribute's value.
+    ///
+    /// This function is similar to the [Attr::read] function, but requires
+    /// an additional generic parameter `C` that specifies the type of
+    /// the [Attr]'s value.
+    ///
+    /// If the `C` parameter does not match the Attr's value type, the function
+    /// returns a [TypeMismatch](AnalysisError::TypeMismatch) error.
     #[inline(always)]
-    pub fn read<'a, C: Computable, S: SyncBuildHasher>(
+    pub fn read<'a, C: Computable, H: TaskHandle, S: SyncBuildHasher>(
         &self,
-        reader: &mut AttrContext<'a, C::Node, S>,
-    ) -> AnalysisResult<AttrReadGuard<'a, C, S>> {
+        reader: &mut AttrContext<'a, C::Node, H, S>,
+    ) -> AnalysisResult<AttrReadGuard<'a, C, H, S>> {
         // Safety: `CHECK` set to true
-        unsafe { self.fetch::<true, C, S>(reader) }
+        unsafe { self.fetch::<true, C, H, S>(reader) }
     }
 
-    pub fn invalidate<N: Grammar, S: SyncBuildHasher>(&self, task: &mut impl MutationAccess<N, S>) {
+    /// Explicitly turns the value of the attribute to invalid state.
+    ///
+    /// By calling this function, you are informing
+    /// the [Analyzer](crate::analysis::Analyzer) that **the value**[^1] of
+    /// the attribute referred to by the AttrRef should be considered as
+    /// invalid. This action enforces recomputation of a part of the Analyzer's
+    /// semantics that depend on this attribute (including the attribute
+    /// itself).
+    ///
+    /// Usually, you don't need to call this function manually, as the Analyzer
+    /// manages the semantic graph validation automatically. However,
+    /// if the attribute's [computable function](Computable::compute) has a side
+    /// effect (depends on the external environment), you can use this function
+    /// to signalize the Analyzer that the environment external to the
+    /// computable function has been updated.
+    ///
+    /// In general, it is recommended to avoid using of this function in
+    /// favor of the Analyzer's built in mechanism of tracking the side effects
+    /// such as [subscriptions](AttrContext::subscribe) to the Analyzer-wide
+    /// events. Use the invalidate function only when no other options work
+    /// for you.
+    ///
+    /// The `task` parameter grants access to mutate the state of the Analyzer.
+    /// It could be either a [MutationTask](crate::analysis::MutationTask) or
+    /// an [ExclusiveTask](crate::analysis::ExclusiveTask).
+    ///
+    /// If the AttrRef itself does not point to a [valid](AsRef::is_valid_ref)
+    /// attribute, or if the value referred to by the AttrRef is not valid
+    /// or has not been computed yet, calling this function has no effect.
+    ///
+    /// [^1]: Don't be confused with AttrRef [validity](AttrRef::is_valid_ref).
+    /// The invalidate function turns **the value** of the attribute to
+    /// an invalid state, but it does not affect the validity status of
+    /// the AttrRef reference. The AttrRef will keep referring to the attribute
+    /// regardless of its value validity.
+    pub fn invalidate<N: Grammar, H: TaskHandle, S: SyncBuildHasher>(
+        &self,
+        task: &mut impl MutationAccess<N, H, S>,
+    ) {
         let Some(records) = task.analyzer().db.records.get(&self.id) else {
             #[cfg(debug_assertions)]
             {
@@ -334,10 +532,18 @@ impl AttrRef {
         task.analyzer().db.commit_revision();
     }
 
+    /// Returns true if the attribute referred to by this AttrRef exists in
+    /// the Analyzer's database.
+    ///
+    /// The `task` parameter could be a task that grants any kind of access to
+    /// the Analyzer:
+    /// [AnalysisTask](crate::analysis::AnalysisTask),
+    /// [MutationTask](crate::analysis::MutationTask),
+    /// or [ExclusiveTask](crate::analysis::ExclusiveTask).
     #[inline(always)]
-    pub fn is_valid_ref<N: Grammar, S: SyncBuildHasher>(
+    pub fn is_valid_ref<N: Grammar, H: TaskHandle, S: SyncBuildHasher>(
         &self,
-        task: &mut impl AbstractTask<N, S>,
+        task: &mut impl AbstractTask<N, H, S>,
     ) -> bool {
         let Some(records) = task.analyzer().db.records.get(&self.id) else {
             return false;

@@ -1,79 +1,63 @@
-# Lady Deirdre.
+<!------------------------------------------------------------------------------
+  This file is a part of the "Lady Deirdre" work,
+  a compiler front-end foundation technology.
 
-[![Lady Deirdre Main Crate API Docs](https://img.shields.io/docsrs/lady-deirdre?label=Main%20Docs)](https://docs.rs/lady-deirdre)
-[![Lady Deirdre Macro Crate API Docs](https://img.shields.io/docsrs/lady-deirdre-derive?label=Macro%20Docs)](https://docs.rs/lady-deirdre-derive)
-[![Lady Deirdre Main Crate](https://img.shields.io/crates/v/lady-deirdre?label=Main%20Crate)](https://crates.io/crates/lady-deirdre)
-[![Lady Deirdre Macro Crate](https://img.shields.io/crates/v/lady-deirdre-derive?label=Macro%20Crate)](https://crates.io/crates/lady-deirdre-derive)
+  This work is proprietary software with source-available code.
 
-Compiler front-end foundation technology.
+  To copy, use, distribute, and contribute to this work, you must agree to
+  the terms of the General License Agreement:
 
-If you want to create your own programming language with IDE support from
-day one, or if you are going to develop new IDE from scratch, or a programming
-language LSP plugin, this Technology is for you!
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.
 
-Lady Deirdre provides a framework to develop Lexical Scanner, Syntax Parser and
-Semantic Analyzer that could work in live coding environment applying
-user-input changes incrementally to all underlying data structures.
+  The agreement grants you a Commercial-Limited License that gives you
+  the right to use my work in non-commercial and limited commercial products
+  with a total gross revenue cap. To remove this commercial limit for one of
+  your products, you must acquire an Unrestricted Commercial License.
 
-This Technology represents a set of essential instruments to develop modern
-programming language compilers with seamless IDE integration.
+  If you contribute to the source code, documentation, or related materials
+  of this work, you must assign these changes to me. Contributions are
+  governed by the "Derivative Work" section of the General License
+  Agreement.
 
-**Features**:
+  Copying the work in parts is strictly forbidden, except as permitted under
+  the terms of the General License Agreement.
 
- - Written in Rust entirely.
- - Derive-macros to define PL Grammar directly on Enum types.
- - Smart error recovery system out of the box.
- - Dependency-free no-std ready API.
- - Works faster than Tree Sitter.
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
 
-**Links:**
- - [Main Crate API Documentation](https://docs.rs/lady-deirdre).
- - [Macro Crate API Documentation](https://docs.rs/lady-deirdre-derive).
- - [Repository](https://github.com/Eliah-Lakhin/lady-deirdre).
- - [Examples, Tests, Benchmarks](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples).
- - [End User License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md).
+  This work is provided "as is" without any warranties, express or implied,
+  except to the extent that such disclaimers are held to be legally invalid.
 
-**This Work is a proprietary software with source available code.**
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
 
-To copy, use, distribute, and contribute into this Work you must agree to
-the terms of the
-[End User License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md).
+# Lady Deirdre Macros Crate
 
-The Agreement let you use this Work in commercial and non-commercial purposes.
-Commercial use of the Work is free of charge to start, but the Agreement
-obligates you to pay me royalties under certain conditions.
+<img style="float: left; margin-right: 10px; width: 160px" alt="Lady Deirdre Logo" src="https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/logo.jpg" />
 
-If you want to contribute into the source code of this Work, the Agreement
-obligates you to assign me all exclusive rights to the Derivative Work made by
-you (this includes GitHub forks and pull requests to my repository).
+This is a helper crate for the [main crate](https://crates.io/crates/lady-deirdre)
+of Lady Deirdre, compiler front-end foundation technology.
 
-The Agreement does not limit rights of the third party software developers as
-long as the third party software uses public API of this Work only, and the
-third party software does not incorporate or distribute this Work directly.
+The derive macros in this crate offer default implementations for
+the Token (lexical scanner), Node (syntax parser), and Feature (semantic object)
+traits used by the main crate.
 
-If you do not or cannot agree to the terms of this Agreement, do not use
-this Work.
+## Links
 
-Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин). All rights reserved.
+- [Source Code](https://github.com/Eliah-Lakhin/lady-deirdre)
+- [Main Crate](https://crates.io/crates/lady-deirdre)
+- [API Documentation](https://docs.rs/lady-deirdre)
+- [User Guide](todo)
+- [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
+- [License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)
 
-# Macro Crate API Documentation.
+## Copyright
 
-This Crate provides two optional companion macros to the
-[`Main Crate`](https://docs.rs/lady-deirdre) to construct
-Lexis Scanner and Syntax Parser using derive Rust syntax on enum types.
+This work is proprietary software with source-available code.
 
-The
-[Token](https://docs.rs/lady-deirdre-derive/latest/lady_deirdre_derive/derive.Token.html)
-macro constructs a Lexical Scanner through the set of user-defined regular
-expressions specified directly on enum variants using macro-attributes.
-And the
-[Node](https://docs.rs/lady-deirdre-derive/latest/lady_deirdre_derive/derive.Node.html)
-macro, in turn, constructs a Syntax Parser through the set of
-user-defined LL(1) grammar rules over the Token variants.
+To copy, use, distribute, and contribute to this work, you must agree to the
+terms and conditions of the [General License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md).
 
-Both macros implement
-[Token](https://docs.rs/lady-deirdre/latest/lady_deirdre/lexis/trait.Token.html)
-and
-[Node](https://docs.rs/lady-deirdre/latest/lady_deirdre/syntax/trait.Node.html)
-traits accordingly, and considered to be the primary recommended way to define
-Programming Language grammar.
+Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин). All rights reserved.
+
