@@ -175,8 +175,9 @@ work in commercial products, both open-source and closed-source.
 
 This license restricts the total gross revenue you can earn using software
 products based on Lady Deirdre. Once your product exceeds this limitation, you
-can purchase the annual Unrestricted Commercial License on my Patreon
-page, which removes these restrictions.
+can purchase the annual
+[Unrestricted Commercial License on my Patreon page](https://www.patreon.com/lakhin/shop/lady-deirdre-annual-unrestricted-license-240505?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=productshare_fan&utm_content=join_link),
+which removes these restrictions.
 
 ### What happens when the Unrestricted Commercial License expires?
 
