@@ -36,7 +36,7 @@
 
 In this chapter, I will explain how the algorithm implemented in the
 hand-written parser in
-the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/expr_parser)
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser)
 example works in general. You may find this approach useful for programming
 languages with infix expressions (math expressions with binary operators).
 

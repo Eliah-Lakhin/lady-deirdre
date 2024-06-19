@@ -45,7 +45,7 @@ attribute and provide a regular expression to match the corresponding token.
 The macro uses these expressions to build an optimized finite-state automaton,
 from which it generates the scanning program..
 
-From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/lexis.rs#L47):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/lexis.rs#L47):
 
 ```rust,noplayground
 use lady_deirdre::lexis::Token;

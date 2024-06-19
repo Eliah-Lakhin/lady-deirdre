@@ -151,7 +151,7 @@ the [derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/derive.
 on your enum type, where the enum variants denote individual token types.
 The token's lexical scanning rules are described in terms of regular expressions.
 
-From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/lexis.rs#L47):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/lexis.rs#L47):
 
 ```rust,noplayground
 #[derive(Token)]
@@ -195,7 +195,7 @@ the parser establishes ascending node-to-parent relationships, allowing
 traversal from nodes to the tree root. Lady Deirdre's incremental reparser
 ensures both kinds of references are kept up to date.
 
-From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs#L52):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/syntax.rs#L52):
 
 ```rust,noplayground
 #[derive(Node)]
@@ -370,7 +370,7 @@ let (_, attribute_value) = semantics
 ```
 
 You can find a complete setup example of the syntax tree with semantics in the
-[Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/syntax.rs)
+[Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/syntax.rs)
 example.
 
 ### Concurrent Analysis
@@ -396,7 +396,7 @@ operations.
 These functions return RAII-guard-like objects called "tasks" through which
 necessary operations can be performed.
 
-From the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/mod.rs#L84) example:
+From the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/mod.rs#L84) example:
 
 ```rust,noplayground
 let analyzer = Analyzer::<ChainNode>::new(AnalyzerConfig::default());

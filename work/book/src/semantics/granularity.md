@@ -45,7 +45,7 @@ attribute values with previous caches and stopping the propagation process if
 they are found to be equal.
 
 In the Chain Analysis example,
-the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L197)
+the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L197)
 input attribute initially collects all assignment statements and inner blocks
 into two dedicated maps: `assignments` and `blocks`.
 
@@ -58,9 +58,9 @@ pub struct BlockAnalysis {
 ```
 
 Later on, these maps are utilized in
-the [LocalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L155)
+the [LocalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L155)
 and
-[GlobalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L85)
+[GlobalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L85)
 attributes. In theory, we could directly read the *BlockAnalysis* attribute from
 these computable functions. However, in practice, when the end user modifies the
 content of a block, it's likely that one of the BlockAnalysis maps may remain
@@ -69,8 +69,8 @@ attribute to read just one of the two maps is probably unnecessary[^blockanalysi
 
 For these reasons, we spread both maps into the
 intermediate
-[BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L310)
-and [BlockNamespaceMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L337) attributes
+[BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L310)
+and [BlockNamespaceMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L337) attributes
 by cloning the hash maps into them. Subsequently, we read these maps in the
 final attributes through these intermediaries independently.
 
@@ -133,9 +133,9 @@ function through which you return `Shared<T>` instead of `T`.
 
 This trait is especially handy for propagating the Shared value through
 intermediate attributes. For instance,
-the [BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L328)
+the [BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L328)
 simply clones a shared map from
-the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L198)
+the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L198)
 (which is cheap, as it merely creates a new smart pointer to the same
 allocation).
 

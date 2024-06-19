@@ -44,6 +44,6 @@ is infix expression parsing. Infix expressions usually require left recursion,
 which cannot be directly expressed in terms of LL(1) grammars.
 
 These chapters will guide you through
-the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/expr_parser)
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser)
 example. This example demonstrates how to parse boolean expressions
 (e.g., `(true | false) & true`) using the Pratt algorithm.

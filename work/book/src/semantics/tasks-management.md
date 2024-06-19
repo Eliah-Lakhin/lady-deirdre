@@ -162,7 +162,7 @@ function execution. To make the trigger handle state examination more granular,
 you can manually check its state in long-running computable functions.
 
 For instance, in
-the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L223)
+the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L223)
 attribute of the Chain Analysis example, we are checking the interruption state
 during the iteration through the assignment statements of the block.
 

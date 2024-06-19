@@ -100,7 +100,7 @@ computable function implementation, it should be reflected in the initial
 semantic model objects by the input attributes.
 
 In the Chain Analysis example, only
-the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L202)
+the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L202)
 attribute (which is a `#[scoped]` attribute of the `#[scope]` node syntax tree
 node) iterates through the block's inner let-statements and the inner blocks and
 collects them into HashMaps usable for further analysis. Moreover, this
@@ -108,9 +108,9 @@ attribute does not inspect the inner structure of its nested blocks too, because
 the sub-block's inner syntax structure is outside of the current block scope.
 
 Other attributes directly (e.g.,
-[BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L310))
+[BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L310))
 or indirectly (e.g.,
-[LocalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L155)
-and [GlobalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L85))
+[LocalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L155)
+and [GlobalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L85))
 read the BlockAnalysis's HashMaps, but they do not perform deeper inspection of
 the node's syntax tree structure inside their computable functions.

@@ -65,7 +65,7 @@ printed, and annotate arbitrary code spans with string messages.
 Once building is finished, the Snippet prints the annotated snippet into the
 Formatter's output.
 
-The [Json Highlight](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_highlight/highlighter.rs#L45)
+The [Json Highlight](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_highlight/highlighter.rs#L45)
 example demonstrates how to set up this builder on a custom object that wraps a
 compilation unit document.
 

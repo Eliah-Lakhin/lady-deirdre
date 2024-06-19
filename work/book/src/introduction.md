@@ -34,7 +34,7 @@
 
 # Introduction
 
-<img style="width: 160px" alt="Lady Deirdre Logo" src="https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/logo.jpg" />
+<img align="right" style="width: 160px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/logo.jpg" />
 
 Lady Deirdre is a framework that helps you develop front-end code analysis
 tools, such as code editor language extensions, programming language compilers
@@ -60,7 +60,7 @@ the core concepts behind these tools.
 - [Main Crate](https://crates.io/crates/lady-deirdre)
 - [API Documentation](https://docs.rs/lady-deirdre)
 - [User Guide](https://lady-deirdre.lakhin.com/)
-- [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
+- [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples)
 - [License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)
 
 ## Copyright

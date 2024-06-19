@@ -70,7 +70,7 @@ or [TokenCursor::skip](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/tra
 which allows you to consume several tokens.
 
 For instance, in
-the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L271)
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser/parser.rs#L271)
 example, we are parsing a sequence of whitespaces iteratively by reading
 the tokens one by one:
 
@@ -133,7 +133,7 @@ and stored in a static for fast reuse.
 
 Depending on the parsing procedure complexity, you may want to prepare several
 Recovery objects for various types of syntax errors. For instance, in
-the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L54)
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser/parser.rs#L54)
 example, there are three prepared Recovery objects: one to recover from syntax
 errors in the operators, one for operands, and one for errors inside
 the parentheses.
@@ -247,7 +247,7 @@ You should prefer to use the *descend* function on
 the [primary nodes](syntax-grammar.md#incremental-reparsing) whenever possible.
 
 In
-the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L230)
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser/parser.rs#L230)
 example, we are using this method to descend into the subexpression when parsing
 the expression group surrounded by the `(...)` parentheses.
 
@@ -347,7 +347,7 @@ function automatically changes the parent NodeRef of the former sibling to the
 node that we start parsing.
 
 From the operator parser of
-the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L90)
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser/parser.rs#L90)
 example:
 
 ```rust,noplayground
