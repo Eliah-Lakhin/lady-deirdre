@@ -34,8 +34,6 @@
 
 # Lady Deirdre Macros Crate
 
-<img align="left" style="float: left; margin-right: 10px; width: 160px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.jpg" />
-
 This is a helper crate for the [main crate](https://crates.io/crates/lady-deirdre)
 of Lady Deirdre, compiler front-end foundation technology.
 
