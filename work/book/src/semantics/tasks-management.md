@@ -161,9 +161,10 @@ function calls. In principle, it is not capable of checking this event during
 function execution. To make the trigger handle state examination more granular,
 you can manually check its state in long-running computable functions.
 
-For instance, in the [BlockAnalysis](todo) attribute of the Chain Analysis
-example, we are checking the interruption state during the iteration through the
-assignment statements of the block.
+For instance, in
+the [BlockAnalysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L223)
+attribute of the Chain Analysis example, we are checking the interruption state
+during the iteration through the assignment statements of the block.
 
 ```rust,noplayground
 impl Computable for BlockAnalysis {

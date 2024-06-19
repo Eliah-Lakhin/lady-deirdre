@@ -59,7 +59,7 @@ the core concepts behind these tools.
 - [Source Code](https://github.com/Eliah-Lakhin/lady-deirdre)
 - [Main Crate](https://crates.io/crates/lady-deirdre)
 - [API Documentation](https://docs.rs/lady-deirdre)
-- [User Guide](todo)
+- [User Guide](https://lady-deirdre.lakhin.com/)
 - [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
 - [License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)
 

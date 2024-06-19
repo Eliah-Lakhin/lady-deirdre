@@ -43,7 +43,8 @@ node within the node's scope. The Analyzer is responsible for maintaining the
 accuracy of this attribute's value, and you can utilize it within any computable
 functions.
 
-For instance, in the Chain Analysis example, the [LocalResolution](todo)
+For instance, in the Chain Analysis example,
+the [LocalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L172)
 function accesses the scope block of the `ChainNode::Key` node by utilizing this
 attribute.
 
@@ -82,9 +83,9 @@ parent scopes. The `ChainNode::Block` node, which serves as a top node of a
 scope, is nested within its parent, Block[^parent]. By iteratively climbing up,
 you will eventually reach the root of the syntax tree.
 
-The [GlobalResolution](todo) attribute leverages this feature to calculate the
-ultimate resolution of the `ChainNode::Key` value by ascending through the
-hierarchy of nested blocks.
+The [GlobalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L85)
+attribute leverages this feature to calculate the ultimate resolution of
+the `ChainNode::Key` value by ascending through the hierarchy of nested blocks.
 
 ```rust,noplayground
 impl Computable for GlobalResolution {

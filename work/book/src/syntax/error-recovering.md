@@ -77,7 +77,9 @@ user started another statement in the ascending context.
 In the macro, you can specify a set of panic-recovery halting tokens using
 the `#[recovery(...)]` macro attribute.
 
-In the [JSON example](todo), we specify the following recovery configuration:
+In
+the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs#L46),
+we specify the following recovery configuration:
 
 ```rust,noplayground
 #[recovery(

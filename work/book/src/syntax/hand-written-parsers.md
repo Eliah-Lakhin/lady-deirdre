@@ -43,6 +43,7 @@ One common case where you might want to implement the parse procedure manually
 is infix expression parsing. Infix expressions usually require left recursion,
 which cannot be directly expressed in terms of LL(1) grammars.
 
-These chapters will guide you through the [Expr Parser](todo) example. This
-example demonstrates how to parse boolean expressions
+These chapters will guide you through
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/expr_parser)
+example. This example demonstrates how to parse boolean expressions
 (e.g., `(true | false) & true`) using the Pratt algorithm.

@@ -65,7 +65,8 @@ the compilation project.
 
 ## Chain Analysis Example
 
-The subchapters of this book section refer to the [Chain Analysis](todo)
+The subchapters of this book section refer to
+the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/chain_analysis)
 example, which illustrates the basic concepts of the framework.
 
 The example program attempts to analyze a simple programming language consisting

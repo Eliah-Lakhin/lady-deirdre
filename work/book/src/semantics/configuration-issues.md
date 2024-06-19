@@ -60,8 +60,9 @@ Canonical compilers written with Lady Deirdre should be designed to be
 infallible. If you receive an abnormal error from a framework function, it
 likely indicates a bug in your program's code that needs to be fixed.
 
-In particular, the computable functions of the [Chain Analysis](todo) example
-use
+In particular, the computable functions of
+the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L337)
+example use
 the [unwrap_abnormal](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/analysis/type.AnalysisResult.html#method.unwrap_abnormal)
 helper function to filter out normal errors from abnormal ones, panicking if an
 abnormal error is encountered.

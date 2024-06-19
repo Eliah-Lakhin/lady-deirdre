@@ -98,8 +98,10 @@ the [Classifier](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/analysis/trait.
 trait. It denotes classes of nodes, essentially serving as indices, and the
 function that partitions requested nodes between these classes.
 
-In the [Chain Analysis](todo) example, we define just one class for
-all `ChainNode::Key` nodes within the syntax tree.
+In
+the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L411)
+example, we define just one class for all `ChainNode::Key` nodes within the
+syntax tree.
 
 ```rust,noplayground
 #[derive(Clone, PartialEq, Eq, Hash)]

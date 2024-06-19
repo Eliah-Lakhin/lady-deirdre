@@ -34,8 +34,9 @@
 
 # Lexical Grammar
 
-The lexical grammar is defined using the [Token derive macro](todo) on an
-arbitrary enum type, which represents the type of the token.
+The lexical grammar is defined using
+the [Token derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/derive.Token.html)
+on an arbitrary enum type, which represents the type of the token.
 
 Each enum variant represents a token variant. To specify the scanning rule for
 an individual variant, you annotate that variant with the `#[rule(...)]` macro
@@ -44,7 +45,7 @@ attribute and provide a regular expression to match the corresponding token.
 The macro uses these expressions to build an optimized finite-state automaton,
 from which it generates the scanning program..
 
-From the [JSON example](todo):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/lexis.rs#L47):
 
 ```rust,noplayground
 use lady_deirdre::lexis::Token;

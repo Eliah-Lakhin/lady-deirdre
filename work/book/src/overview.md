@@ -146,11 +146,12 @@ syntax tree's node type.
 ### Lexis
 
 First, you need to specify the type of the lexis. Typically, you can do this
-using the [derive macro](todo) on your enum type, where the enum variants denote
-individual token types. The token's lexical scanning rules are described in
-terms of regular expressions.
+using
+the [derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/derive.Token.html)
+on your enum type, where the enum variants denote individual token types.
+The token's lexical scanning rules are described in terms of regular expressions.
 
-From the [JSON example](todo):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/lexis.rs#L47):
 
 ```rust,noplayground
 #[derive(Token)]
@@ -179,7 +180,7 @@ during the syntax parsing stage.
 ### Syntax
 
 The syntax grammar is described similarly using enum types and
-the [derive macro](todo).
+the [derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/derive.Node.html).
 
 The node's parsing rules are described in terms of LL(1) grammars, but you can
 also implement your own custom parsers for individual node types, allowing for
@@ -194,7 +195,7 @@ the parser establishes ascending node-to-parent relationships, allowing
 traversal from nodes to the tree root. Lady Deirdre's incremental reparser
 ensures both kinds of references are kept up to date.
 
-From the [JSON example](todo):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs#L52):
 
 ```rust,noplayground
 #[derive(Node)]
@@ -369,7 +370,8 @@ let (_, attribute_value) = semantics
 ```
 
 You can find a complete setup example of the syntax tree with semantics in the
-[Chain Analysis](todo) example.
+[Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/syntax.rs)
+example.
 
 ### Concurrent Analysis
 
@@ -394,7 +396,7 @@ operations.
 These functions return RAII-guard-like objects called "tasks" through which
 necessary operations can be performed.
 
-From the [Chain Analysis](todo) example:
+From the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/mod.rs#L84) example:
 
 ```rust,noplayground
 let analyzer = Analyzer::<ChainNode>::new(AnalyzerConfig::default());

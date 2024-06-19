@@ -53,7 +53,9 @@ to extend this enum type with additional metadata:
 3. Optionally, you can specify the syntax tree classifier using
    the `#[classifier]` macro attribute.
 
-From the [Chain Analysis](todo) example:
+From
+the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/chain_analysis)
+example:
 
 ```rust,noplayground
 #[derive(Node)]
@@ -142,8 +144,10 @@ function.
 The type you use as a parameter of the Semantics object is called a *feature*.
 
 Typically, the semantic feature is a user-defined struct type derived from the
-Feature trait using the [Feature derive macro](todo). This structure consists of
-fields that are either attributes or other feature objects.
+Feature trait using
+the [Feature derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/analysis/derive.Feature.html).
+This structure consists of fields that are either attributes or other feature
+objects.
 
 ```rust,noplayground
 #[derive(Feature)]

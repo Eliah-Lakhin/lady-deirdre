@@ -37,7 +37,7 @@
 This crate contains examples showcasing the core features of Lady Deirdre.
 
 The source code of each example is accompanied by detailed explanations and
-comments in the [User Guide](todo). Therefore, it is recommended to explore them
+comments in the [User Guide](https://lady-deirdre.lakhin.com/). Therefore, it is recommended to explore them
 alongside the corresponding chapters of the guide.
 
 Each example is located in its own crate module within the "src" directory.
@@ -50,8 +50,8 @@ specific features of the example.
   user-defined enums to establish programming language lexical and syntax
   grammar using a simple JSON language example.
 
-  Relevant User Guide chapters: [Lexical Grammar](todo/lexis/lexical-grammar.html)
-  and [Syntax Grammar](todo/syntax/syntax.html)
+  Relevant User Guide chapters: [Lexical Grammar](https://lady-deirdre.lakhin.com/lexis/lexical-grammar.html)
+  and [Syntax Grammar](https://lady-deirdre.lakhin.com/syntax/syntax.html)
 
 - [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/expr_parser).
 
@@ -62,7 +62,7 @@ specific features of the example.
   This example parses boolean expressions (e.g., `(true | false) & true`) using
   the Pratt algorithm.
 
-  Relevant User Guide chapter: [Hand-Written Parsers](todo/syntax/hand-written-parsers.html).
+  Relevant User Guide chapter: [Hand-Written Parsers](https://lady-deirdre.lakhin.com/syntax/hand-written-parsers.html).
 
 - [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/chain_analysis).
 
@@ -74,7 +74,7 @@ specific features of the example.
   variables by analyzing the chains of variable references in dynamically
   evolving source code.
 
-  Relevant User Guide chapter: [Semantics](todo/semantics/semantics.html).
+  Relevant User Guide chapter: [Semantics](https://lady-deirdre.lakhin.com/semantics/semantics.html).
 
 - [JSON Formatter](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_formatter).
 
@@ -82,7 +82,7 @@ specific features of the example.
   a source code reformatting program based on the already defined syntax grammar
   of the JSON language.
 
-  Relevant User Guide chapter: [Code Formatters](todo/code-formatters/code-formatters.html).
+  Relevant User Guide chapter: [Code Formatters](https://lady-deirdre.lakhin.com/code-formatters/code-formatters.html).
 
 - [JSON Highlight](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_highlight).
 
@@ -91,13 +91,13 @@ specific features of the example.
   This feature is particularly useful for displaying compiler syntax errors to
   the end user in the terminal.
 
-  Relevant User Guide chapter: [Snippets](todo/snippets.html).
+  Relevant User Guide chapter: [Snippets](https://lady-deirdre.lakhin.com/snippets.html).
 
 ## Links
 
 - [Source Code](https://github.com/Eliah-Lakhin/lady-deirdre)
 - [Main Crate](https://crates.io/crates/lady-deirdre)
 - [API Documentation](https://docs.rs/lady-deirdre)
-- [User Guide](todo)
+- [User Guide](https://lady-deirdre.lakhin.com/)
 - [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
 - [License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)

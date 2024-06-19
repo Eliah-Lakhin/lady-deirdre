@@ -45,7 +45,8 @@ trait, providing a minimal set of features enabling inspection of its content,
 including the source code text and its lexical structure.
 
 The crate offers specialized source code managers with distinct API options and
-performance characteristics. For instance, while the [TokenBuffer](todo) lacks
-general incremental rescanning capabilities, it offers slightly better
+performance characteristics. For instance, while
+the [TokenBuffer](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/struct.TokenBuffer.html)
+lacks general incremental rescanning capabilities, it offers slightly better
 performance than the
 mutable [Document](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/units/enum.Document.html).

@@ -77,4 +77,5 @@ considering the concrete tree configuration. It then feeds the source code
 tokens into the syntax-unaware Pretty Printer. The printer generates the final
 output string.
 
-The [Json Formatter](todo) example demonstrates the basic usage of both tools.
+The [Json Formatter](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_formatter)
+example demonstrates the basic usage of both tools.

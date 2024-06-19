@@ -38,8 +38,8 @@
 
 [![Crate](https://img.shields.io/crates/v/lady-deirdre?label=Crate)](https://crates.io/crates/lady-deirdre)
 [![API Docs](https://img.shields.io/docsrs/lady-deirdre?label=API%20Docs)](https://docs.rs/lady-deirdre)
-[![User Guide](https://img.shields.io/badge/User_Guide-gray)](todo)
-[![Examples](https://img.shields.io/badge/Examples-gray)](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
+[![User Guide](https://img.shields.io/badge/User_Guide-passing-default)](https://lady-deirdre.lakhin.com/)
+[![Examples](https://img.shields.io/badge/Examples-passing-default)](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
 
 Lady Deirdre is a framework for incremental programming language compilers,
 interpreters, and source code analyzers.
@@ -129,7 +129,7 @@ For detailed information, refer to the [Benchmarks page](https://github.com/Elia
 - [Source Code](https://github.com/Eliah-Lakhin/lady-deirdre)
 - [Main Crate](https://crates.io/crates/lady-deirdre)
 - [API Documentation](https://docs.rs/lady-deirdre)
-- [User Guide](todo)
+- [User Guide](https://lady-deirdre.lakhin.com/)
 - [Examples](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
 - [License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)
 
@@ -175,7 +175,7 @@ work in commercial products, both open-source and closed-source.
 
 This license restricts the total gross revenue you can earn using software
 products based on Lady Deirdre. Once your product exceeds this limitation, you
-can purchase the annual [Unrestricted Commercial License](todo) on my Patreon
+can purchase the annual Unrestricted Commercial License on my Patreon
 page, which removes these restrictions.
 
 ### What happens when the Unrestricted Commercial License expires?

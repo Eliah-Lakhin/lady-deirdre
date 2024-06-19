@@ -34,8 +34,9 @@
 
 # Syntax Grammar
 
-You define the syntax grammar using the [Node derive macro](todo) on an
-arbitrary enum type that serves as the type for the syntax tree nodes.
+You define the syntax grammar using
+the [Node derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/derive.Node.html)
+on an arbitrary enum type that serves as the type for the syntax tree nodes.
 
 Unlike the token enum, the node enum variants are required to have bodies with
 fields. These fields allow the parser to store parent-child relationships
@@ -61,7 +62,7 @@ The opposite ascending node-to-parent relationships are established
 automatically if you declare a variant field with the `#[parent]` macro
 attribute.
 
-From the [JSON example](todo):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs):
 
 ```rust,noplayground
 
@@ -138,9 +139,11 @@ this guide.
 ## Macro API
 
 In this chapter, I will intentionally omit some details, referring you to
-the [macro documentation](todo) for a more verbose description of the available
-features, and to the [JSON example](todo) as an example of a node implementation
-that utilizes most of the macro's capabilities.
+the [macro documentation](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/derive.Node.html)
+for a more verbose description of the available features, and to
+the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs)
+as an example of a node implementation that utilizes most of the macro's
+capabilities.
 
 Some general points to note about the macro API are:
 
@@ -256,7 +259,8 @@ Examples:
    the [NodeRef::span](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/struct.NodeRef.html#method.span)
    function.
 
-   In particular, for this reason, in the [JSON object and array rules](todo),
+   In particular, for this reason, in
+   the [JSON object and array rules](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs#L96),
    we capture start and end tokens even though they are meaningless in terms of
    syntax tree traversing.
 
@@ -299,8 +303,10 @@ Examples:
    For semantic analysis purposes, it would be more convenient to always work
    with node captures, so you should prefer wrapping.
 
-   For example, in the [JSON object entry rule](todo), we capture the entry's
-   key as a node-wrapper (String node) rather than as a token for this reason.
+   For example, in
+   the [JSON object entry rule](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/json_grammar/syntax.rs#L83),
+   we capture the entry's key as a node-wrapper (String node) rather than as a
+   token for this reason.
 
 7. **Make the leaf nodes the Secondary nodes**.
 

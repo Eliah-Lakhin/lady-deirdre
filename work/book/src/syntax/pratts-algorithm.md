@@ -35,9 +35,10 @@
 # Pratt's Algorithm
 
 In this chapter, I will explain how the algorithm implemented in the
-hand-written parser in the [Expr Parser](todo) example works in general. You may
-find this approach useful for programming languages with infix expressions (math
-expressions with binary operators).
+hand-written parser in
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/expr_parser)
+example works in general. You may find this approach useful for programming
+languages with infix expressions (math expressions with binary operators).
 
 To recall, the example parses expressions of simple boolean logic: `true`
 and `false` are the atomic operands of the expression, `_ & _` and `_ | _` are

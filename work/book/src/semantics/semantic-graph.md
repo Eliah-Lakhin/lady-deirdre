@@ -120,7 +120,8 @@ Similarly to the syntax analysis stage, semantic analysis should be resilient to
 errors. If the computable function cannot fully infer the target value, it
 attempts to compute as much metadata as possible or fallback to reasonable
 defaults without causing a panic. For this reason, most semantic model objects
-in the [Chain Analysis](todo) example implement the Default trait.
+in the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L147)
+example implement the Default trait.
 
 For instance, in Rust source code, when introducing a variable with `let x;`,
 the variable's type depends on the initialization expression. In the
@@ -142,9 +143,11 @@ Inside the computable function of the attribute, you can read other attribute
 values. This mechanism allows you to infer more specific semantic facts from
 more general facts.
 
-For instance, in the Chain Analysis example, the [LocalResolution](todo)
+For instance, in the Chain Analysis example,
+the [LocalResolution](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L155)
 attribute infers let-statement references within the local block in which it was
-declared based on all local assignments ([BlockAssignmentMap](todo) attribute)
+declared based on all local assignments
+([BlockAssignmentMap](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/chain_analysis/semantics.rs#L306) attribute)
 within this block.
 
 ```rust,noplayground

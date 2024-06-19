@@ -34,13 +34,14 @@
 
 # Overriding a Parser
 
-To recap, the [Node derive macro](todo) automatically implements parse
-procedures for each enum variant annotated with the `#[rule(...)]` macro
-attribute. Inside the rule, you write a regex-like parse expression in terms of
-the LL(1) grammars used by the macro to generate the parse procedure. This
-determines the leftmost set of tokens from which the procedure starts parsing.
-The leftmost set is used when you descend into this variant in another variant's
-rule.
+To recap,
+the [Node derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/derive.Node.html)
+automatically implements parse procedures for each enum variant annotated with
+the `#[rule(...)]` macro attribute. Inside the rule, you write a regex-like
+parse expression in terms of the LL(1) grammars used by the macro to generate
+the parse procedure. This determines the leftmost set of tokens from which
+the procedure starts parsing. The leftmost set is used when you descend into
+this variant in another variant's rule.
 
 There is a possibility to replace the generated parse procedure with a manually
 written Rust function using the `#[parser(...)]` macro attribute.
@@ -54,7 +55,7 @@ that represents the current state of the parsing environment.
 Usually, inside this expression, you would call your parsing function passing
 the `session` variable as an argument.
 
-From the [Expr Parser](todo) example:
+From the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/syntax.rs#L57) example:
 
 ```rust,noplayground
 
@@ -73,10 +74,10 @@ pub enum BoolNode {
         expr: NodeRef,
     },
 
-    #[rule($ParenOpen | $True | $False)] // leftmost set
+    #[rule($ParenOpen | $True | $False)] // Leftmost set.
     #[denote(EXPR)]
     #[describe("expression", "<expr>")]
-    #[parser(parse_expr(session))] // overridden parser
+    #[parser(parse_expr(session))] // Overridden parser.
     Expr {
         #[node]
         node: NodeRef,

@@ -69,8 +69,10 @@ token,
 or [TokenCursor::skip](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.skip),
 which allows you to consume several tokens.
 
-For instance, in the [Expr Parser](todo) example, we are parsing a sequence of
-whitespaces iteratively by reading the tokens one by one:
+For instance, in
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L271)
+example, we are parsing a sequence of whitespaces iteratively by reading
+the tokens one by one:
 
 ```rust,noplayground
 fn skip_trivia<'a>(session: &mut impl SyntaxSession<'a, Node = BoolNode>) {
@@ -131,9 +133,10 @@ and stored in a static for fast reuse.
 
 Depending on the parsing procedure complexity, you may want to prepare several
 Recovery objects for various types of syntax errors. For instance, in
-the [Expr Parser](todo) example, there are three prepared Recovery objects: one
-to recover from syntax errors in the operators, one for operands, and one for
-errors inside the parentheses.
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L54)
+example, there are three prepared Recovery objects: one to recover from syntax
+errors in the operators, one for operands, and one for errors inside
+the parentheses.
 
 ```rust,noplayground
 static OPERAND_RECOVERY: Recovery =
@@ -243,9 +246,10 @@ environment's inner cache to bypass real parsing steps.
 You should prefer to use the *descend* function on
 the [primary nodes](syntax-grammar.md#incremental-reparsing) whenever possible.
 
-In the [Expr Parser](todo) example, we are using this method to descend into the
-subexpression when parsing the expression group surrounded by the `(...)`
-parentheses.
+In
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L230)
+example, we are using this method to descend into the subexpression when parsing
+the expression group surrounded by the `(...)` parentheses.
 
 ```rust,noplayground
 fn parse_group<'a>(
@@ -342,7 +346,9 @@ new node subparser to the context of this subparser. In particular, this
 function automatically changes the parent NodeRef of the former sibling to the
 node that we start parsing.
 
-From the operator parser of the [Expr Parser](todo) example:
+From the operator parser of
+the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/crates/examples/src/expr_parser/parser.rs#L90)
+example:
 
 ```rust,noplayground
 BoolToken::And => {
