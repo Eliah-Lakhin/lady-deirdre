@@ -34,7 +34,7 @@
 
 # Lady Deirdre
 
-<img align="left" style="float: left; margin-right: 10px; width: 160px" alt="Lady Deirdre Logo" src="https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/work/logo.jpg" />
+<img align="left" style="float: left; margin-right: 10px; width: 160px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.jpg" />
 
 [![Crate](https://img.shields.io/crates/v/lady-deirdre?label=Crate)](https://crates.io/crates/lady-deirdre)
 [![API Docs](https://img.shields.io/docsrs/lady-deirdre?label=API%20Docs)](https://docs.rs/lady-deirdre)
