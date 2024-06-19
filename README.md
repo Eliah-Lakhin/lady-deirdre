@@ -34,12 +34,12 @@
 
 # Lady Deirdre
 
-<img align="left" style="float: left; margin-right: 10px; width: 160px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.jpg" />
-
 [![Crate](https://img.shields.io/crates/v/lady-deirdre?label=Crate)](https://crates.io/crates/lady-deirdre)
 [![API Docs](https://img.shields.io/docsrs/lady-deirdre?label=API%20Docs)](https://docs.rs/lady-deirdre)
 [![User Guide](https://img.shields.io/badge/User_Guide-passing-default)](https://lady-deirdre.lakhin.com/)
 [![Examples](https://img.shields.io/badge/Examples-passing-default)](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
+
+<img align="right" height="220" style="float: right; margin-left: 10px; width: 220px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.jpg" />
 
 Lady Deirdre is a framework for incremental programming language compilers,
 interpreters, and source code analyzers.
