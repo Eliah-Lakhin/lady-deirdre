@@ -1,54 +1,69 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::fmt::{Debug, Display, Formatter};
+
 use crate::{
     arena::{Id, Identifiable},
-    lexis::{SourceCode, TokenCursor, TokenRef},
-    std::*,
+    format::{AnnotationPriority, SnippetFormatter},
+    lexis::{Position, SourceCode, TokenCursor, TokenRef, NIL_TOKEN_REF},
+    report::ld_unreachable,
+    syntax::PolyRef,
 };
 
-/// A number of Unicode characters in the text.
+/// The number of Unicode characters in the source code text fragment.
 pub type Length = usize;
 
-/// A number of Unicode characters behind specified character in the source code text.
+/// An absolute index of the Unicode character within the source code text.
+///
+/// The index is in Unicode units, not in UTF-8 bytes. In the `Буква Щ` text,
+/// site 2 refers to the Cyrillic character `к`.
+///
+/// This index is zero-based, such that index 0 denotes the first char.
+///
+/// Usually, this type denotes the absolute index from the beginning of
+/// the [SourceCode] text content.
 pub type Site = usize;
 
-/// A number of bytes behind specified Unicode character in the source code text.
+/// An index of the byte within the UTF-8 encoding of the unicode text.
 pub type ByteIndex = usize;
+
+/// A [SiteRef] index object that does not point to any character within any
+/// source code text.
+///
+/// The value of this static equals to the [SiteRef::nil] value.
+pub static NIL_SITE_REF: SiteRef = SiteRef::nil();
 
 unsafe impl ToSite for Site {
     #[inline(always)]
@@ -62,67 +77,42 @@ unsafe impl ToSite for Site {
     }
 }
 
-/// A weak reference of the [Site] inside the source code text.
+/// A relative index of the Unicode character within the source code text.
 ///
-/// This object "pins" particular Site inside the source code text, and this "pin" can survive write
-/// operations in the text happening aside of this "pin"(before or after referred Site) resolving
-/// to relevant pinned Site after the source code mutations.
+/// In contrast to the [Site] index, which denotes character's absolute offset
+/// from the beginning of the [source code](SourceCode), the SiteRef is relative
+/// to the tokens surrounding this index.
 ///
-/// An API user is encouraged to use SiteRef to fix particular bounds of the source code snippets
-/// for later use. For example, one can use a [Range](::std::ops::Range) of the
-/// SiteRefs(a [SiteRefSpan](crate::lexis::SiteRefSpan) object) to refer particular bounds of the
-/// Syntax or Semantic error inside the code.
+/// Whenever the end user edits the compilation unit source code (e.g., via
+/// the [Document::write](crate::units::Document::write)) function), this index
+/// object is automatically adjusted to the changes.
 ///
-/// In practice SiteRef could refer Tokens start and end bounds only.
+/// In other words, the SiteRef "pins" particular site of the source code.
 ///
-/// An API user constructs this object either from the
-/// [`TokenRef::site_ref`](crate::lexis::TokenRef::site_ref) to refer Token's start Site or from the
-/// [`SourceCode::end_site_ref`](crate::lexis::SourceCode::end_site_ref) to refer source code's end
-/// Site.
+/// For example, if the SiteRef points to the `f` character in the `bar foo baz`
+/// string, corresponding to the Site 4, and the the user changes the `bar`
+/// substring (3 chars) of this text to `bar2` (4 chars), the SiteRef will
+/// be adjusted automatically to this edit, still pointing to the `f` character
+/// and resolving to the Site 5 (because this character has been shifted to the
+/// right by one char after the edit).
 ///
-/// SiteRef implements [ToSite] trait, and as such can be used as an index into the source code.
+/// However, if the user rewrites a substring that would touch the pointed
+/// character, the SiteRef object would become invalid.
 ///
-/// SiteRef is a cheap to [Copy] and cheap to dereference object.
+/// The SiteRef can either point to the start [site](TokenRef::site) of
+/// the source code token, or to the [end](SourceCode::length) site of
+/// the source code text.
 ///
-/// ```rust
-/// use lady_deirdre::{
-///     Document,
-///     lexis::{SimpleToken, SourceCode, TokenCursor, ToSite, CodeContent},
-///     syntax::NoSyntax,
-/// };
-///
-/// let mut doc = Document::<NoSyntax<SimpleToken>>::from("foo bar baz");
-///
-/// // Obtaining the beginning Site weak reference to the third token("bar").
-/// let site_ref = doc.cursor(..).site_ref(2);
-///
-/// // "bar" starts on the fifth character.
-/// assert_eq!(site_ref.to_site(&doc).unwrap(), 4);
-///
-/// // Write something in the beginning of the text.
-/// doc.write(0..0, "123");
-/// assert_eq!(doc.substring(..), "123foo bar baz");
-///
-/// // From now on "bar" starts on the 8th character.
-/// assert_eq!(site_ref.to_site(&doc).unwrap(), 7);
-///
-/// // But if we erase the entire source code, "site_ref" turns to invalid reference.
-/// doc.write(.., "123456");
-/// assert_eq!(doc.substring(..), "123456");
-///
-/// assert!(!site_ref.is_valid_site(&doc));
-/// assert_eq!(site_ref.to_site(&doc), None);
-/// ```
-///
-/// For details on the Weak references framework design see [Arena](crate::arena) module
-/// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// When the SiteRef points to the end of the source code, this index object
+/// cannot become obsolete (it will always be valid for this source code
+/// instance).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct SiteRef(SiteRefInner);
 
 impl Debug for SiteRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match &self.0 {
             SiteRefInner::CodeEnd(id) => formatter.write_fmt(format_args!("SiteRef({:?})", id)),
             SiteRefInner::ChunkStart(reference) => match reference.is_nil() {
@@ -135,11 +125,18 @@ impl Debug for SiteRef {
 
 impl Identifiable for SiteRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.id(),
-            SiteRefInner::CodeEnd(code_id) => code_id,
+            SiteRefInner::CodeEnd(code_id) => *code_id,
         }
+    }
+}
+
+impl Default for SiteRef {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::nil()
     }
 }
 
@@ -147,9 +144,9 @@ unsafe impl ToSite for SiteRef {
     #[inline(always)]
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
         match &self.0 {
-            SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.chunk_ref),
+            SiteRefInner::ChunkStart(token_ref) => code.get_site(&token_ref.entry),
 
-            SiteRefInner::CodeEnd(id) => match id == code.id() {
+            SiteRefInner::CodeEnd(id) => match id == &code.id() {
                 false => None,
                 true => Some(code.length()),
             },
@@ -160,43 +157,101 @@ unsafe impl ToSite for SiteRef {
     fn is_valid_site(&self, code: &impl SourceCode) -> bool {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.is_valid_ref(code),
-            SiteRefInner::CodeEnd(id) => id == code.id(),
+            SiteRefInner::CodeEnd(id) => id == &code.id(),
         }
     }
 }
 
 impl SiteRef {
-    /// Returns an invalid instance of the SiteRef.
+    /// Returns a SiteRef that intentionally does not point to any character
+    /// within any source code text.
     ///
-    /// This instance never resolves to a valid [Site](crate::lexis::Site).
+    /// If you need just a static reference to the nil SiteRef, use
+    /// the predefined [NIL_SITE_REF] static.
     #[inline(always)]
     pub const fn nil() -> Self {
         Self(SiteRefInner::ChunkStart(TokenRef::nil()))
     }
 
+    /// Creates a SiteRef that points to the [start site](TokenRef::site) of
+    /// the token.
+    ///
+    /// The returning object would be [valid](ToSite::is_valid_site) if and
+    /// only if the [TokenRef::is_valid_ref] returns true.
     #[inline(always)]
-    pub(crate) const fn new_code_end(code_id: Id) -> Self {
+    pub const fn start_of(token_ref: TokenRef) -> Self {
+        Self(SiteRefInner::ChunkStart(token_ref))
+    }
+
+    /// Creates a SiteRef that points to the [end site](SourceCode::length)
+    /// of the source code.
+    ///
+    /// The `code_id` parameter is an identifier of the source code. You can
+    /// get this value from the compilation unit using
+    /// the [id](Identifiable::id) function.
+    #[inline(always)]
+    pub const fn end_of(code_id: Id) -> Self {
         Self(SiteRefInner::CodeEnd(code_id))
     }
 
+    /// Returns a [TokenRef] of the token if this SiteRef points to the start
+    /// site of a token. Otherwise, returns a [nil](TokenRef::nil) TokenRef.
     #[inline(always)]
-    pub(super) const fn new_chunk_start(reference: TokenRef) -> Self {
-        Self(SiteRefInner::ChunkStart(reference))
+    pub fn token_ref(&self) -> &TokenRef {
+        match &self.0 {
+            SiteRefInner::ChunkStart(token_ref) => token_ref,
+            SiteRefInner::CodeEnd(_) => &NIL_TOKEN_REF,
+        }
     }
 
-    /// Returns `true` if this instance will never resolve to a valid [Site](crate::lexis::Site).
+    /// Returns a SiteRef that points to the [start site](TokenRef::site) of
+    /// the token preceding the Site to which this SiteRef points to.
     ///
-    /// It is guaranteed that `SiteRef::nil().is_nil()` is always `true`, but in general if
-    /// this function returns `false` it is not guaranteed that provided instance is a valid
-    /// reference.
+    /// Returns a [nil](Self::nil) SiteRef if this SiteRef points to
+    /// the beginning of the source code or if the SiteRef is not
+    /// [valid](ToSite::is_valid_site) for the specified `code`.
+    pub fn prev(&self, code: &impl SourceCode) -> Self {
+        let site = match self.to_site(code) {
+            Some(site) => site,
+            None => return Self::nil(),
+        };
+
+        code.cursor(site..site).site_ref(0)
+    }
+
+    /// Returns a SiteRef that points to the [start site](TokenRef::site) of
+    /// the token following after the Site to which this SiteRef points to, or
+    /// points to end of the code if there are no tokens in front of this
+    /// SiteRef.
     ///
-    /// To determine reference validity per specified [SourceCode](crate::lexis::SourceCode)
-    /// instance use [is_valid_site](crate::lexis::ToSite::is_valid_site) function instead.
+    /// Returns [nil](Self::nil) if the SiteRef is not
+    /// [valid](ToSite::is_valid_site) for the specified `code`.
+    pub fn next(&self, code: &impl SourceCode) -> Self {
+        let site = match self.to_site(code) {
+            Some(site) => site,
+            None => return Self::nil(),
+        };
+
+        code.cursor(site..).site_ref(2)
+    }
+
+    /// Returns true if this SiteRef has been created as [nil](SiteRef::nil),
+    /// or if the SiteRef has been created from the [nil](TokenRef::nil)
+    /// TokenRef.
     #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
+    pub fn is_nil(&self) -> bool {
         match &self.0 {
             SiteRefInner::ChunkStart(reference) => reference.is_nil(),
             SiteRefInner::CodeEnd(_) => false,
+        }
+    }
+
+    /// Returns true if this SiteRef points to the end of the source code text.
+    #[inline(always)]
+    pub fn is_code_end(&self) -> bool {
+        match &self.0 {
+            SiteRefInner::CodeEnd(_) => true,
+            _ => false,
         }
     }
 
@@ -206,59 +261,86 @@ impl SiteRef {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum SiteRefInner {
     ChunkStart(TokenRef),
     CodeEnd(Id),
 }
 
-/// An interface of the source code character index.
+/// An object that addresses a character of the source code text.
 ///
-/// The underlying object may be a valid or invalid index for particular
-/// [SourceCode](crate::lexis::SourceCode) instance. If the object considered to be not valid,
-/// [is_valid_site](ToSite::is_valid_site) function returns `false`, and
-/// [to_site](ToSite::to_site), [to_byte_index](ToSite::to_byte_index) functions return [None].
-/// Otherwise "is_valid_site" function returns `true` and other two functions return meaningful
-/// [Some] values.
+/// In Lady Deirdre, a minimal unit of text indexing is a Unicode character
+/// ([Site]).
 ///
-/// It is up to implementation to decide whether particular instance considered to be valid or not.
+/// Addressing code characters just in terms of the absolute indices of Unicode
+/// characters would be inconvenient.
 ///
-/// The most trivial implementation of this trait is a [Site] type(a UTF-8 character absolute
-/// offset). Sites are always valid indices. For the sake of simplicity ToSite implementation of
-/// the Site type always clamps Site's value to the source code character
-/// [length](crate::lexis::SourceCode::length).
+/// The ToSite trait is a generic interface that provides conversion between
+/// custom types of indices and the Site.
 ///
-/// Another two implementations provided for an API user out of the box are
-/// [Position](crate::lexis::Position) and [SiteRef](crate::lexis::SiteRef). Positions are always
-/// valid values, and SiteRefs could be invalid if referred site does not belong to specified `code`
-/// reference, or if the SiteRef obsolete.
+/// In particular, Lady Deirdre provides the following custom index types that
+/// implement the ToSite trait:
 ///
-/// **Safety:**
-///   - If [to_site](ToSite::to_site) function returns [Some] value, this value is always within
-///     the `0..=SourceCode::length(code)` range.
-///   - If [to_byte_index](ToSite::to_byte_index) function returns Some value, this value is
-///     Unicode-valid character byte offset within the `code` underlying text.
+///  - The [Site] itself.
+///  - The [Position], which is a line-column index.
+///  - The [SiteRef], which denotes a bound of the [TokenRef].
+///
+/// You are encouraged to provide your own implementations of the [ToSite] on
+/// custom site types depending on the needs.
+///
+/// For convenience, the ToSite implementation of any [Site] value
+/// (any Unicode numeric index within the source code text) is considered valid.
+///
+/// If the Site value exceeds the source code text [length](SourceCode::length),
+/// the [ToSite::to_site] function clamps this value.
+///
+/// **Safety**
+///
+/// The implementor of the trait guarantees the following:
+///
+///  1. If the [ToSite::to_site] function returns Some site, this value is
+///     less than or equal to the `code`'s [length](SourceCode::length).
+///
+///  2. If the [ToSite::to_byte_index] function returns Some value, this number
+///     represent valid index into the UTF-8 code point start byte of the
+///     `code`'s text content encoding.
+///
+///  3. The [ToSite::to_site] and [ToSite::to_position] functions return Some
+///     value if and only if the [ToSite::is_valid_site] returns true for
+///     the same source code.
 pub unsafe trait ToSite {
-    /// Resolves index object into a valid [Site](crate::lexis::Site) index for specified `code`
-    /// instance.
+    /// Returns a [Site] representation of this index object.
     ///
-    /// This function returns [Some] value if and only if
-    /// [is_valid_site](crate::lexis::ToSite::is_valid_site) function returns `true`.
+    /// The `code` parameter specifies a source code to which this index object
+    /// belongs.
     ///
-    /// Returned Some value is always within the `0..=SourceCode::length(code)` range.
+    /// The returning Site will not exceed the [SourceCode::length] value.
+    ///
+    /// Returns None, if the index object is not [valid](Self::is_valid_site).
     fn to_site(&self, code: &impl SourceCode) -> Option<Site>;
 
-    /// Resolves index object into a valid Unicode [byte index](crate::lexis::ByteIndex) for
-    /// specified `code` instance text.
+    /// Returns a [line-column](PositionSpan) representation of this index
+    /// object.
     ///
-    /// This function returns [Some] value if and only if
-    /// [is_valid_site](crate::lexis::ToSite::is_valid_site) function returns `true`.
+    /// The `code` parameter specifies a source code to which this index object
+    /// belongs.
     ///
-    /// Returned Some value is always Unicode-valid byte offset into the `code` underlying text.
+    /// Returns None, if the index object is not [valid](Self::is_valid_site).
+    #[inline(always)]
+    fn to_position(&self, code: &impl SourceCode) -> Option<Position> {
+        let site = self.to_site(code)?;
+
+        let line = code.lines().line_of(site);
+        let line_start = code.lines().line_start(line);
+        let column = site - line_start + 1;
+
+        Some(Position { line, column })
+    }
+
+    /// Returns a UTF-8 code point start byte index of the character to which
+    /// this index object points in the `code`'s text.
     ///
-    /// **Safety:**
-    ///   - The default implementation of this function is safe as long as
-    ///     [to_site](ToSite::to_site) function follows trait's general safety requirements.
+    /// Returns None, if the index object is not [valid](Self::is_valid_site).
     fn to_byte_index(&self, code: &impl SourceCode) -> Option<ByteIndex> {
         let mut site = match self.to_site(code) {
             None => return None,
@@ -310,8 +392,64 @@ pub unsafe trait ToSite {
         Some(byte_index)
     }
 
-    /// Returns `true` if this index object could be resolved to valid
-    /// [Site](crate::lexis::Site) and [ByteIndex](crate::lexis::ByteIndex) values for specified
-    /// `code` instance.
+    /// Returns true if this index object considered valid within the `code`
+    /// [SourceCode].
+    ///
+    /// The index validity is implementation dependent.
     fn is_valid_site(&self, code: &impl SourceCode) -> bool;
+
+    /// Returns a displayable object that prints the underlying site object
+    /// for debugging purposes.
+    #[inline(always)]
+    fn display<'a>(&self, code: &'a impl SourceCode) -> impl Debug + Display + 'a {
+        DisplaySite {
+            code,
+            site: self.to_site(code),
+        }
+    }
+}
+
+struct DisplaySite<'a, Code: SourceCode> {
+    code: &'a Code,
+    site: Option<Site>,
+}
+
+impl<'a, Code> Debug for DisplaySite<'a, Code>
+where
+    Code: SourceCode,
+{
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(self, formatter)
+    }
+}
+
+impl<'a, Code> Display for DisplaySite<'a, Code>
+where
+    Code: SourceCode,
+{
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        let site = match &self.site {
+            None => return formatter.write_str("?"),
+            Some(site) => *site,
+        };
+
+        let position = match site.to_position(self.code) {
+            Some(span) => span,
+
+            // Safety: Sites are always valid to resolve.
+            None => unsafe { ld_unreachable!("Invalid site.") },
+        };
+
+        if !formatter.alternate() {
+            return formatter.write_fmt(format_args!("{}", position));
+        }
+
+        formatter
+            .snippet(self.code)
+            .set_caption(format!("Unit({})", self.code.id()))
+            .set_summary(format!("Site: {site}\nPosition: {position}"))
+            .annotate(site..site, AnnotationPriority::Default, "")
+            .finish()
+    }
 }

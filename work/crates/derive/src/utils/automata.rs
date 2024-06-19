@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,8 +43,8 @@ use std::{
 use syn::Result;
 
 use crate::utils::{
-    debug_panic,
     deterministic::Deterministic,
+    system_panic,
     transitions::Transitions,
     AutomataContext,
     Map,
@@ -71,9 +68,9 @@ where
         struct Visitor<'a, 'f, C: AutomataContext> {
             original: &'a Automata<C>,
             formatter: &'a mut Formatter<'f>,
-            pending: VecDeque<&'a State>,
-            visited: Set<&'a State>,
-            names: Map<&'a State, usize>,
+            pending: VecDeque<State>,
+            visited: Set<State>,
+            names: Map<State, usize>,
             generator: RangeFrom<usize>,
         }
 
@@ -113,22 +110,22 @@ where
 
                     let mut string_from = format!("{}", self.name_of(state));
 
-                    if self.original.finish.contains(state) {
+                    if self.original.finish.contains(&state) {
                         string_from = format!("{}\u{2192}", string_from);
                     }
 
-                    if state == &self.original.start {
+                    if state == self.original.start {
                         string_from = format!("\u{2192}{}", string_from);
                     }
 
                     for (_, through, to) in transitions {
                         let mut string_to = format!("{}", self.name_of(to));
 
-                        if self.original.finish.contains(to) {
+                        if self.original.finish.contains(&to) {
                             string_to = format!("{}\u{2192}", string_to);
                         }
 
-                        if to == &self.original.start {
+                        if to == self.original.start {
                             string_to = format!("\u{2192}{}", string_to);
                         }
 
@@ -138,7 +135,7 @@ where
                             string_from, through, string_to,
                         )?;
 
-                        if !self.visited.contains(to) {
+                        if !self.visited.contains(&to) {
                             let _ = self.visited.insert(to);
                             self.pending.push_back(to);
                         }
@@ -149,7 +146,7 @@ where
             }
 
             #[inline]
-            fn name_of(&mut self, state: &'a State) -> usize {
+            fn name_of(&mut self, state: State) -> usize {
                 *self.names.entry(state).or_insert_with(|| {
                     self.generator
                         .next()
@@ -161,8 +158,8 @@ where
         let mut visitor = Visitor {
             original: self,
             formatter,
-            pending: VecDeque::from([&self.start]),
-            visited: Set::new([&self.start]),
+            pending: VecDeque::from([self.start]),
+            visited: Set::new([self.start]),
             names: Map::empty(),
             generator: 1..,
         };
@@ -182,8 +179,8 @@ impl<C: AutomataContext> Automata<C> {
     }
 
     #[inline(always)]
-    pub fn start(&self) -> &State {
-        &self.start
+    pub fn start(&self) -> State {
+        self.start
     }
 
     #[inline(always)]
@@ -219,7 +216,7 @@ impl<C: AutomataContext> Automata<C> {
 
                 let finish = match self.finish.single() {
                     Some(finish) => finish,
-                    None => debug_panic!("Reversed DFA with multiple start states."),
+                    None => system_panic!("Reversed DFA with multiple start states."),
                 };
 
                 self.finish = Set::new([self.start]);
@@ -246,7 +243,7 @@ impl<C: AutomataContext> Automata<C> {
 
                 let finish = match self.finish.single() {
                     Some(finish) => finish,
-                    None => debug_panic!("Reversed DFA with multiple start states."),
+                    None => system_panic!("Reversed DFA with multiple start states."),
                 };
 
                 self.finish = Set::new([self.start]);
@@ -266,7 +263,7 @@ impl<C: AutomataContext> Automata<C> {
     }
 
     #[inline(always)]
-    pub(super) fn determine(&mut self, context: &mut C) {
+    pub(super) fn determinize(&mut self, context: &mut C) {
         let (deterministic, alphabet) = self.transitions.meta();
 
         if deterministic {
@@ -286,7 +283,7 @@ impl<C: AutomataContext> Automata<C> {
     pub(super) fn test(&self, input: Vec<C::Terminal>) -> bool {
         use crate::utils::context::AutomataTerminal;
 
-        let mut state = &self.start;
+        let mut state = self.start;
 
         'outer: for terminal in &input {
             for (from, through, to) in &self.transitions {
@@ -305,6 +302,6 @@ impl<C: AutomataContext> Automata<C> {
             return false;
         }
 
-        self.finish.contains(state)
+        self.finish.contains(&state)
     }
 }

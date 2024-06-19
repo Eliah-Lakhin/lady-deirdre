@@ -1,42 +1,39 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
 use crate::{
-    arena::{Id, Identifiable, RefIndex, Sequence},
+    arena::{Entry, EntryIndex, Id, Identifiable},
     lexis::{
         Length,
         Site,
@@ -48,228 +45,105 @@ use crate::{
         TokenCount,
         TokenRef,
     },
-    std::*,
+    syntax::PolyRef,
 };
 
-/// A lookahead iterator over the source code Tokens.
+/// A cursor that iterates through the lexical tokens and their metadata
+/// within the tokens stream.
 ///
-/// This is a low-level API that provides access features to the subset of the source code tokens
-/// sequence. For a higher-level iteration access you can use a
-/// [`CodeContent::chunks`](crate::lexis::CodeContent::chunks) function instead that returns a more
-/// convenient [Iterator](::std::iter::iterator) over the [ChunkRef](crate::lexis::ChunkRef)
-/// objects.
+/// Most functions of this object (e.g., the [token_ref](TokenCursor::token_ref)
+/// function) have a `distance` parameter that allows looking ahead to the
+/// token stream without advancing the cursor.
 ///
-/// TokenCursor is the main access gate to the [SourceCode](crate::lexis::SourceCode) underlying
-/// lexical data. An API user receives this object by calling a
-/// [SourceCode::cursor](crate::lexis::SourceCode::cursor) function. Also, TokenCursor is a base
-/// interface of the [SyntaxSession](crate::syntax::SyntaxSession) that iterates over a subset of
-/// tokens in specified parsing context.
-///
-/// TokenCursor is an iterator-alike structure. This object provides functions to access
-/// particular tokens and their metadata with lookahead capabilities from the current
-/// inner [Site](crate::lexis::Site), and a function to [advance](TokenCursor::advance) the
-/// inner Site.
-///
-/// Note that even though the lookahead operations do not advance the inner Cursor position, it's
-/// SyntaxSession extension may track the lookahead distance to calculate the final syntax parsing
-/// lookahead. This final value affects incremental re-parsing algorithm, and should be minimized
-/// to gain the best performance results.
-///
-/// ```rust
-/// use lady_deirdre::lexis::{TokenBuffer, SimpleToken, SourceCode, TokenCursor, ToSite};
-///
-/// let buf = TokenBuffer::<SimpleToken>::from("(foo bar)");
-///
-/// // A cursor over the "foo bar" substring tokens "touched" by the `4..5` span:
-/// //   - Token "foo" is adjacent to the Site 4.
-/// //   - Token " " is covered by 4..5 span.
-/// //   - Token "bar" is adjacent to the Site 5.
-/// //
-/// // In the beginning the inner Cursor Site set to the beginning of the "foo" token(Site 1).
-/// let mut cursor = buf.cursor(4..5);
-///
-/// // Looking ahead from the beginning.
-/// assert_eq!(cursor.token(0).unwrap(), &SimpleToken::Identifier);
-/// assert_eq!(cursor.site(0).unwrap(), 1); // Token "foo" starts from Site 1.
-/// assert_eq!(cursor.string(0).unwrap(), "foo");
-/// assert_eq!(cursor.string(1).unwrap(), " ");
-/// assert_eq!(cursor.string(2).unwrap(), "bar");
-/// assert!(cursor.string(3).is_none());
-///
-/// // Advances cursor Site to the beginning of the next token " ".
-/// assert!(cursor.advance());
-///
-/// assert_eq!(cursor.site(0).unwrap(), 4); // Token " " starts from Site 4.
-/// assert_eq!(cursor.string(0).unwrap(), " ");
-/// assert_eq!(cursor.string(1).unwrap(), "bar");
-/// assert!(cursor.string(2).is_none());
-///
-/// // Advances cursor Site to the beginning of the last token "bar".
-/// assert!(cursor.advance());
-///
-/// assert_eq!(cursor.site(0).unwrap(), 5); // Token "bar" starts from Site 5.
-/// assert_eq!(cursor.string(0).unwrap(), "bar");
-/// assert!(cursor.string(1).is_none());
-///
-/// // Advances cursor Site to the end of the last token "bar".
-/// assert!(cursor.advance());
-/// assert!(cursor.site(0).is_none()); // There are no more tokens in front of the Cursor.
-/// assert!(cursor.string(0).is_none());
-///
-/// // Further advancement is not possible.
-/// assert!(!cursor.advance());
-///
-/// // Since there are no more tokens in front of the Cursor Site the "site_ref" function returns
-/// // a reference to the beginning of the next token "(" which is the Site of the end of
-/// // the Cursor covered tokens.
-/// let site_ref = cursor.site_ref(0);
-///
-/// assert_eq!(site_ref.to_site(&buf).unwrap(), 8);
-/// ```
+/// The `distance` index is zero-based, where the zero value means the current
+/// token of where the cursor currently points to.
 pub trait TokenCursor<'code>: Identifiable {
-    /// A type of the [Token](crate::lexis::Token) of the [SourceCode](crate::lexis::SourceCode)
-    /// instance this Cursor belongs to.
+    /// Specifies a [Token] type of the underlying source code.
     type Token: Token;
 
-    /// Advances TokenCursor inner [Site](crate::lexis::Site).
+    /// Advances the cursor to the next token in the token stream.
     ///
-    /// If in front of the inner site there is a token covered by this TokenCursor, the inner site
-    /// advances by the token's substring [Length](crate::lexis::Length), and the function
-    /// returns `true`.
-    ///
-    /// Otherwise this function does nothing and returns `false`.
+    /// Returns false if the cursor already at the end of the stream.
     fn advance(&mut self) -> bool;
 
-    /// Looks ahead of the [Token](crate::lexis::Token) in front of the TokenCursor inner
-    /// [Site](crate::lexis::Site).
+    /// Skips the next `distance` tokens.
     ///
-    /// If there are `distance` number of tokens covered by the TokenCursor in front of the
-    /// TokenCursor inner site, this function returns [Some] reference to this Token,
-    /// otherwise returns [None].
+    /// This function behaves similarly to [advancing](Self::advance) each
+    /// token one by one when the number of tokens that need to be skipped
+    /// is known upfront.
     ///
-    /// `distance` is zero-based argument. Number `0` refers to the first token in front of the
-    /// current inner site. `1` refers to the second token, and so on.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
-    /// distance to gain the best performance.
-    fn token(&mut self, distance: TokenCount) -> Option<&'code Self::Token>;
+    /// If the `distance` equals zero, this function does nothing.
+    fn skip(&mut self, distance: TokenCount);
 
-    /// Looks ahead of the [Token](crate::lexis::Token)'s start [Site](crate::lexis::Site) in front
-    /// of the TokenCursor inner Site.
+    /// Returns a copy of the [Token] in the token stream where the cursor is
+    /// currently pointing, or looks ahead to the `distance` number of tokens
+    /// if the distance is greater than zero.
     ///
-    /// If there are `distance` number of tokens covered by the TokenCursor in front of the
-    /// TokenCursor inner site, this function returns Token's [Some] Site, otherwise returns [None].
+    /// If the TokenCursor has already reached the end of the token stream, or
+    /// the lookahead `distance` exceeds the token stream's end bound, this
+    /// function returns [EOI](Token::eoi) token.
+    fn token(&mut self, distance: TokenCount) -> Self::Token;
+
+    /// Returns a start [site](Site) of the token in the token stream where
+    /// the cursor is currently pointing, or looks ahead to the `distance`
+    /// number of tokens if the distance is greater than zero.
     ///
-    /// `distance` is zero-based argument. Number `0` refers to the first token in front of the
-    /// current inner site. `1` refers to the second token, and so on.
-    ///
-    /// In particular, `site(0)` would return the current TokenCursor inner site if there are
-    /// covered tokens left in front of the site.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
-    /// distance to gain the best performance.
+    /// If the TokenCursor has already reached the end of the token stream, or
+    /// the lookahead `distance` exceeds the token stream's end bound, this
+    /// function returns None.
     fn site(&mut self, distance: TokenCount) -> Option<Site>;
 
-    /// Looks ahead of the [Token](crate::lexis::Token)'s string [Length](crate::lexis::Length)
-    /// in front of the TokenCursor inner [Site](crate::lexis::Site).
+    /// Returns a [length](Length) of the token in the token stream where
+    /// the cursor is currently pointing, or looks ahead to the `distance`
+    /// number of tokens if the distance is greater than zero.
     ///
-    /// If there are `distance` number of tokens covered by the TokenCursor in front of the
-    /// TokenCursor inner site, this function returns Token's string [Some] Length,
-    /// otherwise returns [None].
-    ///
-    /// `distance` is zero-based argument. Number `0` refers to the first token in front of the
-    /// current inner site. `1` refers to the second token, and so on.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
-    /// distance to gain the best performance.
+    /// If the TokenCursor has already reached the end of the token stream, or
+    /// the lookahead `distance` exceeds the token stream's end bound, this
+    /// function returns None.
     fn length(&mut self, distance: TokenCount) -> Option<Length>;
 
-    /// Looks ahead of the [Token](crate::lexis::Token)'s string in front of the TokenCursor inner
-    /// [Site](crate::lexis::Site).
+    /// Returns a string of the token in the token stream where the cursor
+    /// is currently pointing, or looks ahead to the `distance` number of tokens
+    /// if the distance is greater than zero.
     ///
-    /// If there are `distance` number of tokens covered by the TokenCursor in front of the
-    /// TokenCursor inner site, this function returns Token's [Some] string slice,
-    /// otherwise returns [None].
-    ///
-    /// `distance` is zero-based argument. Number `0` refers to the first token in front of the
-    /// current inner site. `1` refers to the second token, and so on.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
-    /// distance to gain the best performance.
+    /// If the TokenCursor has already reached the end of the token stream, or
+    /// the lookahead `distance` exceeds the token stream's end bound, this
+    /// function returns None.
     fn string(&mut self, distance: TokenCount) -> Option<&'code str>;
 
-    /// Looks ahead of the [Token](crate::lexis::Token) in front of the TokenCursor inner
-    /// [Site](crate::lexis::Site), and returns a [weak reference](crate::lexis::TokenRef) to this
-    /// token.
+    /// Returns a [TokenRef] reference of the token in the token stream where
+    /// the cursor is currently pointing, or looks ahead to the `distance`
+    /// number of tokens if the distance is greater than zero.
     ///
-    /// If there are `distance` number of tokens covered by the TokenCursor in front of the
-    /// TokenCursor inner site, this function returns [Some] weak reference to this Token,
-    /// otherwise returns [None].
-    ///
-    /// `distance` is zero-based argument. Number `0` refers to the first token in front of the
-    /// current inner site. `1` refers to the second token, and so on.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
-    /// distance to gain the best performance.
+    /// If the TokenCursor has already reached the end of the token stream, or
+    /// the lookahead `distance` exceeds the token stream's end bound, this
+    /// function returns [nil](TokenRef::nil).
     fn token_ref(&mut self, distance: TokenCount) -> TokenRef;
 
-    /// Returns [weak reference](crate::lexis::SiteRef) to the source code
-    /// [Site](crate::lexis::Site) in front of the TokenCursor inner site.
+    /// Returns a [SiteRef] that points to the beginning of the token
+    /// in the token stream where the cursor is currently pointing, or looks
+    /// ahead to the `distance` number of tokens if the distance is greater
+    /// than zero.
     ///
-    /// If there are `distance` number of tokens covered by the TokenCursor in front of the
-    /// TokenCursor inner site, this function returns a weak reference to the start site of that
-    /// token, otherwise this function returns a SiteRef pointing to the end Site of the covered
-    /// token sequence.
-    ///
-    /// `distance` is zero-based argument. Number `0` refers to the first token in front of the
-    /// current inner site. `1` refers to the second token, and so on. In particular, `site_ref(0)`
-    /// returns a weak reference to the current TokenCursor inner site.
-    ///
-    /// Note, that in contrast to [TokenCursor::site](crate::lexis::TokenCursor::site) function this
-    /// function always returns meaningful valid SiteRef even if there are no tokens in from of the
-    /// inner site, and if there are no tokens covered by this TokenCursor.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. An API user should prefer to minimize the lookahead
-    /// distance to gain the best performance.
+    /// If the TokenCursor has already reached the end of the token stream, or
+    /// the lookahead `distance` exceeds the token stream's end bound, this
+    /// function returns the [end_site_ref](Self::end_site_ref) value.
     fn site_ref(&mut self, distance: TokenCount) -> SiteRef;
 
-    /// Returns a [weak reference](crate::lexis::SiteRef) pointing to the source code
-    /// [Site](crate::lexis::Site) in the end of the TokenCursor covered token sequence.
-    ///
-    /// Note that this function always returns meaningful valid SiteRef regardless to the
-    /// TokenCursor inner site, and even if there are no tokens covered by this TokenCursor
-    /// instance.
-    ///
-    /// This function does not advance TokenCursor inner site, but it could track an overall
-    /// lookahead distance of the [parsing session](crate::syntax::SyntaxSession) that affects
-    /// incremental re-parsing capabilities. In particular, this function sets max lookahead
-    /// to the end of the TokenCursor covered tokens. An API user should prefer to minimize the
-    /// lookahead distance to gain the best performance.
+    /// Returns a [SiteRef] that points to the end of the stream.
     fn end_site_ref(&mut self) -> SiteRef;
 }
 
 pub struct TokenBufferCursor<'code, T: Token> {
     buffer: &'code TokenBuffer<T>,
-    next: RefIndex,
+    next: EntryIndex,
     end_site: Site,
     end_site_ref: SiteRef,
 }
 
 impl<'code, T: Token> Identifiable for TokenBufferCursor<'code, T> {
     #[inline(always)]
-    fn id(&self) -> &Id {
+    fn id(&self) -> Id {
         self.buffer.id()
     }
 }
@@ -279,11 +153,11 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 
     #[inline]
     fn advance(&mut self) -> bool {
-        if self.next >= self.buffer.token_count() {
+        if self.next >= self.buffer.tokens() {
             return false;
         }
 
-        let next_site = unsafe { *self.buffer.sites.inner().get_unchecked(self.next) };
+        let next_site = unsafe { *self.buffer.sites.get_unchecked(self.next) };
 
         if next_site > self.end_site {
             return false;
@@ -294,32 +168,37 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
         true
     }
 
+    #[inline(always)]
+    fn skip(&mut self, distance: TokenCount) {
+        self.next = (self.next + distance).min(self.buffer.tokens());
+    }
+
     #[inline]
-    fn token(&mut self, mut distance: TokenCount) -> Option<&'code Self::Token> {
+    fn token(&mut self, mut distance: TokenCount) -> Self::Token {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
-            return None;
+        if distance >= self.buffer.tokens() {
+            return <Self::Token as Token>::eoi();
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
-            return None;
+            return <Self::Token as Token>::eoi();
         }
 
-        Some(unsafe { self.buffer.tokens.inner().get_unchecked(distance) })
+        *unsafe { self.buffer.tokens.get_unchecked(distance) }
     }
 
     #[inline]
     fn site(&mut self, mut distance: TokenCount) -> Option<Site> {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return None;
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return None;
@@ -332,53 +211,66 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
     fn length(&mut self, mut distance: TokenCount) -> Option<Length> {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return None;
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return None;
         }
 
-        Some(*unsafe { self.buffer.spans.inner().get_unchecked(distance) })
+        Some(*unsafe { self.buffer.spans.get_unchecked(distance) })
     }
 
     #[inline]
     fn string(&mut self, mut distance: TokenCount) -> Option<&'code str> {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return None;
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return None;
         }
 
-        Some(unsafe { self.buffer.strings.inner().get_unchecked(distance).as_str() })
+        let text = self.buffer.text.as_str();
+
+        let start = *unsafe { self.buffer.indices.get_unchecked(distance) };
+        let end = self
+            .buffer
+            .indices
+            .get(distance + 1)
+            .copied()
+            .unwrap_or(text.len());
+
+        Some(unsafe { text.get_unchecked(start..end) })
     }
 
     #[inline]
     fn token_ref(&mut self, mut distance: TokenCount) -> TokenRef {
         distance += self.next;
 
-        if distance >= self.buffer.token_count() {
+        if distance >= self.buffer.tokens() {
             return TokenRef::nil();
         }
 
-        let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(distance) };
+        let peek_site = unsafe { *self.buffer.sites.get_unchecked(distance) };
 
         if peek_site > self.end_site {
             return TokenRef::nil();
         }
 
         TokenRef {
-            id: *self.buffer.id(),
-            chunk_ref: Sequence::<Self::Token>::make_ref(distance),
+            id: self.buffer.id(),
+            entry: Entry {
+                index: distance,
+                version: 0,
+            },
         }
     }
 
@@ -393,23 +285,22 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
         token_ref.site_ref()
     }
 
-    #[inline]
     fn end_site_ref(&mut self) -> SiteRef {
         if self.end_site_ref.is_nil() {
             let mut index = self.next;
 
             loop {
-                if index >= self.buffer.token_count() {
-                    self.end_site_ref = SiteRef::new_code_end(*self.buffer.id());
+                if index >= self.buffer.tokens() {
+                    self.end_site_ref = SiteRef::end_of(self.buffer.id());
                     break;
                 }
 
-                let peek_site = unsafe { *self.buffer.sites.inner().get_unchecked(index) };
+                let peek_site = unsafe { *self.buffer.sites.get_unchecked(index) };
 
                 if peek_site > self.end_site {
                     self.end_site_ref = TokenRef {
-                        id: *self.buffer.id(),
-                        chunk_ref: Sequence::<Self::Token>::make_ref(index),
+                        id: self.buffer.id(),
+                        entry: Entry { index, version: 0 },
                     }
                     .site_ref();
                     break;
@@ -424,13 +315,12 @@ impl<'code, T: Token> TokenCursor<'code> for TokenBufferCursor<'code, T> {
 }
 
 impl<'code, T: Token> TokenBufferCursor<'code, T> {
-    #[inline(always)]
     pub(super) fn new(buffer: &'code TokenBuffer<T>, span: SiteSpan) -> Self {
         let mut next = 0;
 
-        while next < buffer.token_count() {
-            let site = unsafe { *buffer.sites.inner().get_unchecked(next) };
-            let length = unsafe { *buffer.spans.inner().get_unchecked(next) };
+        while next < buffer.tokens() {
+            let site = unsafe { *buffer.sites.get_unchecked(next) };
+            let length = unsafe { *buffer.spans.get_unchecked(next) };
 
             if site + length < span.start {
                 next += 1;
@@ -441,14 +331,14 @@ impl<'code, T: Token> TokenBufferCursor<'code, T> {
         }
 
         let end_site_ref = match span.end >= buffer.length() {
-            true => SiteRef::new_code_end(*buffer.id()),
+            true => SiteRef::end_of(buffer.id()),
             false => SiteRef::nil(),
         };
 
         Self {
             buffer,
-            end_site: span.end,
             next,
+            end_site: span.end,
             end_site_ref,
         }
     }

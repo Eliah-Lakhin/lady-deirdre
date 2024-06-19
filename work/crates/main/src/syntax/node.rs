@@ -1,355 +1,622 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
 extern crate lady_deirdre_derive;
 
+use std::fmt::{Debug, Formatter};
+
 pub use lady_deirdre_derive::Node;
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
-    lexis::{Token, TokenCursor},
-    std::*,
-    syntax::{ClusterRef, SyntaxBuffer, SyntaxError, SyntaxRule, SyntaxSession, SyntaxTree},
+    arena::{Entry, Id, Identifiable, SubId},
+    lexis::{Site, SiteSpan, SourceCode, Token, TokenBuffer, TokenRef, NIL_TOKEN_REF},
+    syntax::{
+        Capture,
+        CapturesIter,
+        ChildrenIter,
+        DebugObserver,
+        ImmutableSyntaxTree,
+        Key,
+        NodeRule,
+        PolyRef,
+        PolyVariant,
+        RefKind,
+        SyntaxSession,
+        SyntaxTree,
+        NON_RULE,
+    },
+    units::CompilationUnit,
 };
 
-/// A trait that specifies syntax tree node kind and provides a syntax grammar parser.
+/// A [NodeRef] reference that does not point to any node.
 ///
-/// An API user implements this trait to specify Programming Language syntax grammar and the
-/// type of the syntax tree node.
+/// The value of this static equals to the [NodeRef::nil] value.
+pub static NIL_NODE_REF: NodeRef = NodeRef::nil();
+
+/// A type of the syntax tree node.
 ///
-/// This trait is supposed to be implemented on the Rust enum type with variants representing
-/// tree node kinds, but this is not a strict requirement. From the functional sense the main
-/// purpose of the Node implementation is to provide a syntax parser that will re-parse sequences of
-/// [Tokens](crate::lexis::Token) by interacting with arbitrary
-/// [SyntaxSession](crate::syntax::SyntaxSession) interface that, in turn, manages parsing process.
+/// Typically, this trait should be implemented on enum types, where each enum
+/// variant represents an individual node kind. The variant fields would
+/// include references to the parent and children nodes.
 ///
-/// An API user is encouraged to implement this trait using helper
-/// [Node](::lady_deirdre_derive::Node) macro-derive on enum types by specifying syntax
-/// grammar directly on enum variants through the macros attributes.
+/// The interface provides language-agnostic functions to reveal
+/// node's structure, such as [children_iter](AbstractNode::children_iter)
+/// to iterate through all children of the node instance, or
+/// [name](AbstractNode::name) to get the node's variant name.
 ///
-/// ```rust
-/// use lady_deirdre::{
-///     syntax::{Node, SyntaxError, SyntaxTree},
-///     lexis::{SimpleToken, TokenRef},
-///     Document,
-/// };
+/// The [Node::parse] function serves as the syntax parser of the programming
+/// language and the constructor of the node instance.
 ///
-/// #[derive(Node, PartialEq, Debug)]
-/// #[token(SimpleToken)]
-/// #[error(SyntaxError)]
-/// #[skip($Whitespace)]
-/// enum NumbersInParens {
-///     #[root]
-///     #[rule($ParenOpen & (numbers: $Number)*{$Symbol} & $ParenClose)]
-///     Root {
-///         numbers: Vec<TokenRef>,
-///     },
-/// }
+/// Essentially, this interface defines the syntax component of the programming
+/// language grammar.
 ///
-/// let doc = Document::<NumbersInParens>::from("(3, 4, 5)");
+/// The node interface is split into the [Node] trait, which includes
+/// object-unsafe API, and its super-trait [AbstractNode] which includes
+/// object-safe API.
 ///
-/// let root = doc.root().deref(&doc).unwrap();
-///
-/// match root {
-///     NumbersInParens::Root { numbers } => {
-///         assert_eq!(
-///             numbers.iter().map(|num| num.string(&doc).unwrap()).collect::<Vec<_>>(),
-///             vec!["3", "4", "5"],
-///         );
-///     },
-/// }
-/// ```
-///
-/// An API user can implement the Node trait manually too. For example, using 3rd party parser
-/// libraries. See [`Node::new`](crate::syntax::Node::new) function specification for details.
-pub trait Node: Sized + 'static {
-    /// Describes programming language's lexical grammar.
+/// You are encouraged to use the companion [Node](lady_deirdre_derive::Node)
+/// derive macro to implement all required components on enum types in terms
+/// of the LL(1) grammar.
+pub trait Node: AbstractNode + Sized {
+    /// Specifies the lexical structure of the language.
+    ///
+    /// This associated type is required because the syntax grammar of the
+    /// language includes the lexical grammar as well.
+    ///
+    /// When using the derive macro, this type is specified through the
+    /// `#[token(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// #[token(MyToken)]
+    /// struct MyNode {
+    ///     //...
+    /// }
+    /// ```
     type Token: Token;
 
-    /// Describes syntax/semantic error type of this programming language grammar.
-    type Error: From<SyntaxError> + Sized + 'static;
+    /// Parses the programming language syntax tree node.
+    ///
+    /// The `session` parameter of type [SyntaxSession] provides access
+    /// to the token stream that needs to be parsed and offers an API to descend
+    /// into the sub-rules as needed.
+    ///
+    /// The `rule` is a numeric index of the syntax parse rule that needs to be
+    /// parsed.
+    ///
+    /// The exact set of valid values for the `rule` argument, and the mapping
+    /// between these values and the Node types, is language-specific.
+    ///
+    /// The calling side doesn't need to know this mapping upfront,
+    /// except for the following `rule` cases:
+    ///
+    ///   - [ROOT_RULE](crate::syntax::ROOT_RULE) parses the root rule of the
+    ///     syntax tree. The parse function should always be able to parse
+    ///     at least this rule.
+    ///   - [NON_RULE] does not represent any parsing rule within any
+    ///     programming language. This function should never be called with this
+    ///     rule value.
+    ///
+    /// If the `rule` value is within the valid set of the programming language
+    /// rule set, **the function is infallible** regardless of the input token
+    /// stream.
+    ///
+    /// In the event of syntax errors in the input stream, the function attempts
+    /// to recover from these errors, and it **always consumes at least one token**
+    /// from the input token stream (if the stream is not empty).
+    ///
+    /// Finally, the underlying parsing algorithm is deterministic
+    /// and context-free: the parse function always returns the same result
+    /// from the same set of input tokens and requested `rule`, and the
+    /// function always returns the same kind of syntax tree nodes for
+    /// the same `rule` value.
+    ///
+    /// Typically, you don't need to call this function manually. It is the
+    /// responsibility of the compilation unit manager
+    /// (e.g., [Document](crate::units::Document)) to decide when to call this
+    /// function.
+    ///
+    /// To debug the parser, use the [Node::debug] function.
+    ///
+    /// For a detailed specification of the syntax parsing process,
+    /// refer to the [SyntaxSession] documentation.
+    ///
+    /// **Safety**
+    ///
+    /// This function **is safe**. Violations of any of the above rules is an
+    /// implementation bug, not undefined behavior.
+    ///
+    /// **Panic**
+    ///
+    /// The function may panic if the `rule` parameter value is not valid for
+    /// this programming language.
+    fn parse<'code>(session: &mut impl SyntaxSession<'code, Node = Self>, rule: NodeRule) -> Self;
 
-    /// Parses a branch of the syntax tree from the sequence of [Tokens](crate::lexis::Token) using
-    /// specified parse `rule`, and returns an instance of the top node of the branch.
+    /// Debugs the syntax parsing algorithm for this node type.
     ///
-    /// This is a low-level API function.
-    ///
-    /// An API user encouraged to use [Node](::lady_deirdre_derive::Node) macro-derive to
-    /// implement this trait automatically based on a set of LL(1) grammar rules,
-    /// but you can implement it manually too.
-    ///
-    /// You need to call this function manually only if you want to implement an extension API to
-    /// this crate. In this case you should also prepare a custom implementation of the
-    /// SyntaxSession trait. See [SyntaxSession](crate::syntax::SyntaxSession) documentation for
-    /// details.
-    ///
-    /// **Algorithm Specification:**
-    ///   - The Algorithm lay behind this implementation is a
-    ///     [Top-down Parser](https://en.wikipedia.org/wiki/Top-down_parsing) that parses
-    ///     a context-free language of [LL grammar class](https://en.wikipedia.org/wiki/LL_grammar)
-    ///     with potentially unlimited lookahead. Note, that due to unlimited lookahead
-    ///     characteristic it could be a wide class of recursive-descending grammars including
-    ///     [PEG grammars](https://en.wikipedia.org/wiki/Parsing_expression_grammar).
-    ///   - The Algorithm reads as many tokens from the input sequence as needed using `session`'s
-    ///     [TokenCursor](crate::lexis::TokenCursor) lookahead operations to recognize
-    ///     appropriate parse `rule`.
-    ///   - The Algorithm [advances](crate::lexis::Tokens::advance) TokenCursor to as many tokens
-    ///     as needed to exactly match parsed `rule`.
-    ///   - To descend into a parsing subrule the Algorithm calls `session`'s
-    ///     [`descend`](crate::syntax::SyntaxSession::descend) function that consumes subrule's
-    ///     [kind](crate::syntax::SyntaxRule) and returns a [`weak reference`](NodeRef) into the
-    ///     rule's parsed Node.
-    ///   - The Algorithm never calls [`descend`](crate::syntax::SyntaxSession::descend) function
-    ///     with [ROOT_RULE](crate::syntax::ROOT_RULE). The Root Rule is not a recursive rule
-    ///     by design.
-    ///   - The Specification does not limit the way the Algorithm maps `rule` values to
-    ///     specific parsing function under the hood. This mapping is fully encapsulated by the
-    ///     Algorithm internals. In other words the "external" caller of the function `new` does not
-    ///     have to be aware of the mapping between the `rule` values and the types of produced
-    ///     nodes. The only exception from this is a [ROOT_RULE](crate::syntax::ROOT_RULE)
-    ///     value. If the "external" caller invokes `new` function with the ROOT_RULE parameter, the
-    ///     Algorithm guaranteed to enter the entire syntax tree parsing procedure.
-    ///   - When the function `new` invoked, the Algorithm guaranteed to complete parsing procedure
-    ///     regardless of input sequence, and to return a valid instance of [Node]. If the input
-    ///     sequence contains syntax errors, the Algorithm recovers these error in a way that is
-    ///     not specified. In this case the Algorithm could call `session`'s
-    ///     [error](crate::syntax::SyntaxSession::error) function to register syntax error.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{
-    ///     syntax::{Node, NodeRef, SyntaxSession, SyntaxRule, SyntaxError, SyntaxTree, ROOT_RULE},
-    ///     lexis::{SimpleToken, TokenCursor},
-    ///     Document,
-    /// };
-    ///
-    /// // A syntax of embedded parentheses: `(foo (bar) baz)`.
-    /// enum Parens {
-    ///    Root { inner: Vec<NodeRef> },
-    ///    Parens { inner: Vec<NodeRef> },
-    ///    Other,
-    /// };
-    ///  
-    /// const PARENS_RULE: SyntaxRule = &1;
-    /// const OTHER_RULE: SyntaxRule = &2;
-    ///
-    /// impl Node for Parens {
-    ///     type Token = SimpleToken;
-    ///     type Error = SyntaxError;
-    ///
-    ///     fn new<'code>(
-    ///         rule: SyntaxRule,
-    ///         session: &mut impl SyntaxSession<'code, Node = Self>,
-    ///     ) -> Self {
-    ///         // Rule dispatcher that delegates parsing control flow to specialized parse
-    ///         // functions.
-    ///
-    ///         if rule == ROOT_RULE {
-    ///             return Self::parse_root(session);
-    ///         }
-    ///
-    ///         if rule == PARENS_RULE {
-    ///             return Self::parse_parens(session);
-    ///         }
-    ///
-    ///         // Otherwise the `rule` is an `OTHER_RULE`.
-    ///
-    ///         Self::parse_other(session)
-    ///     }
-    ///
-    /// }
-    ///
-    /// impl Parens {
-    ///     fn parse_root<'code>(session: &mut impl SyntaxSession<'code, Node = Self>) -> Self {
-    ///         let mut inner = vec![];
-    ///
-    ///         loop {
-    ///             // Analysing of the next incoming token.
-    ///             match session.token(0) {
-    ///                 Some(&SimpleToken::ParenOpen) => {
-    ///                     inner.push(session.descend(PARENS_RULE));
-    ///                 }
-    ///
-    ///                 Some(_) => {
-    ///                     inner.push(session.descend(OTHER_RULE));
-    ///                 }
-    ///
-    ///                 None => break,
-    ///             }
-    ///         }
-    ///
-    ///         Self::Root { inner }
-    ///     }
-    ///
-    ///     // Parsing a pair of parenthesis(`(...)`).
-    ///     fn parse_parens<'code>(session: &mut impl SyntaxSession<'code, Node = Self>) -> Self {
-    ///         let mut inner = vec![];
-    ///
-    ///         // The first token is open parenthesis("("). Consuming it.
-    ///         session.advance();
-    ///
-    ///         loop {
-    ///             // Analysing of the next incoming token.
-    ///             match session.token(0) {
-    ///                 Some(&SimpleToken::ParenOpen) => {
-    ///                     inner.push(session.descend(PARENS_RULE));
-    ///                 }
-    ///
-    ///                 // Close parenthesis(")") found. Parsing process finished successfully.
-    ///                 Some(&SimpleToken::ParenClose) => {
-    ///                     // Consuming this token.
-    ///                     session.advance();
-    ///
-    ///                     return Self::Parens { inner };
-    ///                 }
-    ///
-    ///                 Some(_) => {
-    ///                     inner.push(session.descend(OTHER_RULE));
-    ///                 }
-    ///
-    ///                 None => break,
-    ///             }
-    ///         }
-    ///
-    ///         // Parse process has failed. We didn't find closing parenthesis.
-    ///
-    ///         // Registering a syntax error.
-    ///         let span = session.site_ref(0)..session.site_ref(0);
-    ///         session.error(SyntaxError::UnexpectedEndOfInput {
-    ///             span,
-    ///             context: "Parse Parens",
-    ///         });
-    ///
-    ///         // Returning what we have parsed so far.
-    ///         Self::Parens { inner }
-    ///     }
-    ///
-    ///     // Parsing any sequence of tokens except parenthesis(`foo bar`).
-    ///     fn parse_other<'code>(session: &mut impl SyntaxSession<'code, Node = Self>) -> Self {
-    ///         // The first token is not a parenthesis token. Consuming it.
-    ///         session.advance();
-    ///
-    ///         loop {
-    ///             // Analysing of the next incoming token.
-    ///             match session.token(0) {
-    ///                 Some(&SimpleToken::ParenOpen) | Some(&SimpleToken::ParenClose) | None => {
-    ///                     break;
-    ///                 }
-    ///
-    ///                 Some(_) => {
-    ///                     // The next token is not a parenthesis token. Consuming it.
-    ///                     session.advance();
-    ///                 },
-    ///             }
-    ///         }
-    ///
-    ///         Self::Other
-    ///     }
-    /// }
-    ///
-    /// let doc = Document::<Parens>::from("foo (bar (baz) (aaa) ) bbb");
-    ///
-    /// // The input text has been parsed without errors.
-    /// assert_eq!(doc.errors().count(), 0);
-    /// ```
-    fn new<'code>(rule: SyntaxRule, session: &mut impl SyntaxSession<'code, Node = Self>) -> Self;
+    /// This function runs the parsing algorithm on the `text` source code
+    /// and prints parsing steps to the terminal (stdout).
+    fn debug(text: impl AsRef<str>) {
+        let tokens = TokenBuffer::<Self::Token>::from(text);
 
-    /// A helper function to immediately parse a subsequent of tokens in non-incremental way.
-    ///
-    /// ```rust
-    /// use lady_deirdre::{
-    ///     lexis::{SimpleToken, Token, SourceCode},
-    ///     syntax::{SimpleNode, Node, SyntaxTree},
-    /// };
-    ///
-    /// let tokens = SimpleToken::parse("(foo bar)");
-    ///
-    /// let sub_sequence = tokens.cursor(0..5); // A cursor into the "(foo bar" substring.
-    ///
-    /// let syntax = SimpleNode::parse(sub_sequence);
-    ///
-    /// // Close parenthesis is missing in this subsequence, so the syntax tree of the subsequence
-    /// // has syntax errors.
-    /// assert!(syntax.errors().count() > 0);
-    /// ```
-    #[inline(always)]
-    fn parse<'code>(cursor: impl TokenCursor<'code, Token = Self::Token>) -> SyntaxBuffer<Self> {
-        SyntaxBuffer::new(cursor)
+        ImmutableSyntaxTree::<Self>::parse_with_id_and_observer(
+            SubId::fork(tokens.id()),
+            tokens.cursor(..),
+            &mut DebugObserver::default(),
+        );
     }
 }
 
-/// A weak reference of the [Node] and its metadata inside the syntax structure of the compilation
-/// unit.
+/// An object-safe part of the syntax tree node interface.
 ///
-/// This objects represents a long-lived lifetime independent and type independent cheap to
-/// [Copy](::std::marker::Copy) safe weak reference into the syntax tree.
+/// This trait is a super-trait of the [Node] trait, which is not object-safe.
 ///
-/// NodeRef is capable to survive source code incremental changes happening aside of the referred
-/// Node.
+/// The entire interface is separated into two traits so that an API user
+/// can use most parts of the whole interface from the object-safe trait.
 ///
-/// An API user normally does not need to inspect NodeRef inner fields manually or to construct
-/// a NodeRef manually unless you are working on the Crate API Extension.
+/// The AbstractNode trait consists of language-agnostic functions to
+/// read individual syntax tree node structure, whereas the Node trait provides
+/// node's parser, essentially the node constructor.
+pub trait AbstractNode: Send + Sync + 'static {
+    /// A syntax parse rule that parses this kind of node.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this value
+    /// is either generated by the macro program or overridden through the
+    /// `#[denote(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// enum MyNode {
+    ///     #[denote(100)] // self.rule() == 100
+    ///     #[rule()]
+    ///     Variant1 {},
+    ///
+    ///     #[denote(V2)] // self.rule() == Self::V2
+    ///     #[rule()]
+    ///     Variant2 {},
+    ///
+    ///     #[denote(V3, 300)] // self.rule() == Self::V3 && Self::V3 == 300
+    ///     #[rule()]
+    ///     Variant3 {},
+    ///
+    ///     #[rule()] // self.rule() value generated by the macro
+    ///     Variant4 {},
+    /// }
+    /// ```
+    fn rule(&self) -> NodeRule;
+
+    /// A debug name of this node.
+    ///
+    /// Returns None if this feature is disabled for this node instance.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this function
+    /// returns the stringified variant's name:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// enum MyNode {
+    ///     #[rule()]
+    ///     Variant {}, // self.name() == Some("Variant")
+    ///
+    ///     NonParsable {}, // self.name() == None
+    /// }
+    /// ```
+    fn name(&self) -> Option<&'static str>;
+
+    /// An end-user display description of this node.
+    ///
+    /// Returns None if this feature is disabled for this node instance.
+    ///
+    /// This function is intended to be used for the syntax errors formatting.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this function
+    /// returns what you have specified with the `#[describe(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// enum MyNode {
+    ///     // self.describe(false) == Some("short")
+    ///     // self.describe(true) == Some("verbose")
+    ///     #[rule()]
+    ///     #[describe("short", "verbose")]
+    ///     Variant {},
+    ///
+    ///     NonParsable {}, // self.name() == None
+    /// }
+    /// ```
+    ///
+    /// The difference between the short (`verbose` is false) and verbose
+    /// (verbose is `true`) descriptions is that the short version represents
+    /// a "class" of the node, while the verbose version provides a more
+    /// detailed text specific to this particular node.
+    ///
+    /// For example, a short description of the Sum and Mul binary operators
+    /// would simply be "operator", whereas, for verbose versions
+    /// this function might returns something like "<a + b>" and "<a * b>".
+    fn describe(&self, verbose: bool) -> Option<&'static str>;
+
+    /// Returns a [NodeRef] reference of this node.
+    ///
+    /// The returning value resolves to self when borrowing a node from
+    /// the [SyntaxTree].
+    ///
+    /// This function may return [nil](NodeRef::nil) reference, if the feature
+    /// is disabled for this node instance.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this function
+    /// returns what you have annotated with the `#[node(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// enum MyNode {
+    ///     // self.node_ref() returns `node` value
+    ///     #[rule()]
+    ///     Variant {
+    ///         #[node]
+    ///         node: NodeRef,
+    ///     },
+    ///
+    ///     // self.node_ref() returns NodeRef::nil()
+    ///     #[rule()]
+    ///     VariantWithoutNodeRef {
+    ///         // #[node]
+    ///         node: NodeRef,
+    ///     },
+    /// }
+    /// ```
+    fn node_ref(&self) -> NodeRef;
+
+    /// Returns a [NodeRef] reference of the parent node of this node.
+    ///
+    /// The returning value resolves to the parent node when borrowing a node
+    /// from the [SyntaxTree].
+    ///
+    /// This function may return [nil](NodeRef::nil) reference, if the feature
+    /// is disabled for this node instance.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this function
+    /// returns what you have annotated with the `#[parent(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// enum MyNode {
+    ///     // self.parent_ref() returns `parent` value
+    ///     #[rule()]
+    ///     Variant {
+    ///         #[parent]
+    ///         parent: NodeRef,
+    ///     },
+    ///
+    ///     // self.parent_ref() returns NodeRef::nil()
+    ///     #[rule()]
+    ///     VariantWithoutParentRef {
+    ///         // #[parent]
+    ///         parent: NodeRef,
+    ///     },
+    /// }
+    /// ```
+    fn parent_ref(&self) -> NodeRef;
+
+    /// Updates the parent node reference of this node.
+    ///
+    /// This function updates the value returned by the
+    /// [parent_ref](Self::parent_ref) function.
+    ///
+    /// The compilation unit managers
+    /// (e.g., mutable [Document](crate::units::Document)) may use this function
+    /// to "transplant" the syntax tree branch to another branch.
+    ///
+    /// This function could ignore the provided [NodeRef] reference
+    /// if the "parent_ref" feature is not available for this node instance.
+    fn set_parent_ref(&mut self, parent_ref: NodeRef);
+
+    /// Returns a set of children of this node associated with the specified
+    /// `key`.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this function
+    /// returns what you have annotated with the `#[child]` attribute.
+    ///
+    /// The string `key` denotes the field name, and the numeric `key`
+    /// denotes the index of the `#[child]` attribute in order.
+    ///
+    /// The function returns None if there is no capture associated
+    /// with specified key.
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// enum MyNode {
+    ///     #[rule()]
+    ///     Variant {
+    ///         #[child] // self.capture(Key::Index(0))
+    ///         capture_1: NodeRef,
+    ///
+    ///         #[child] // self.capture(Key::Name("capture_2"))
+    ///         capture_2: Vec<NodeRef>,
+    ///
+    ///         #[child] // self.capture(Key::Index(2))
+    ///         capture_3: TokenRef,
+    ///     },
+    /// }
+    /// ```
+    fn capture(&self, key: Key) -> Option<Capture>;
+
+    /// Returns the first set of children of this node.
+    ///
+    /// Returns None if there are no known captures in this node instance.
+    #[inline(always)]
+    fn first_capture(&self) -> Option<Capture> {
+        self.capture(Key::Index(0))
+    }
+
+    /// Returns the last set of children of this node.
+    ///
+    /// Returns None if there are no known captures in this node instance.
+    #[inline(always)]
+    fn last_capture(&self) -> Option<Capture> {
+        self.capture(Key::Index(self.captures_len().checked_sub(1)?))
+    }
+
+    /// Returns all valid [capture](Self::capture) keys.
+    ///
+    /// The keys in the returning array come in order such as the index of the
+    /// [Key] in this array corresponds to the [Key::Index] with this index.
+    ///
+    /// However the function prefers to return an array of [Key::Name] so that
+    /// the calling side gains both the capture number and the capture name
+    /// metadata.
+    fn capture_keys(&self) -> &'static [Key<'static>];
+
+    /// Returns a total number of [captures](Self::capture) of this node instance.
+    #[inline(always)]
+    fn captures_len(&self) -> usize {
+        self.capture_keys().len()
+    }
+
+    /// Returns an iterator over all capture values.
+    #[inline(always)]
+    fn captures_iter(&self) -> CapturesIter<Self>
+    where
+        Self: Sized,
+    {
+        CapturesIter::new(self)
+    }
+
+    /// Returns an iterator over all children of this node.
+    ///
+    /// This is a version of the [captures_iter](Self::captures_iter) that
+    /// subsequently iterates each child inside the [Capture] and flattens
+    /// the result.
+    #[inline(always)]
+    fn children_iter(&self) -> ChildrenIter<Self>
+    where
+        Self: Sized,
+    {
+        ChildrenIter::new(self)
+    }
+
+    /// Returns a [NodeRef] reference of a child node that precedes
+    /// the `current` child node.
+    ///
+    /// Returns None if the `current` node is the first child, or if
+    /// the `current` is not a reference to a child node.
+    fn prev_child_node(&self, current: &NodeRef) -> Option<&NodeRef>
+    where
+        Self: Sized,
+    {
+        let mut nodes = self
+            .children_iter()
+            .rev()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref());
+
+        loop {
+            let probe = nodes.next()?;
+
+            if probe == current {
+                return nodes.next();
+            }
+        }
+    }
+
+    /// Returns a [NodeRef] reference of a child node that follows after
+    /// the `current` child node.
+    ///
+    /// Returns None if the `current` node is the last child, or if
+    /// the `current` is not a reference to a child node.
+    fn next_child_node(&self, current: &NodeRef) -> Option<&NodeRef>
+    where
+        Self: Sized,
+    {
+        let mut nodes = self
+            .children_iter()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref());
+
+        loop {
+            let probe = nodes.next()?;
+
+            if probe == current {
+                return nodes.next();
+            }
+        }
+    }
+
+    /// Infers the [site span](SiteSpan) of this node.
+    ///
+    /// The underlying algorithm infers the span based on the leftmost captured
+    /// token (or the leftmost token of the leftmost descendant node)
+    /// start site, and the rightmost token end site correspondingly.
+    ///
+    /// If the underlying syntax captures the leftmost and the rightmost tokens
+    /// of the corresponding parse rules, this span matches the parsed segment
+    /// span.
+    ///
+    /// Returns None if the span cannot be inferred based on the node captures
+    /// (e.g., if the syntax does not have [TokenRef] captures).
+    ///
+    /// The `unit` parameter is the compilation unit
+    /// (e.g., [Document](crate::units::Document)) to which this Node instance
+    /// belongs.
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan>
+    where
+        Self: Sized,
+    {
+        let start = self.start(unit)?;
+        let end = self.end(unit)?;
+
+        Some(start..end)
+    }
+
+    /// Infers the start [site](Site) of this node.
+    ///
+    /// The underlying algorithm infers the site based on the leftmost captured
+    /// token (or the leftmost token of the leftmost descendant node)
+    /// start site.
+    ///
+    /// If the underlying syntax captures the leftmost tokens of
+    /// the corresponding parse rules, this span matches the parsed segment
+    /// start site.
+    ///
+    /// Returns None if the site cannot be inferred based on the node captures
+    /// (e.g., if the syntax does not have [TokenRef] captures).
+    ///
+    /// The `unit` parameter is the compilation unit
+    /// (e.g., [Document](crate::units::Document)) to which this Node instance
+    /// belongs.
+    fn start(&self, unit: &impl CompilationUnit) -> Option<Site>
+    where
+        Self: Sized,
+    {
+        for child in self.captures_iter() {
+            match child.start(unit) {
+                None => continue,
+                Some(site) => return Some(site),
+            }
+        }
+
+        None
+    }
+
+    /// Infers the end [site](Site) of this node.
+    ///
+    /// The underlying algorithm infers the site based on the rightmost captured
+    /// token (or the rightmost token of the rightmost descendant node)
+    /// end site.
+    ///
+    /// If the underlying syntax captures the rightmost tokens of
+    /// the corresponding parse rules, this span matches the parsed segment
+    /// end site.
+    ///
+    /// Returns None if the site cannot be inferred based on the node captures
+    /// (e.g., if the syntax does not have [TokenRef] captures).
+    ///
+    /// The `unit` parameter is the compilation unit
+    /// (e.g., [Document](crate::units::Document)) to which this Node instance
+    /// belongs.
+    fn end(&self, unit: &impl CompilationUnit) -> Option<Site>
+    where
+        Self: Sized,
+    {
+        for child in self.captures_iter().rev() {
+            match child.end(unit) {
+                None => continue,
+                Some(site) => return Some(site),
+            }
+        }
+
+        None
+    }
+
+    /// A debug name of the parse rule.
+    ///
+    /// The returning value is the same as `self.name(self.rule())`.
+    ///
+    /// See [name](Self::name) for details.
+    fn rule_name(rule: NodeRule) -> Option<&'static str>
+    where
+        Self: Sized;
+
+    /// An end-user display description of the parse rule.
+    ///
+    /// The returning value is the same as `self.describe(self.rule(), verbose)`.
+    ///
+    /// See [describe](Self::describe) for details.
+    fn rule_description(rule: NodeRule, verbose: bool) -> Option<&'static str>
+    where
+        Self: Sized;
+}
+
+/// A globally unique reference of the [node](Node) in the syntax tree.
 ///
-/// For details on the Weak references framework design see [Arena](crate::arena) module
-/// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Each [syntax tree](crate::syntax::SyntaxTree) node could be uniquely
+/// addressed within a pair of the [Id] and [Entry], where the identifier
+/// uniquely addresses a specific compilation unit instance (syntax tree), and
+/// the entry part addresses a node within this tree.
+///
+/// Essentially, NodeRef is a composite index.
+///
+/// Both components of this index form a unique pair
+/// (within the current process), because each compilation unit has a unique
+/// identifier, and the nodes within the syntax tree always receive unique
+/// [Entry] indices within the syntax tree.
+///
+/// If the node instance has been removed from the syntax tree over time,
+/// new nodes within this syntax tree will never occupy the same NodeRef object,
+/// but the NodeRef referred to the removed Node would become _invalid_.
+///
+/// The [nil](NodeRef::nil) NodeRefs are special references that are considered
+/// to be always invalid (they intentionally don't refer to any node within
+/// any syntax tree).
+///
+/// Two distinct instances of the nil NodeRef are always equal.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeRef {
-    /// An [identifier](crate::arena::Id) of the [SyntaxTree](crate::syntax::SyntaxTree) instance
-    /// this weakly referred [Node] belongs to.
+    /// An identifier of the syntax tree.
     pub id: Id,
 
-    /// An internal weak reference of the node's [Cluster](crate::syntax::Cluster) of the
-    /// [SyntaxTree](crate::syntax::SyntaxTree) instance.
-    pub cluster_ref: Ref,
-
-    /// An internal weak reference of the Node object in the
-    /// [Cluster](crate::syntax::Cluster).
-    ///
-    /// If `node_ref` is a [`Ref::Primary`](crate::arena::Ref::Primary) variant, the NodeRef object
-    /// refers [`Cluster::primary`](crate::syntax::Cluster::primary) object. Otherwise `node_ref` is
-    /// a [`Ref::Repository`] variant that refers an object from the
-    /// [`Cluster::nodes`](crate::syntax::Cluster::nodes) repository.
-    pub node_ref: Ref,
+    /// A versioned index of the node instance within the syntax tree.
+    pub entry: Entry,
 }
 
 impl Debug for NodeRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self.is_nil() {
-            false => formatter.write_fmt(format_args!("NodeRef({:?})", self.id())),
+            false => formatter.write_fmt(format_args!(
+                "NodeRef(id: {:?}, entry: {:?})",
+                self.id, self.entry,
+            )),
             true => formatter.write_str("NodeRef(Nil)"),
         }
     }
@@ -357,145 +624,286 @@ impl Debug for NodeRef {
 
 impl Identifiable for NodeRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl Default for NodeRef {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::nil()
+    }
+}
+
+impl PolyRef for NodeRef {
+    #[inline(always)]
+    fn kind(&self) -> RefKind {
+        RefKind::Node
+    }
+
+    #[inline(always)]
+    fn is_nil(&self) -> bool {
+        self.id.is_nil() || self.entry.is_nil()
+    }
+
+    #[inline(always)]
+    fn as_variant(&self) -> PolyVariant {
+        PolyVariant::Node(*self)
+    }
+
+    #[inline(always)]
+    fn as_token_ref(&self) -> &TokenRef {
+        &NIL_TOKEN_REF
+    }
+
+    #[inline(always)]
+    fn as_node_ref(&self) -> &NodeRef {
+        self
+    }
+
+    #[inline(always)]
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
+        self.deref(unit)?.span(unit)
     }
 }
 
 impl NodeRef {
-    /// Returns an invalid instance of the NodeRef.
+    /// Returns a NodeRef that intentionally does not refer to any node within
+    /// any syntax tree.
     ///
-    /// This instance never resolves to valid [Node].
+    /// If you need just a static reference to the nil NodeRef, use
+    /// the predefined [NIL_NODE_REF] static.
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
-            id: *Id::nil(),
-            cluster_ref: Ref::Nil,
-            node_ref: Ref::Nil,
+            id: Id::nil(),
+            entry: Entry::nil(),
         }
     }
 
-    /// Returns `true` if this instance will never resolve to valid [Node].
+    /// Immutably borrows a syntax tree node referred to by this NodeRef.
     ///
-    /// It is guaranteed that `NodeRef::nil().is_nil()` is always `true`, but in general if
-    /// this function returns `false` it is not guaranteed that provided instance is a valid
-    /// reference.
-    ///
-    /// To determine reference validity per specified [SyntaxTree](crate::syntax::SyntaxTree)
-    /// instance use [is_valid_ref](NodeRef::is_valid_ref) function instead.
-    #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.cluster_ref.is_nil() || self.node_ref.is_nil()
-    }
-
-    /// Immutably dereferences weakly referred [Node] of specified
-    /// [SyntaxTree](crate::syntax::SyntaxTree).
-    ///
-    /// Returns [None] if this NodeRef is not valid reference for specified `tree` instance.
-    ///
-    /// Use [is_valid_ref](NodeRef::is_valid_ref) to check NodeRef validity.
-    ///
-    /// This function uses [`SyntaxTree::get_cluster`](crate::syntax::SyntaxTree::get_cluster)
-    /// function under the hood.
+    /// Returns None if this NodeRef is not valid for the specified `tree`.
     #[inline(always)]
     pub fn deref<'tree, N: Node>(
         &self,
         tree: &'tree impl SyntaxTree<Node = N>,
     ) -> Option<&'tree N> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
-        match tree.get_cluster(&self.cluster_ref) {
-            Some(cluster) => match &self.node_ref {
-                Ref::Primary => Some(&cluster.primary),
-
-                _ => cluster.nodes.get(&self.node_ref),
-            },
-
-            _ => None,
-        }
+        tree.get_node(&self.entry)
     }
 
-    /// Mutably dereferences weakly referred [Node] of specified
-    /// [SyntaxTree](crate::syntax::SyntaxTree).
+    /// Mutably borrows a syntax tree node referred to by this NodeRef.
     ///
-    /// Returns [None] if this NodeRef is not valid reference for specified `tree` instance.
-    ///
-    /// Use [is_valid_ref](NodeRef::is_valid_ref) to check NodeRef validity.
-    ///
-    /// This function uses
-    /// [`SyntaxTree::get_cluster_mut`](crate::syntax::SyntaxTree::get_cluster_mut) function under
-    /// the hood.
+    /// Returns None if this NodeRef is not valid for the specified `tree`.
     #[inline(always)]
     pub fn deref_mut<'tree, N: Node>(
         &self,
         tree: &'tree mut impl SyntaxTree<Node = N>,
     ) -> Option<&'tree mut N> {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return None;
         }
 
-        match tree.get_cluster_mut(&self.cluster_ref) {
-            None => None,
-            Some(data) => match &self.node_ref {
-                Ref::Primary => Some(&mut data.primary),
-
-                _ => data.nodes.get_mut(&self.node_ref),
-            },
-        }
+        tree.get_node_mut(&self.entry)
     }
 
-    /// Creates a weak reference of the [Cluster](crate::syntax::Cluster) of referred [Node].
+    /// Returns a syntax parse rule that parses referred node.
+    ///
+    /// Returns [NON_RULE] if this NodeRef is not valid for the specified `tree`.
+    ///
+    /// See [AbstractNode::rule] for details.
     #[inline(always)]
-    pub fn cluster(&self) -> ClusterRef {
-        ClusterRef {
-            id: self.id,
-            cluster_ref: self.cluster_ref,
-        }
+    pub fn rule(&self, tree: &impl SyntaxTree) -> NodeRule {
+        self.deref(tree).map(AbstractNode::rule).unwrap_or(NON_RULE)
     }
 
-    /// Removes an instance of the [Node] from the [SyntaxTree](crate::syntax::SyntaxTree)
-    /// that is weakly referred by this reference.
+    /// Returns a debug name of the referred node.
     ///
-    /// Returns [Some] value of the Node if this weak reference is a valid reference of
-    /// existing node inside `tree` instance. Otherwise returns [None].
+    /// Returns None if this NodeRef is not valid for the specified `tree`,
+    /// or if the node instance does not have a name.
     ///
-    /// Use [is_valid_ref](NodeRef::is_valid_ref) to check NodeRef validity.
-    ///
-    /// This function uses
-    /// [`SyntaxTree::get_cluster_mut`](crate::syntax::SyntaxTree::get_cluster_mut) function under
-    /// the hood.
+    /// See [AbstractNode::name] for details.
     #[inline(always)]
-    pub fn unlink<N: Node>(&self, tree: &mut impl SyntaxTree<Node = N>) -> Option<N> {
-        if &self.id != tree.id() {
-            return None;
-        }
-
-        match tree.get_cluster_mut(&self.cluster_ref) {
-            None => None,
-            Some(data) => data.nodes.remove(&self.node_ref),
-        }
+    pub fn name<N: Node>(&self, tree: &impl SyntaxTree<Node = N>) -> Option<&'static str> {
+        self.deref(tree).map(AbstractNode::name).flatten()
     }
 
-    /// Returns `true` if and only if weakly referred Node belongs to specified
-    /// [SyntaxTree](crate::syntax::SyntaxTree), and referred Node exists in this SyntaxTree
-    /// instance.
+    /// Returns an end-user display description of the referred node.
     ///
-    /// If this function returns `true`, all dereference function would return meaningful [Some]
-    /// values, otherwise these functions return [None].
+    /// Returns None if this NodeRef is not valid for the specified `tree`,
+    /// or if the node instance does not have a description.
     ///
-    /// This function uses [`SyntaxTree::get_cluster`](crate::syntax::SyntaxTree::get_cluster)
-    /// function under the hood.
+    /// See [AbstractNode::describe] for details.
+    #[inline(always)]
+    pub fn describe<N: Node>(
+        &self,
+        tree: &impl SyntaxTree<Node = N>,
+        verbose: bool,
+    ) -> Option<&'static str> {
+        self.deref(tree)
+            .map(|node| node.describe(verbose))
+            .flatten()
+    }
+
+    /// Returns a reference of the parent node of the referred node.
+    ///
+    /// Returns [nil](NodeRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the node instance does not have a parent.
+    ///
+    /// See [AbstractNode::parent_ref] for details.
+    #[inline(always)]
+    pub fn parent(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        node.parent_ref()
+    }
+
+    /// Returns a reference to the first child node of the referred node.
+    ///
+    /// Returns [nil](NodeRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the node instance does not have child nodes.
+    pub fn first_child(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        node.children_iter()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref())
+            .next()
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Returns a reference to the last child node of the referred node.
+    ///
+    /// Returns [nil](NodeRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the node instance does not have child nodes.
+    pub fn last_child(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        node.children_iter()
+            .rev()
+            .filter(|child| child.kind().is_node())
+            .map(|child| child.as_node_ref())
+            .next()
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Returns a child node by the capture `key`.
+    ///
+    /// Returns [nil](NodeRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the specified `key` parameter does not
+    /// address a NodeRef capture.
+    ///
+    /// If the capture referred to by the `key` parameter addresses multiple
+    /// nodes, the function returns the first one.
+    ///
+    /// See [AbstractNode::capture] for details.
+    pub fn get_child<'a>(&self, tree: &impl SyntaxTree, key: impl Into<Key<'a>>) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        let Some(child) = node.capture(key.into()) else {
+            return NodeRef::nil();
+        };
+
+        let Some(first) = child.first() else {
+            return NodeRef::nil();
+        };
+
+        *first.as_node_ref()
+    }
+
+    /// Returns a child token by the capture `key`.
+    ///
+    /// Returns [nil](TokenRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the specified `key` parameter does not
+    /// address a [TokenRef] capture.
+    ///
+    /// If the capture referred to by the `key` parameter addresses multiple
+    /// tokens, the function returns the first one.
+    ///
+    /// See [AbstractNode::capture] for details.
+    pub fn get_token(&self, tree: &impl SyntaxTree, key: &'static str) -> TokenRef {
+        let Some(node) = self.deref(tree) else {
+            return TokenRef::nil();
+        };
+
+        let Some(child) = node.capture(key.into()) else {
+            return TokenRef::nil();
+        };
+
+        let Some(first) = child.first() else {
+            return TokenRef::nil();
+        };
+
+        *first.as_token_ref()
+    }
+
+    /// Returns a previous sibling node of the node referred to by this NodeRef
+    /// within the node's parent.
+    ///
+    /// Returns [nil](NodeRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the referred node does not have a preceded
+    /// sibling.
+    pub fn prev_sibling(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        let Some(parent) = node.parent_ref().deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        let Some(sibling) = parent.prev_child_node(self) else {
+            return NodeRef::nil();
+        };
+
+        *sibling
+    }
+
+    /// Returns a next sibling node of the node referred to by this NodeRef
+    /// within the node's parent.
+    ///
+    /// Returns [nil](NodeRef::nil) if this NodeRef is not valid for
+    /// the specified `tree`, or if the referred node does not have a successive
+    /// sibling.
+    pub fn next_sibling(&self, tree: &impl SyntaxTree) -> NodeRef {
+        let Some(node) = self.deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        let Some(parent) = node.parent_ref().deref(tree) else {
+            return NodeRef::nil();
+        };
+
+        let Some(sibling) = parent.next_child_node(self) else {
+            return NodeRef::nil();
+        };
+
+        *sibling
+    }
+
+    /// Returns true if the node referred to by this NodeRef exists in the specified
+    /// `tree`.
     #[inline(always)]
     pub fn is_valid_ref(&self, tree: &impl SyntaxTree) -> bool {
-        if &self.id != tree.id() {
+        if self.id != tree.id() {
             return false;
         }
 
-        match tree.get_cluster(&self.cluster_ref) {
-            None => false,
-            Some(cluster) => cluster.nodes.contains(&self.node_ref),
-        }
+        tree.has_node(&self.entry)
     }
 }

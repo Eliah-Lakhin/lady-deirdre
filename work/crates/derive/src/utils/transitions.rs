@@ -1,46 +1,46 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{collections::BTreeSet, mem::take};
+use std::{
+    collections::{hash_map::Entry, BTreeSet},
+    mem::take,
+};
 
 use syn::Result;
 
 use crate::utils::{
-    debug_panic,
+    system_panic,
     AutomataTerminal,
     Map,
     PredictableCollection,
@@ -52,14 +52,14 @@ use crate::utils::{
 #[derive(Clone)]
 pub struct Transitions<T: AutomataTerminal> {
     view: Map<State, Set<(T, State)>>,
-    length: usize,
+    len: usize,
 }
 
 impl<T: AutomataTerminal> Default for Transitions<T> {
     fn default() -> Self {
         Self {
             view: Map::empty(),
-            length: 0,
+            len: 0,
         }
     }
 }
@@ -117,8 +117,8 @@ impl<T: AutomataTerminal> Transitions<T> {
         &self.view
     }
 
-    pub fn length(&self) -> usize {
-        self.length
+    pub fn len(&self) -> usize {
+        self.len
     }
 
     #[inline(always)]
@@ -139,11 +139,11 @@ impl<T: AutomataTerminal> Transitions<T> {
             let after = outgoing.len();
 
             if before > after {
-                self.length -= before - after;
+                self.len -= before - after;
             }
 
             if after > before {
-                self.length += after - before;
+                self.len += after - before;
             }
         }
 
@@ -157,7 +157,7 @@ impl<T: AutomataTerminal> Transitions<T> {
                 let retain = map(from, through, to);
 
                 if !retain {
-                    self.length -= 1;
+                    self.len -= 1;
                 }
 
                 retain
@@ -262,7 +262,7 @@ impl<T: AutomataTerminal> Transitions<T> {
             alphabet,
             Self {
                 view,
-                length: self.length,
+                len: self.len,
             },
         )
     }
@@ -272,13 +272,13 @@ impl<T: AutomataTerminal> Transitions<T> {
         match self.view.get_mut(&from) {
             Some(outgoing) => {
                 if outgoing.insert((symbol, to)) {
-                    self.length += 1;
+                    self.len += 1;
                 }
             }
 
             None => {
                 let _ = self.view.insert(from, Set::new([(symbol, to)]));
-                self.length += 1;
+                self.len += 1;
             }
         }
     }
@@ -292,11 +292,48 @@ impl<T: AutomataTerminal> Transitions<T> {
     pub(super) fn merge(&mut self, other: Self) {
         for (from, outgoing) in other.view {
             if self.view.insert(from, outgoing).is_some() {
-                debug_panic!("Merging of automatas with duplicate states.")
+                system_panic!("Merging of automatas with duplicate states.");
             }
         }
 
-        self.length += other.length;
+        self.len += other.len;
+    }
+
+    #[inline(always)]
+    pub(super) fn rename_and_merge(&mut self, other: Self, rename_from: State, rename_to: State) {
+        for (mut from, outgoing) in other.view {
+            if from == rename_from {
+                from = rename_to;
+            }
+
+            let capacity = outgoing.capacity();
+
+            for (through, mut to) in outgoing {
+                if to == rename_from {
+                    to = rename_to;
+                }
+
+                match self.view.entry(from) {
+                    Entry::Vacant(entry) => {
+                        let mut renamed = Set::with_capacity(capacity);
+
+                        renamed.insert((through, to));
+
+                        entry.insert(renamed);
+                    }
+
+                    Entry::Occupied(mut entry) => {
+                        let entry = entry.get_mut();
+
+                        if !entry.insert((through, to)) {
+                            system_panic!("Duplicate transition.");
+                        }
+                    }
+                }
+            }
+        }
+
+        self.len += other.len;
     }
 }
 
@@ -309,14 +346,14 @@ pub struct TransitionsIter<'a, T: AutomataTerminal> {
 }
 
 impl<'a, T: AutomataTerminal> Iterator for TransitionsIter<'a, T> {
-    type Item = (&'a State, &'a T, &'a State);
+    type Item = (State, &'a T, State);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match &mut self.outgoing_iterator {
                 Some((from, outgoing_iterator)) => match outgoing_iterator.next() {
-                    Some((through, to)) => return Some((from, through, to)),
+                    Some((through, to)) => return Some((**from, through, *to)),
                     None => (),
                 },
 
@@ -335,7 +372,7 @@ impl<'a, T: AutomataTerminal> Iterator for TransitionsIter<'a, T> {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Closure {
     states: BTreeSet<State>,
 }
@@ -365,44 +402,90 @@ impl Closure {
         self.states.is_empty()
     }
 
-    pub(super) fn of<T: AutomataTerminal>(
+    pub(super) fn of<'a, T: AutomataTerminal>(
         &mut self,
         transitions: &Transitions<T>,
         state: State,
-        symbol: &T,
+        symbol: &'a T,
+        cache: &mut Option<(usize, ClosureCache<'a, T>)>,
     ) {
         if symbol.is_null() {
-            self.of_null(transitions, state);
+            Self::transit_null(&mut self.states, transitions, state);
 
             return;
         }
 
+        if let Some((capacity, cache)) = cache {
+            match cache.entry(state) {
+                Entry::Occupied(mut view) => {
+                    let view = view.get_mut();
+
+                    match view.entry(symbol) {
+                        Entry::Occupied(cached) => {
+                            self.states.append(&mut cached.get().clone());
+                        }
+
+                        Entry::Vacant(entry) => {
+                            let states = entry.insert(BTreeSet::new());
+
+                            Self::transit(states, transitions, state, symbol);
+                            self.states.append(&mut states.clone());
+                        }
+                    };
+                }
+
+                Entry::Vacant(entry) => {
+                    let mut cached = BTreeSet::new();
+
+                    Self::transit(&mut cached, transitions, state, symbol);
+                    self.states.append(&mut cached.clone());
+
+                    let view = entry.insert(Map::with_capacity(*capacity));
+
+                    view.insert(symbol, cached);
+                }
+            }
+
+            return;
+        }
+
+        Self::transit(&mut self.states, transitions, state, symbol);
+    }
+
+    fn transit<'a, T: AutomataTerminal>(
+        states: &mut BTreeSet<State>,
+        transitions: &Transitions<T>,
+        state: State,
+        symbol: &'a T,
+    ) {
         if let Some(outgoing) = transitions.view.get(&state) {
             for (through, to) in outgoing {
                 if through == symbol {
-                    self.of_null(transitions, *to);
+                    Self::transit_null(states, transitions, *to);
                 }
             }
         }
     }
 
-    pub(super) fn of_null<T: AutomataTerminal>(
-        &mut self,
+    fn transit_null<T: AutomataTerminal>(
+        states: &mut BTreeSet<State>,
         transitions: &Transitions<T>,
         state: State,
     ) {
-        let _ = self.states.insert(state);
+        let _ = states.insert(state);
 
         if let Some(outgoing) = transitions.view.get(&state) {
             for (through, to) in outgoing {
                 if through.is_null() {
                     let to = *to;
 
-                    if !self.states.contains(&to) {
-                        self.of_null(transitions, to);
+                    if !states.contains(&to) {
+                        Self::transit_null(states, transitions, to);
                     }
                 }
             }
         }
     }
 }
+
+pub(super) type ClosureCache<'a, T> = Map<State, Map<&'a T, BTreeSet<State>>>;

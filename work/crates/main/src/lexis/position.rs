@@ -1,125 +1,82 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use crate::{
-    lexis::{CodeContent, Site, SourceCode, ToSite},
-    std::*,
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Formatter},
+    ops::AddAssign,
 };
 
-/// A one-based line number inside the source code.
+use crate::lexis::{Site, SourceCode, ToSite};
+
+/// An index of the line in the source code text.
 ///
-/// In contrast to [Sites](crate::lexis::Site), Lines numeration starts with `1`. Number `1` means
-/// the first line in the source code. Number `2` means the second line in the source code,
-/// and so on. Number `0` is a valid value that means the first line too.
+/// Line numeration starts from 1, such that 1 denotes the first line,
+/// 2 denotes the second line, and so on.
+///
+/// Line 0 also denotes the first line.
+///
+/// If this number exceed the total number of lines, the value interpreted
+/// as the source code text end.
 pub type Line = usize;
 
-/// A one-based Unicode character number inside the source code line string.
+/// An index of the character of the line in the source code text.
 ///
-/// In contrast to [Sites](crate::lexis::Site), Columns numeration starts with `1`. Number `1` means
-/// the first UTF-8 character in the source code line. Number `2` means the second UTF-8 character
-/// in the source code line, and so on. Number `0` is a valid value that means the first character
-/// inside the source code line too.
+/// Column numeration starts from 1, such that 1 denotes the first char,
+/// 2 denotes the second char, and so on.
+///
+/// Column 0 also denotes the first char.
+///
+/// If this number exceed the total number of characters of the line, the value
+/// interpreted as the end of the line.
+///
+/// Note that the line delimiters (`\n` and `\r` chars) are parts of the line
+/// tail.
 pub type Column = usize;
 
-/// A line-column index object into the source code text.
+/// A line-column index of the Unicode character within the source code text.
 ///
-/// This object interprets the source code text as a table of UTF-8 characters, where the rows are
-/// text lines, and the columns are UTF-8 characters inside lines.
+/// The line and the column indices are 1-based, and the Position object
+/// is always [valid](ToSite::is_valid_site) index for any source code.
 ///
-/// Lines separated either by `\n`, or `\r\n`, or `\n\r` character sequences.
-/// Line-break/Caret-return symbols interpretation is encoding-independent to some extent.
-///
-/// This object implements [ToSite](crate::lexis::ToSite) trait. Any Position value is always
-/// [valid to resolve](crate::lexis::ToSite::is_valid_site), but resolution complexity is linear
-/// to the entire source code text size. An API user should take into account this performance
-/// characteristic in the end compilation system design. [AddAssign](::std::ops::AddAssign)(`+=`)
-/// operation that incrementally moves Position into specified string symbols forward could help
-/// in resolving possible performance bottlenecks when the Position object is supposed to be used
-/// frequently.
-///
-/// Also, the companion auto-implemented trait [ToPosition](crate::lexis::ToPosition) allows turning
-/// of any `ToSite` implementation back to Position. In Particular [Site](crate::lexis::Site) or
-/// [SiteRef](crate::lexis::SiteRef) can be turned into Position instance.
-///
-/// ```rust
-/// use lady_deirdre::lexis::{
-///     Position, ToSite, ToPosition, SimpleToken, TokenBuffer, CodeContent
-/// };
-///
-/// let mut code = TokenBuffer::<SimpleToken>::default();
-///
-/// code.append("First line\n");
-/// code.append("Second line\n");
-/// code.append("Third line\n");
-///
-/// assert_eq!(code.substring(Position::new(1, 1)..=Position::new(1, 100)), "First line\n");
-/// assert_eq!(code.substring(Position::new(2, 1)..=Position::new(2, 100)), "Second line\n");
-/// assert_eq!(code.substring(Position::new(3, 1)..=Position::new(3, 100)), "Third line\n");
-///
-/// assert!(Position::new(2, 8) < Position::new(3, 6));
-/// assert_eq!(code.substring(Position::new(2, 8)..Position::new(3, 6)), "line\nThird");
-///
-/// let site = Position::new(2, 8).to_site(&code).unwrap();
-/// let mut position = site.to_position(&code).unwrap();
-///
-/// assert_eq!(position, Position::new(2, 8));
-///
-/// position += "line\nThird".chars();
-///
-/// assert_eq!(position, Position::new(3, 6));
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// For details, see [Line] and [Column] specifications.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
-    /// A number of the line inside the Source code.
-    ///
-    /// Numeration is One-based. Line `1` is the first line. Line `2` is the second line, and so on.
-    /// Number `0` is a valid value that means the first line too.
-    ///
-    /// If the `line` number is greater than the total number of lines inside the source code, this
-    /// number will be interpreted as a source code text end.
+    /// A line number. This value is 1-based.
     pub line: Line,
 
-    /// A number of the UTF-8 character inside the `line` of the Source code.
-    ///
-    /// Numeration is One-based. Colum `1` is the first character. Line `2` is the character, and
-    /// so on. Number `0` is a valid value that means the first character too.
-    ///
-    /// If the `column` number is greater than the total number of characters inside this `line`,
-    /// this number will be interpreted as the line string end.
+    /// A number of the character in the line. This value is 1-based.
     pub column: Column,
 }
 
@@ -154,16 +111,16 @@ impl Default for Position {
 
 impl Display for Position {
     #[inline(always)]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        formatter.write_fmt(format_args!("[{}:{}]", self.line, self.column))
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_fmt(format_args!("{}:{}", self.line, self.column))
     }
 }
 
 impl<I: Iterator<Item = char>> AddAssign<I> for Position {
     #[inline]
     fn add_assign(&mut self, rhs: I) {
-        for character in rhs {
-            match character {
+        for ch in rhs {
+            match ch {
                 '\n' => {
                     self.line += 1;
                     self.column = 1;
@@ -179,43 +136,16 @@ impl<I: Iterator<Item = char>> AddAssign<I> for Position {
 
 unsafe impl ToSite for Position {
     fn to_site(&self, code: &impl SourceCode) -> Option<Site> {
-        if self.line == 0 {
-            return Some(0);
-        }
+        let span = code.lines().line_span(self.line);
 
-        let mut line = 1;
-        let mut column = 0;
-
-        for (site, character) in code.chars(..).enumerate() {
-            match character {
-                '\r' => {
-                    if line == self.line {
-                        return Some(site);
-                    }
-
-                    column = 0;
-                }
-
-                '\n' => {
-                    if line == self.line {
-                        return Some(site);
-                    }
-
-                    line += 1;
-                    column = 0;
-                }
-
-                _ => {
-                    column += 1;
-
-                    if self.line == line && self.column <= column {
-                        return Some(site);
-                    }
-                }
-            }
-        }
-
-        Some(code.length())
+        Some(
+            self.column
+                .checked_sub(1)
+                .unwrap_or_default()
+                .checked_add(span.start)
+                .unwrap_or(span.end)
+                .min(span.end),
+        )
     }
 
     #[inline(always)]
@@ -225,86 +155,9 @@ unsafe impl ToSite for Position {
 }
 
 impl Position {
-    /// A helper shortcut constructor of the Position object.
+    /// A constructor of the Position object.
     #[inline(always)]
     pub fn new(line: Line, column: Column) -> Self {
         Self { line, column }
-    }
-
-    pub(super) fn from_site(code: &impl SourceCode, site: Site) -> Self {
-        if site == 0 {
-            return Self::default();
-        }
-
-        let mut line = 1;
-        let mut column = 1;
-        let mut candidate = 0;
-        let mut slice = code.chars(..);
-
-        loop {
-            let next = match slice.next() {
-                None => break,
-                Some(character) => character,
-            };
-
-            candidate += 1;
-
-            match next {
-                '\n' => {
-                    line += 1;
-                    column = 1;
-                }
-
-                _ => {
-                    column += 1;
-                }
-            }
-
-            if candidate >= site {
-                break;
-            }
-        }
-
-        Self { line, column }
-    }
-}
-
-/// An auto-implemented trait that turns any [ToSite](crate::lexis::ToSite) implementation
-/// into [Position](crate::lexis::Position).
-///
-/// ```rust
-/// use lady_deirdre::lexis::{ToPosition, TokenBuffer, SimpleToken, Position};
-///
-/// let mut code = TokenBuffer::<SimpleToken>::default();
-///
-/// code.append("First line\n");
-/// code.append("Second line\n");
-/// code.append("Third line\n");
-///
-/// // The third character "c" in the "Second line\n" substring.
-/// let site = 13;
-/// let position = site.to_position(&code).unwrap();
-///
-/// assert_eq!(position, Position::new(2, 3));
-/// ```
-pub trait ToPosition: ToSite {
-    /// Turns an object that implements a [ToSite](crate::lexis::ToSite) trait to Position.
-    ///
-    /// Returns [Some] value if and only if `self.is_valid_site(code)`.
-    ///
-    /// This operation performs in linear time of the entire source code size.
-    fn to_position(&self, code: &impl SourceCode) -> Option<Position>;
-}
-
-impl<S: ToSite> ToPosition for S {
-    #[inline(always)]
-    fn to_position(&self, code: &impl SourceCode) -> Option<Position> {
-        let site = match self.to_site(code) {
-            None => return None,
-
-            Some(site) => site,
-        };
-
-        Some(Position::from_site(code, site))
     }
 }

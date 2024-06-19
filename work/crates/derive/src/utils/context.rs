@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,7 +36,7 @@ use std::{hash::Hash, mem::replace};
 
 use crate::utils::{
     automata::Automata,
-    debug_panic,
+    system_panic,
     transitions::Transitions,
     Map,
     PredictableCollection,
@@ -56,7 +53,7 @@ pub trait AutomataContext: Sized {
 
     fn copy(&mut self, automata: &Automata<Self>) -> Automata<Self> {
         let mut state_map =
-            Map::with_capacity(automata.transitions.length() + automata.finish.len() + 1);
+            Map::with_capacity(automata.transitions.len() + automata.finish.len() + 1);
 
         let start = self.gen_state();
 
@@ -81,7 +78,7 @@ pub trait AutomataContext: Sized {
 
     fn terminal(&mut self, terminals: Set<Self::Terminal>) -> Automata<Self> {
         if terminals.is_empty() {
-            debug_panic!("An attempt to create a terminal of empty set.");
+            system_panic!("An attempt to create a terminal of empty set.");
         }
 
         let start = self.gen_state();
@@ -101,6 +98,36 @@ pub trait AutomataContext: Sized {
     }
 
     fn union(&mut self, mut a: Automata<Self>, b: Automata<Self>) -> Automata<Self> {
+        let mut fits = true;
+
+        if let Some(a_outgoing) = a.transitions.outgoing(&a.start) {
+            if let Some(b_outgoing) = b.transitions.outgoing(&b.start) {
+                'outer: for a_out in a_outgoing {
+                    for b_out in b_outgoing {
+                        if a_out.0 == b_out.0 {
+                            fits = false;
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+
+        if fits {
+            a.transitions
+                .rename_and_merge(b.transitions, b.start, a.start);
+
+            for mut b_finish in b.finish {
+                if b_finish == b.start {
+                    b_finish = a.start;
+                }
+
+                a.finish.insert(b_finish);
+            }
+
+            return a;
+        }
+
         let start = self.gen_state();
 
         a.transitions.merge(b.transitions);
@@ -117,6 +144,40 @@ pub trait AutomataContext: Sized {
     }
 
     fn concatenate(&mut self, mut a: Automata<Self>, b: Automata<Self>) -> Automata<Self> {
+        if let Some(a_finish) = a.finish.single() {
+            let mut fits = true;
+
+            if let Some(b_outgoing) = b.transitions.outgoing(&b.start) {
+                'outer: for (b_out, _) in b_outgoing {
+                    if let Some(a_outgoing) = a.transitions.outgoing(&a_finish) {
+                        for (a_out, _) in a_outgoing {
+                            if a_out == b_out {
+                                fits = false;
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if fits {
+                a.transitions
+                    .rename_and_merge(b.transitions, b.start, a_finish);
+
+                a.finish.clear();
+
+                for mut b_finish in b.finish {
+                    if b_finish == b.start {
+                        b_finish = a_finish;
+                    }
+
+                    let _ = a.finish.insert(b_finish);
+                }
+
+                return a;
+            }
+        }
+
         for a_finish in replace(&mut a.finish, b.finish) {
             a.transitions.through_null(a_finish, b.start);
         }
@@ -156,6 +217,10 @@ pub trait AutomataContext: Sized {
     }
 
     fn optional(&mut self, mut inner: Automata<Self>) -> Automata<Self> {
+        if inner.finish.contains(&inner.start) {
+            return inner;
+        }
+
         let start = self.gen_state();
 
         inner.transitions.through_null(start, inner.start);
@@ -170,23 +235,19 @@ pub trait AutomataContext: Sized {
 
     fn optimize(&mut self, automata: &mut Automata<Self>) {
         match self.strategy() {
-            &OptimizationStrategy::CANONICALIZE => automata.canonicalize(self),
-            &OptimizationStrategy::DETERMINE => automata.determine(self),
-            &OptimizationStrategy::NONE => (),
+            Strategy::CANONICALIZE => automata.canonicalize(self),
+            Strategy::DETERMINIZE => automata.determinize(self),
         }
     }
 
-    fn strategy(&self) -> &OptimizationStrategy {
-        static DEFAULT: OptimizationStrategy = OptimizationStrategy::CANONICALIZE;
-
-        &DEFAULT
+    fn strategy(&self) -> Strategy {
+        Strategy::CANONICALIZE
     }
 }
 
-#[derive(PartialEq, Eq)]
-pub enum OptimizationStrategy {
-    NONE,
-    DETERMINE,
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Strategy {
+    DETERMINIZE,
     CANONICALIZE,
 }
 
@@ -198,16 +259,9 @@ pub trait AutomataTerminal: Clone + Eq + Hash + 'static {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{
-        AutomataContext,
-        AutomataTerminal,
-        OptimizationStrategy,
-        Set,
-        SetImpl,
-        State,
-    };
+    use crate::utils::{AutomataContext, AutomataTerminal, Set, SetImpl, State, Strategy};
 
-    struct TestContext(State, OptimizationStrategy);
+    struct TestContext(State, Strategy);
 
     impl AutomataContext for TestContext {
         type Terminal = TestTerminal;
@@ -222,8 +276,8 @@ mod tests {
         }
 
         #[inline(always)]
-        fn strategy(&self) -> &OptimizationStrategy {
-            &self.1
+        fn strategy(&self) -> Strategy {
+            self.1
         }
     }
 
@@ -243,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_automata() {
-        let mut context = TestContext(1, OptimizationStrategy::CANONICALIZE);
+        let mut context = TestContext(1, Strategy::CANONICALIZE);
 
         let foo = context.terminal(Set::new(["foo"]));
         let bar = context.terminal(Set::new(["bar"]));

@@ -1,0 +1,38 @@
+name: Deploy User Guide
+
+on:
+  push:
+    paths: [ "work/book/**" ]
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install
+        run: |
+          mkdir book
+          curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=./book
+          echo `pwd`/book >> $GITHUB_PATH
+      - name: Deploy
+        run: |
+          cd work/book
+          mdbook build
+          git worktree add gh-pages
+          git config user.name "deploy-user-guide"
+          git config user.email ""
+          cd gh-pages
+          git update-ref -d refs/heads/gh-pages
+          rm -rf *
+          mv ../output/* .
+          echo "lady-deirdre.lakhin.com" > CNAME
+          git add .
+          git commit -m "Deploy User Guide $GITHUB_SHA to gh-pages"
+          git push --force --set-upstream origin gh-pages

@@ -1,310 +1,308 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
 extern crate lady_deirdre_derive;
 
+use std::fmt::{Debug, Formatter};
+
 pub use lady_deirdre_derive::Token;
 
 use crate::{
-    arena::{Id, Identifiable, Ref},
-    lexis::{ChunkRef, Length, LexisSession, Site, SiteRef, SourceCode, TokenBuffer},
-    std::*,
+    arena::{Entry, Id, Identifiable},
+    lexis::{
+        Chunk,
+        Length,
+        LexisSession,
+        Site,
+        SiteRef,
+        SiteSpan,
+        SourceCode,
+        ToSpan,
+        TokenRule,
+        EOI,
+    },
+    syntax::{NodeRef, PolyRef, PolyVariant, RefKind, NIL_NODE_REF},
+    units::CompilationUnit,
 };
 
-/// A number of Tokens.
+/// A [TokenRef] reference that does not point to any token.
+///
+/// The value of this static equals to the [TokenRef::nil] value.
+pub static NIL_TOKEN_REF: TokenRef = TokenRef::nil();
+
+/// A number of tokens.
 pub type TokenCount = usize;
 
-/// A trait that specifies Token's kind and provides a lexical grammar parser.
+/// A type of the source code token.
 ///
-/// An API user implements this trait to specify Programming Language lexical grammar and the
-/// lexis unit type(a "Token").
+/// Typically, this trait should be implemented on the `#[repr(u8)]` and [Copy]
+/// enum types, where each enum variant without fields represents an individual
+/// token kind.
 ///
-/// This trait is supposed to be implemented on the Rust enum type with variants representing
-/// token kinds, but this is not a strict requirement. From the functional sense the main purpose
-/// of the Token implementation is to provide a lexical parser that will re-parse sequences of
-/// Unicode character by interacting with arbitrary [LexisSession](crate::lexis::LexisSession)
-/// interface that, in turn, manages parsing process.
+/// The trait provides language-agnostic functions to reveal metadata about the
+/// lexis of the language, such as [name](Token::name) to get token's name,
+/// or the [eoi](Token::eoi) function that returns a token kind that denoting
+/// the end-of-input token of this language.
 ///
-/// An API user is encouraged to implement this trait using helper
-/// [Token](::lady_deirdre_derive::Token) macro-derive on enum types by specifying lexical
-/// grammar directly on enum variants through the macros attributes.
+/// The [Token::scan] function serves as the lexical scanner of a single token
+/// in the source code text, and the constructor of this token instance.
 ///
-/// ```rust
-/// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, ChunkRef};
+/// Essentially, this trait defines the lexical component of the programming
+/// language grammar.
 ///
-/// #[derive(Token, PartialEq, Debug)]
-/// enum MyToken {
-///     // Exact string "FOO".
-///     #[rule("FOO")]
-///     Foo,
-///
-///     // Exact string "bar".
-///     #[rule("bar")]
-///     Bar,
-///
-///     // An unlimited non empty sequence of '_' characters.
-///     #[rule('_'+)]
-///     LowDashes,
-///
-///     // Character sequences that don't fit this grammar.
-///     #[mismatch]
-///     Mismatch,
-/// }
-///
-/// let mut buf = TokenBuffer::<MyToken>::from("FOO___bar_mismatch__FOO");
-///
-/// assert_eq!(
-///     buf.chunks(..).map(|chunk: ChunkRef<'_, MyToken>| chunk.token).collect::<Vec<_>>(),
-///     vec![
-///         &MyToken::Foo,
-///         &MyToken::LowDashes,
-///         &MyToken::Bar,
-///         &MyToken::LowDashes,
-///         &MyToken::Mismatch,
-///         &MyToken::LowDashes,
-///         &MyToken::Foo,
-///     ],
-/// );
-/// ```
-///
-/// The Token enum object may keep additional semantic metadata inside variants' fields, but
-/// optimization-wise you will gain the best performance if the Token would require as little
-/// allocated memory as possible(ideally one byte).
-///
-/// An API user can implement the Token trait manually too. For example, using 3rd party lexical
-/// scanner libraries. See [`Token::new`](crate::lexis::Token::new) function specification for
-/// details.
-pub trait Token: Sized + 'static {
-    /// Parses a single token from the source code text, and returns a Token instance that
-    /// represents this token kind.
+/// You are encouraged to use the companion [Token](lady_deirdre_derive::Token)
+/// derive macro to implement the lexical grammar on enum types in terms
+/// of the scanner's regular expressions.
+pub trait Token: Copy + Eq + Send + Sync + Sized + 'static {
+    /// Specifies the minimum length of the token in Unicode chars that is
+    /// guaranteed to be unambiguous in terms of the preceding tokens.
     ///
-    /// This is a low-level API function.
+    /// Usually, this value equals 1, meaning that any token is unambiguous.
     ///
-    /// An API user encouraged to use [Token](::lady_deirdre_derive::Token) macro-derive to
-    /// implement this trait automatically based on a set of Regular Expressions,
-    /// but you can implement it manually too.
+    /// Zero is an invalid value for LOOKAHEAD, because in Lady Deirdre,
+    /// there are no tokens of zero length.
     ///
-    /// You need to call this function manually only if you want to implement an extension API to
-    /// this crate. In this case you should also prepare a custom implementation of the LexisSession
-    /// trait. See [LexisSession](crate::lexis::LexisSession) specification for details.
+    /// When using the [Token](lady_deirdre_derive::Token) macro, this value
+    /// is either set to 1 as default or overridden by
+    /// the `#[lookback(...)]` attriubute:
     ///
-    /// The function implements a
-    /// [Finite-State Machine](https://en.wikipedia.org/wiki/Finite-state_machine) that reads
-    /// as many [characters](char) from input sequence of [String](::std::ops::String) as needed to
-    /// decide about the read substring token kind. Each time the function reads the next character,
-    /// it advances `session` internal cursor.
-    ///
-    /// As the function implements a FSM it should not look of more than a single character ahead
-    /// to make a decision on each Algorithm step. Failure to do so could lead to logical
-    /// errors during incremental re-parsing.
-    ///
-    /// **Algorithm Specification:**
-    ///   - The Algorithm invokes [`session.character()`](crate::lexis::LexisSession::character)
-    ///     function to fetch the character that the Session's internal cursor currently looking at.
-    ///     This function does not advance internal cursor. In the beginning the cursor points to
-    ///     the first character of input String.
-    ///
-    ///     If this function returns a Null-character(`'\0'`) that means that the Session cursor has
-    ///     reached the end of input. This character is not a part of the input sequence, an
-    ///     Algorithm should ignore this character, but it should make a final decision and return
-    ///     a Token instance. Note that if the original input sequence(a source code text) contains
-    ///     Null-character, the `session.character()` yields a
-    ///     [replacement character](::std::char::REPLACEMENT_CHARACTER) instead.
-    ///   - The Algorithm invokes [`session.advance()`](crate::lexis::LexisSession::advance)
-    ///     function to advance the Session's internal cursor to the next character in the input
-    ///     character sequence.
-    ///   - If the Algorithm decides that the input substring prior to the current character
-    ///     contains complete token, it should invoke a
-    ///     [`session.submit()`](crate::lexis::LexisSession::submit) function. In this case the
-    ///     Algorithm could either return a Token instance, or to continue scanning process. The
-    ///     LexisSession ignores all calls of Submit function happening before the last one.
-    ///
-    ///     Note that "submitted" character is not going to be a part of the parsed token substring.
-    ///     By calling a Submit function the Algorithm submits the character sequence prior
-    ///     to the current character.
-    ///   - It is assumed that the Token type defines special kind of Token that would specify
-    ///     a lexically-unrecognizable input sequences. If the Algorithm cannot recognize a
-    ///     lexically valid token it should never call a `session.submit()` function, and in the end
-    ///     it should return an instance of such "mismatched" Token.
-    ///   - The Algorithm can optionally obtain a slice of the input string from the beginning of
-    ///     the scanning session till submitted character exclusively by calling a
-    ///     [`session.substring()`](crate::lexis::LexisSession::substring) function.The Algorithm
-    ///     can use this substring to analise and store additional metadata inside the returning
-    ///     Token instance.
-    ///
-    /// ```rust
-    /// use lady_deirdre::lexis::{Token, TokenBuffer, CodeContent, LexisSession, ChunkRef};
-    ///
-    /// // Represents integer numbers or lower case alphabetic words.
-    /// #[derive(PartialEq, Debug)]
-    /// enum NumOrWord {
-    ///     Num(usize),
-    ///     Word(String),
-    ///     Mismatch,
-    /// }
-    ///
-    /// impl Token for NumOrWord {
-    ///     fn new(session: &mut impl LexisSession) -> Self {
-    ///         if session.character() >= 'a' && session.character() <= 'z' {
-    ///             loop {
-    ///                 session.advance();
-    ///                 if session.character() < 'a' || session.character() > 'z' { break; }
-    ///             }
-    ///
-    ///             session.submit();
-    ///
-    ///             return Self::Word(session.substring().to_string());
-    ///         }
-    ///
-    ///         if session.character() == '0' {
-    ///             session.advance();
-    ///             session.submit();
-    ///             return Self::Num(0);
-    ///         }
-    ///
-    ///         if session.character() >= '1' && session.character() <= '9' {
-    ///             loop {
-    ///                 session.advance();
-    ///                 if session.character() < '0' || session.character() > '9' { break; }
-    ///             }
-    ///
-    ///             session.submit();
-    ///
-    ///             return Self::Num(session.substring().parse::<usize>().unwrap());
-    ///         }
-    ///
-    ///         Self::Mismatch
-    ///     }
-    /// }
-    ///
-    /// let buf = TokenBuffer::<NumOrWord>::from("foo123_bar");
-    ///
-    /// assert_eq!(
-    ///     buf
-    ///         .chunks(..)
-    ///         .map(|chunk_ref: ChunkRef<NumOrWord>| chunk_ref.token)
-    ///         .collect::<Vec<_>>(),
-    ///     vec![
-    ///         &NumOrWord::Word(String::from("foo")),
-    ///         &NumOrWord::Num(123),
-    ///         &NumOrWord::Mismatch,
-    ///         &NumOrWord::Word(String::from("bar")),
-    ///     ],
-    /// );
+    /// ```ignore
+    /// #[derive(Token)]
+    /// #[lookback(3)]
+    /// enum MyToken {}
     /// ```
-    fn new(session: &mut impl LexisSession) -> Self;
+    const LOOKBACK: Length;
 
-    /// A helper function to lexically scan provided `string`.
+    /// Scans a single token from the beginning of the input text.
     ///
-    /// This function is a shortcut to the `TokenBuffer::from(string)` call.
+    /// The `session` parameter of type [LexisSession] provides access
+    /// to the byte stream of a valid UTF-8 encoded text that needs to be
+    /// scanned.
+    ///
+    /// It returns an instance of the Token that denotes scanning result.
+    ///
+    /// If the function fails to recognize any token, it returns
+    /// the [mismatch](Self::mismatch) token. Otherwise, it returns
+    /// a non-mismatch token that denotes the scanned token kind.
+    ///
+    /// If the function returns a non-mismatch token it must call the
+    /// [LexisSession::submit] at least once, and the last call of that function
+    /// denotes the end-boundary in the byte stream of where the scan ends.
+    ///
+    /// The underlying algorithm always scans the maximum-wide token that
+    /// matches the beginning of the input stream. Non-mismatched tokens
+    /// are tokens of non-zero length.
+    ///
+    /// Typically, you don't need to call this function manually. It is the
+    /// responsibility of the compilation unit manager
+    /// (e.g., [Document](crate::units::Document)) to decide when to call this
+    /// function.
+    ///
+    /// For a detailed specification of the lexical parsing process,
+    /// refer to the [LexisSession] documentation.
+    fn scan(session: &mut impl LexisSession) -> Self;
+
+    /// Returns a Token instance that denotes the end-of-input.
+    ///
+    /// This is a special kind of token that normally does not exist in the
+    /// token streams. It is used by various functions around the crate API to
+    /// denote the end of the stream inputs.
+    ///
+    /// Additionally, the eoi token of any language has a predefined token
+    /// [rule](Self::rule) equal to [EOI].
+    ///
+    /// When using the [Token](lady_deirdre_derive::Token) macro, this token
+    /// variant is denoted by the `0` discriminant value:
+    ///
+    /// ```ignore
+    /// #[derive(Token)]
+    /// #[repr(u8)]
+    /// enum MyToken {
+    ///     EOI = 0,
+    /// }
+    /// ```
+    fn eoi() -> Self;
+
+    /// Returns a Token instance that denotes a fragment of the source code text
+    /// that does not belong to a known set of lexical tokens of the programming
+    /// language.
+    ///
+    /// In principal, lexical scanning is an infallible process. The lexical
+    /// scanner guarantees to be able to split any source code text into
+    /// a sequence of tokens. Since a token set of a particular programming
+    /// language may be non-exhaustive, this kind of token is used as a sink
+    /// for the text fragments that the scanner unable to classify.
+    ///
+    /// Additionally, the mismatch token of any language has a predefined token
+    /// [rule](Self::rule) equal to [MISMATCH](crate::lexis::MISMATCH).
+    ///
+    /// When using the [Token](lady_deirdre_derive::Token) macro, this token
+    /// variant is denoted by the `1` discriminant value:
+    ///
+    /// ```ignore
+    /// #[derive(Token)]
+    /// #[repr(u8)]
+    /// enum MyToken {
+    ///     Mismatch = 1,
+    /// }
+    /// ```
+    fn mismatch() -> Self;
+
+    /// Returns a numeric representation of this token.
+    ///
+    /// Usually, this value equals the enum's variant discriminant:
+    ///
+    /// ```ignore
+    /// #[derive(Token)]
+    /// enum MyToken {
+    ///     #[rule()]
+    ///     Variant1 = 20, // self.rule() == 20
+    ///
+    ///     #[rule()]
+    ///     Variant2 = 30,  // self.rule() == 30
+    /// }
+    /// ```
+    fn rule(self) -> TokenRule;
+
+    /// A debug name of this token.
+    ///
+    /// Returns None if this feature is disabled for this token instance.
+    ///
+    /// When using the [Token](lady_deirdre_derive::Token) macro, this function
+    /// returns the stringified variant's name:
+    ///
+    /// ```ignore
+    /// #[derive(Token)]
+    /// enum MyToken {
+    ///     #[rule()]
+    ///     Variant {}, // self.name() == Some("Variant")
+    /// }
+    /// ```
     #[inline(always)]
-    fn parse(string: impl Borrow<str>) -> TokenBuffer<Self> {
-        let mut buffer = TokenBuffer::default();
-
-        buffer.append(string.borrow());
-
-        buffer
+    fn name(self) -> Option<&'static str> {
+        Self::rule_name(self.rule())
     }
+
+    /// An end-user display description of this token.
+    ///
+    /// Returns None if this feature is disabled for this token instance.
+    ///
+    /// This function is intended to be used for the syntax errors formatting.
+    ///
+    /// When using the [Token](lady_deirdre_derive::Token) macro, this function
+    /// returns what you have specified with the `#[describe(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Token)]
+    /// enum MyToken {
+    ///     // self.describe(false) == Some("short")
+    ///     // self.describe(true) == Some("verbose")
+    ///     #[rule()]
+    ///     #[describe("short", "verbose")]
+    ///     Variant {},
+    /// }
+    /// ```
+    ///
+    /// The difference between the short (`verbose` is false) and verbose
+    /// (verbose is `true`) descriptions is that the short version represents
+    /// a "class" of tokens, while the verbose version provides a more
+    /// detailed text specific to this particular token.
+    ///
+    /// For example, a short description of the Plus and Mul operator tokens
+    /// would simply be "operator", whereas, for verbose versions
+    /// this function might returns something like "sum" and "mul".
+    #[inline(always)]
+    fn describe(self, verbose: bool) -> Option<&'static str> {
+        Self::rule_description(self.rule(), verbose)
+    }
+
+    /// A debug name of the token rule.
+    ///
+    /// The returning value is the same as `self.name(self.rule())`.
+    ///
+    /// See [name](Self::name) for details.
+    fn rule_name(rule: TokenRule) -> Option<&'static str>;
+
+    /// An end-user display description of the token rule.
+    ///
+    /// The returning value is the same as `self.describe(self.rule(), verbose)`.
+    ///
+    /// See [describe](Self::describe) for details.
+    fn rule_description(rule: TokenRule, verbose: bool) -> Option<&'static str>;
 }
 
-/// A weak reference of the [Token] and its [Chunk](crate::lexis::Chunk) metadata inside the source
-/// code.
+/// A globally unique reference of the [token](Token) in the source code.
 ///
-/// This objects represents a long-lived lifetime independent and type independent cheap to
-/// [Copy](::std::marker::Copy) safe weak reference into the source code lexical structure.
+/// Each [source code](SourceCode) token could be uniquely addressed within
+/// a pair of the [Id] and [Entry], where the identifier uniquely addresses
+/// a specific compilation unit instance (source code), and
+/// the entry part addresses a token within this code.
 ///
-/// TokenRef is capable to survive source code incremental changes happening aside of the referred
-/// Token.
+/// Essentially, TokenRef is a composite index.
 ///
-/// ```rust
-/// use lady_deirdre::{
-///     Document,
-///     lexis::{TokenRef, SimpleToken, SourceCode, TokenCursor, CodeContent},
-///     syntax::NoSyntax,
-/// };
+/// Both components of this index form a unique pair
+/// (within the current process), because each compilation unit has a unique
+/// identifier, and the tokens within the source code always receive unique
+/// [Entry] indices within the source code.
 ///
-/// let mut doc = Document::<NoSyntax<SimpleToken>>::from("foo bar baz");
+/// If the token instance has been removed from the source code over time,
+/// new tokens within this source code will never occupy the same TokenRef
+/// object, but the TokenRef referred to the removed Token would
+/// become _invalid_.
 ///
-/// // Reference to the "bar" token.
-/// let bar_token: TokenRef = doc.cursor(..).token_ref(2);
+/// The [nil](TokenRef::nil) TokenRefs are special references that are considered
+/// to be always invalid (they intentionally don't refer to any token within
+/// any source code).
 ///
-/// assert!(bar_token.is_valid_ref(&doc));
-/// assert_eq!(bar_token.deref(&doc).unwrap(), &SimpleToken::Identifier);
-/// assert_eq!(bar_token.string(&doc).unwrap(), "bar");
-///
-/// // Prepend the source code text.
-/// doc.write(0..0, "123");
-/// assert_eq!(doc.substring(..), "123foo bar baz");
-///
-/// // "bar" token is still dereferancible since the changes has happened aside of this token.
-/// assert_eq!(bar_token.string(&doc).unwrap(), "bar");
-///
-/// // Writing inside of the "bar" token will obsolete prior TokenRef.
-/// doc.write(7..8, "B");
-/// assert_eq!(doc.substring(..), "123foo Bar baz");
-///
-/// assert!(!bar_token.is_valid_ref(&doc));
-/// ```
-///
-/// An API user normally does not need to inspect TokenRef inner fields manually or to construct
-/// a TokenRef manually unless you are working on the Crate API Extension.
-///
-/// For details on the Weak references framework design see [Arena](crate::arena) module
-/// documentation.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Two distinct instances of the nil TokenRef are always equal.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TokenRef {
-    /// An [identifier](crate::arena::Id) of the [SourceCode](crate::lexis::SourceCode) instance
-    /// this weakly referred Token belongs to.
+    /// An identifier of the source code.
     pub id: Id,
 
-    /// An internal weak reference of the token's Chunk into
-    /// the [SourceCode](crate::lexis::SourceCode) instance.
-    ///
-    /// This low-level [Ref](crate::arena::Ref) object used by the TokenRef under the hood to
-    /// fetch particular values from the SourceCode dereferencing functions(e.g.
-    /// [`SourceCode::get_token`](crate::lexis::SourceCode::get_token)).
-    pub chunk_ref: Ref,
+    /// A versioned index of the token instance within the source code.
+    pub entry: Entry,
 }
 
 impl Debug for TokenRef {
     #[inline]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
         match self.is_nil() {
-            false => formatter.write_fmt(format_args!("TokenRef({:?})", self.id())),
+            false => formatter.write_fmt(format_args!(
+                "TokenRef(id: {:?}, entry: {:?})",
+                self.entry, self.id,
+            )),
             true => formatter.write_str("TokenRef(Nil)"),
         }
     }
@@ -312,111 +310,99 @@ impl Debug for TokenRef {
 
 impl Identifiable for TokenRef {
     #[inline(always)]
-    fn id(&self) -> &Id {
-        &self.id
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+impl Default for TokenRef {
+    #[inline(always)]
+    fn default() -> Self {
+        Self::nil()
+    }
+}
+
+impl PolyRef for TokenRef {
+    #[inline(always)]
+    fn kind(&self) -> RefKind {
+        RefKind::Token
+    }
+
+    #[inline(always)]
+    fn is_nil(&self) -> bool {
+        self.id.is_nil() || self.entry.is_nil()
+    }
+
+    #[inline(always)]
+    fn as_variant(&self) -> PolyVariant {
+        PolyVariant::Token(*self)
+    }
+
+    #[inline(always)]
+    fn as_token_ref(&self) -> &TokenRef {
+        self
+    }
+
+    #[inline(always)]
+    fn as_node_ref(&self) -> &NodeRef {
+        &NIL_NODE_REF
+    }
+
+    #[inline(always)]
+    fn span(&self, unit: &impl CompilationUnit) -> Option<SiteSpan> {
+        self.chunk(unit)?.to_site_span(unit)
     }
 }
 
 impl TokenRef {
-    /// Returns an invalid instance of the TokenRef.
+    /// Returns a TokenRef that intentionally does not refer to any token within
+    /// any source code.
     ///
-    /// This instance never resolves to valid [Token] or [token metadata](crate::lexis::Chunk).
+    /// If you need just a static reference to the nil TokenRef, use
+    /// the predefined [NIL_TOKEN_REF] static.
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
-            id: *Id::nil(),
-            chunk_ref: Ref::Nil,
+            id: Id::nil(),
+            entry: Entry::nil(),
         }
     }
 
-    /// Returns `true` if this instance will never resolve to valid [Token] or
-    /// [token metadata](crate::lexis::Chunk).
+    /// Returns a copy of a source code token referred to by this TokenRef.
     ///
-    /// It is guaranteed that `TokenRef::nil().is_nil()` is always `true`, but in general if
-    /// this function returns `false` it is not guaranteed that provided instance is a valid
-    /// reference.
-    ///
-    /// To determine reference validity per specified [SourceCode](crate::lexis::SourceCode)
-    /// instance use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) function instead.
+    /// Returns None if this TokenRef is not valid for the specified `code`.
     #[inline(always)]
-    pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.chunk_ref.is_nil()
-    }
-
-    /// Immutably dereferences weakly referred [Token](crate::lexis::Token) of specified
-    /// [SourceCode](crate::lexis::SourceCode).
-    ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
-    ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// This function uses [`SourceCode::get_token`](crate::lexis::SourceCode::get_token) function
-    /// under the hood.
-    #[inline(always)]
-    pub fn deref<'code, T: Token>(
-        &self,
-        code: &'code impl SourceCode<Token = T>,
-    ) -> Option<&'code T> {
-        if &self.id != code.id() {
+    pub fn deref<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<T> {
+        if self.id != code.id() {
             return None;
         }
 
-        code.get_token(&self.chunk_ref)
+        code.get_token(&self.entry)
     }
 
-    /// Mutably dereferences weakly referred [Token](crate::lexis::Token) of specified
-    /// [SourceCode](crate::lexis::SourceCode).
+    /// Returns metadata (a "chunk") of the token referred to by this TokenRef.
     ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
+    /// The [Chunk] metadata includes a copy of the [Token] instance, its
+    /// absolute [site](Site) in the source code, the length (in Unicode
+    /// chars) of the token's string, and the reference to the source code
+    /// text fragment covered by this token.
     ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// Even though this function provides a way to mutate a Token instance, it is not recommended
-    /// to mutate the token in a way that would change its lexical group. In other words, for enum
-    /// Token implementations it is fine to change variant's inner fields, but is not recommended
-    /// to replace one variant with another variant.
-    ///
-    /// Such mutations do not lead to undefined behavior, but they could corrupt syntax parser
-    /// correctness.
-    ///
-    /// This function uses [`SourceCode::get_token_mut`](crate::lexis::SourceCode::get_token)
-    /// function under the hood.
-    #[inline(always)]
-    pub fn deref_mut<'code, T: Token>(
-        &self,
-        code: &'code mut impl SourceCode<Token = T>,
-    ) -> Option<&'code mut T> {
-        if &self.id != code.id() {
-            return None;
-        }
-
-        code.get_token_mut(&self.chunk_ref)
-    }
-
-    /// Returns a [ChunkRef](crate::lexis::ChunkRef) overall token metadata object of the weakly
-    /// referred token of specified [SourceCode](crate::lexis::SourceCode).
-    ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
-    ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// If an API user needs just a small subset of fields from returning object it is recommended
-    /// to use more specialized functions of the TokenRef instead.
+    /// Returns None if this TokenRef is not valid for the specified `code`.
     #[inline]
     pub fn chunk<'code, T: Token>(
         &self,
         code: &'code impl SourceCode<Token = T>,
-    ) -> Option<ChunkRef<'code, T>> {
-        if &self.id != code.id() {
+    ) -> Option<Chunk<'code, T>> {
+        if self.id != code.id() {
             return None;
         }
 
-        let token = code.get_token(&self.chunk_ref)?;
-        let site = code.get_site(&self.chunk_ref)?;
-        let length = code.get_length(&self.chunk_ref)?;
-        let string = code.get_string(&self.chunk_ref)?;
+        let token = code.get_token(&self.entry)?;
+        let site = code.get_site(&self.entry)?;
+        let length = code.get_length(&self.entry)?;
+        let string = code.get_string(&self.entry)?;
 
-        Some(ChunkRef {
+        Some(Chunk {
             token,
             site,
             length,
@@ -424,87 +410,98 @@ impl TokenRef {
         })
     }
 
-    /// Returns an absolute Unicode character index of the first character of the weakly referred
-    /// token's string into specified [source code text](crate::lexis::SourceCode).
+    /// Returns a [site](Site) (an absolute offset in Unicode chars) of a source
+    /// code token referred to by this TokenRef.
     ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
-    ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// This function uses [`SourceCode::get_site`](crate::lexis::SourceCode::get_site)
-    /// function under the hood.
+    /// Returns None if this TokenRef is not valid for the specified `code`.
     #[inline(always)]
     pub fn site<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<Site> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
-        code.get_site(&self.chunk_ref)
+        code.get_site(&self.entry)
     }
 
-    /// Returns a token string of the weakly referred token from specified
-    /// [source code text](crate::lexis::SourceCode).
+    /// Returns a reference to the source code text fragment covered by the
+    /// token referred to by this TokenRef.
     ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
-    ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// This function uses [`SourceCode::get_string`](crate::lexis::SourceCode::get_string)
-    /// function under the hood.
+    /// Returns None if this TokenRef is not valid for the specified `code`.
     #[inline(always)]
     pub fn string<'code, T: Token>(
         &self,
         code: &'code impl SourceCode<Token = T>,
     ) -> Option<&'code str> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
-        code.get_string(&self.chunk_ref)
+        code.get_string(&self.entry)
     }
 
-    /// Returns a number of Unicode characters of the string of the weakly referred token from
-    /// specified [source code text](crate::lexis::SourceCode).
+    /// Returns the [length](Length) (in Unicode chars) of a source code
+    /// fragment covered by the token referred to by this TokenRef.
     ///
-    /// Returns [None] if this TokenRef is not valid reference for specified `code` instance.
-    ///
-    /// Use [is_valid_ref](crate::lexis::TokenRef::is_valid_ref) to check TokenRef validity.
-    ///
-    /// This function uses [`SourceCode::get_length`](crate::lexis::SourceCode::get_length)
-    /// function under the hood.
+    /// Returns None if this TokenRef is not valid for the specified `code`.
     #[inline(always)]
     pub fn length<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<Length> {
-        if &self.id != code.id() {
+        if self.id != code.id() {
             return None;
         }
 
-        code.get_length(&self.chunk_ref)
+        code.get_length(&self.entry)
     }
 
-    /// Returns `true` if and only if referred weak Token reference belongs to specified
-    /// [SourceCode](crate::lexis::SourceCode), and referred Token exists in this SourceCode
-    /// instance.
+    /// Returns a numeric representation of the token referred to by this
+    /// TokenRef.
     ///
-    /// If this function returns `true`, all dereference function would return meaningful [Some]
-    /// values, otherwise these functions return [None].
+    /// Returns [EOI] if this TokenRef is not valid for the specified `code`.
     ///
-    /// This function uses [`SourceCode::contains`](crate::lexis::SourceCode::contains)
-    /// function under the hood.
+    /// See [Token::rule] for details.
+    #[inline(always)]
+    pub fn rule(&self, code: &impl SourceCode) -> TokenRule {
+        self.deref(code).map(|token| token.rule()).unwrap_or(EOI)
+    }
+
+    /// Returns a debug name of the referred token.
+    ///
+    /// Returns None if this TokenRef is not valid for the specified `code`,
+    /// or if the token instance does not have a name.
+    ///
+    /// See [Token::name] for details.
+    #[inline(always)]
+    pub fn name<T: Token>(&self, code: &impl SourceCode<Token = T>) -> Option<&'static str> {
+        self.deref(code).map(T::name).flatten()
+    }
+
+    /// Returns an end-user display description of the referred token.
+    ///
+    /// Returns None if this TokenRef is not valid for the specified `code`,
+    /// or if the token instance does not have a description.
+    ///
+    /// See [Token::describe] for details.
+    #[inline(always)]
+    pub fn describe<T: Token>(
+        &self,
+        code: &impl SourceCode<Token = T>,
+        verbose: bool,
+    ) -> Option<&'static str> {
+        self.deref(code)
+            .map(|token| token.describe(verbose))
+            .flatten()
+    }
+
+    /// Returns true if the token referred to by this TokenRef exists in the specified
+    /// `code`.
     #[inline(always)]
     pub fn is_valid_ref(&self, code: &impl SourceCode) -> bool {
-        &self.id == code.id() && code.contains(&self.chunk_ref)
+        self.id == code.id() && code.has_chunk(&self.entry)
     }
 
-    /// Turns this weak reference into the Token string first character weak reference of the
-    /// [site index](lexis::crate::ToSite).
-    ///
-    /// The returning [SiteRef](lexis::crate::SiteRef) weak reference is a valid reference if and
-    /// only if TokenRef is a valid weak reference too.
-    ///
-    /// This function never fails, it is fine to call it on invalid references(and on the
-    /// [Nil](crate::lexis::TokenRef::nil) references in particular).
+    /// Returns a [SiteRef] site reference of this token reference that points
+    /// to the start site of the token.
     #[inline(always)]
     pub fn site_ref(self) -> SiteRef {
-        SiteRef::new_chunk_start(self)
+        SiteRef::start_of(self)
     }
 }

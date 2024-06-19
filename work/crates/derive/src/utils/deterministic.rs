@@ -1,57 +1,61 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
+// This file is a part of the "Lady Deirdre" work,                            //
 // a compiler front-end foundation technology.                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, and contribute to this work, you must agree to   //
+// the terms of the General License Agreement:                                //
 //                                                                            //
 // https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants you a Commercial-Limited License that gives you       //
+// the right to use my work in non-commercial and limited commercial products //
+// with a total gross revenue cap. To remove this commercial limit for one of //
+// your products, you must acquire an Unrestricted Commercial License.        //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials  //
+// of this work, you must assign these changes to me. Contributions are       //
+// governed by the "Derivative Work" section of the General License           //
+// Agreement.                                                                 //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted under //
+// the terms of the General License Agreement.                                //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is" without any warranties, express or implied,  //
+// except to the extent that such disclaimers are held to be legally invalid. //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::collections::BTreeMap;
+
 use crate::utils::{
-    transitions::{Closure, Transitions},
+    transitions::{Closure, ClosureCache, Transitions},
     Automata,
     AutomataContext,
+    AutomataTerminal,
     Map,
     PredictableCollection,
     Set,
     State,
 };
 
+const CACHE_THRESHOLD: usize = 10000;
+const PENDING_THRESHOLD: usize = 1000;
+
 pub(super) struct Deterministic<'a, C: AutomataContext> {
     context: &'a mut C,
     original: &'a Transitions<C::Terminal>,
     alphabet: &'a Set<C::Terminal>,
-    pending: Vec<(State, Closure)>,
+    pending: Pending,
     registered: Map<Closure, State>,
     transitions: Transitions<C::Terminal>,
+    cache: Option<(usize, ClosureCache<'a, C::Terminal>)>,
 }
 
 impl<'a, C: AutomataContext> Deterministic<'a, C> {
@@ -65,11 +69,22 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
         let mut start_closure = Closure::default();
 
         for start in start {
-            start_closure.of_null(transitions, *start);
+            start_closure.of(transitions, *start, &C::Terminal::null(), &mut None);
         }
 
-        let pending = Vec::with_capacity(transitions.length());
-        let registered = Map::with_capacity(transitions.length());
+        let capacity = transitions.len();
+
+        let pending = match capacity >= PENDING_THRESHOLD {
+            true => Pending::Map(BTreeMap::new()),
+            false => Pending::Vec(Vec::with_capacity(capacity)),
+        };
+
+        let registered = Map::with_capacity(capacity);
+
+        let cache = match capacity >= CACHE_THRESHOLD {
+            true => Some((alphabet.capacity(), Map::with_capacity(capacity))),
+            false => None,
+        };
 
         let mut deterministic = Self {
             context,
@@ -78,6 +93,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             pending,
             registered,
             transitions: Transitions::default(),
+            cache,
         };
 
         let start = deterministic.force_push(start_closure);
@@ -106,7 +122,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
     }
 
     fn pop(&mut self) -> bool {
-        let (from, closure) = match self.pending.pop() {
+        let (closure, from) = match self.pending.pop() {
             None => return false,
             Some(pair) => pair,
         };
@@ -117,7 +133,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             let mut target = Closure::default();
 
             for state in closure.into_iter().cloned() {
-                target.of(&self.original, state, symbol);
+                target.of(&self.original, state, symbol, &mut self.cache);
             }
 
             if target.is_empty() {
@@ -137,10 +153,8 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             return *state;
         }
 
-        for (state, pending) in self.pending.iter() {
-            if pending == &closure {
-                return *state;
-            }
+        if let Some(state) = self.pending.get(&closure) {
+            return state;
         }
 
         self.force_push(closure)
@@ -150,7 +164,7 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
     fn force_push(&mut self, closure: Closure) -> State {
         match closure.state() {
             Some(state) => {
-                self.pending.push((state, closure));
+                self.pending.push(closure, state);
 
                 state
             }
@@ -158,10 +172,52 @@ impl<'a, C: AutomataContext> Deterministic<'a, C> {
             None => {
                 let state = self.context.gen_state();
 
-                self.pending.push((state, closure));
+                self.pending.push(closure, state);
 
                 state
             }
+        }
+    }
+}
+
+enum Pending {
+    Vec(Vec<(Closure, State)>),
+    Map(BTreeMap<Closure, State>),
+}
+
+impl Pending {
+    #[inline(always)]
+    fn push(&mut self, closure: Closure, state: State) {
+        match self {
+            Self::Vec(pending) => pending.push((closure, state)),
+            Self::Map(pending) => {
+                let _ = pending.insert(closure, state);
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn pop(&mut self) -> Option<(Closure, State)> {
+        match self {
+            Self::Vec(pending) => pending.pop(),
+            Self::Map(pending) => pending.pop_last(),
+        }
+    }
+
+    #[inline(always)]
+    fn get(&self, closure: &Closure) -> Option<State> {
+        match self {
+            Self::Vec(pending) => {
+                for (pending, state) in pending {
+                    if pending == closure {
+                        return Some(*state);
+                    }
+                }
+
+                None
+            }
+
+            Self::Map(pending) => pending.get(closure).copied(),
         }
     }
 }
