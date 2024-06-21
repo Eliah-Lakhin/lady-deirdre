@@ -142,26 +142,27 @@ terms and conditions of the [General License Agreement](https://github.com/Eliah
 
 Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин). All rights reserved.
 
-### Can I use your work in my free software project?
+### Can I use your work in my open-source project?
 
-Yes, absolutely. I would be happy to assist with your project and hear your
-feedback to improve Lady Deirdre.
+Yes, you can use Lady Deirdre in your open-source projects. I would be happy to
+assist and hear your feedback to improve Lady Deirdre.
 
-The agreement automatically grants you a license to develop free software
-projects based on Lady Deirdre.
+The agreement automatically grants you a license to develop non-commercial
+software based on Lady Deirdre.
 
 ### May I contribute to your project?
 
-I welcome contributions to my project. If you find a bug or have a new feature
-suggestion, you can open a pull request in my GitHub repository.
+If you find a bug or have a new feature suggestion, you can open a pull request
+in my GitHub repository.
 
-Please be aware that my work is proprietary software. The agreement requires you
-to automatically assign me the changes you make to my project's source code.
+Please be aware that my work is proprietary software, intended for solo
+development. For this reason, the agreement requires you to automatically assign
+me the changes you make to my project's source code.
 
 However, if you want to create an extension for my crate, you can develop a
 separate crate that uses my crate's public APIs through Cargo. In this case, you
 don't have to assign me your work, and you can distribute your project under any
-permissive free software license, such as the MIT license.
+permissive license, such as the MIT license.
 
 I deliberately keep my crate's APIs extendable for third-party authors who want
 to create dedicated Lady Deirdre extensions.
