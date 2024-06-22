@@ -138,6 +138,15 @@ setups are covered by unit tests to ensure that the input data is correct
 and that the results of the setups match.
 """
 
+"PGO Optimizations" = """
+These benchmark tests were not optimized using Profile-Guided Optimization
+techniques. However, it is worth noting that performance-oriented applications
+could achieve significantly better performance in Lady Deirdre and the reference
+frameworks compared to the benchmark results below.
+
+For details, see [discussion thread](https://github.com/Eliah-Lakhin/lady-deirdre/discussions/7).
+"""
+
 [table_comments]
 
 entire_text_parsing = """

@@ -7,6 +7,7 @@
 - [Input Data](#input-data)
 - [Reference Setups](#reference-setups)
 - [Unit Tests](#unit-tests)
+- [PGO Optimizations](#pgo-optimizations)
 - [Benchmark Results](#benchmark-results)
     - [Entire Text Parsing](#entire-text-parsing)
     - [Keystrokes Reparsing](#keystrokes-reparsing)
@@ -120,6 +121,15 @@ similar features:
 The benchmarks' input data, Lady Deirdre setup, and the reference frameworks'
 setups are covered by unit tests to ensure that the input data is correct
 and that the results of the setups match.
+
+## PGO Optimizations
+
+These benchmark tests were not optimized using Profile-Guided Optimization
+techniques. However, it is worth noting that performance-oriented applications
+could achieve significantly better performance in Lady Deirdre and the reference
+frameworks compared to the benchmark results below.
+
+For details, see [discussion thread](https://github.com/Eliah-Lakhin/lady-deirdre/discussions/7).
 
 ## Benchmark Results
 
