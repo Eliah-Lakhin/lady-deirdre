@@ -221,9 +221,12 @@ impl<'a> Output<'a> {
 
         if !unicode_cases.is_empty() {
             statements.push_branching(quote!(
-                match ch {#(
-                    #unicode_cases,
-                )*}
+                match ch {
+                    #(
+                        #unicode_cases
+                    )*
+                    _ => (),
+                }
             ))
         }
 
