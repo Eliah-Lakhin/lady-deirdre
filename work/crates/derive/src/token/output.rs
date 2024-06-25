@@ -223,7 +223,7 @@ impl<'a> Output<'a> {
             statements.push_branching(quote!(
                 match ch {
                     #(
-                        #unicode_cases,
+                        #unicode_cases
                     )*
                     _ => (),
                 }
