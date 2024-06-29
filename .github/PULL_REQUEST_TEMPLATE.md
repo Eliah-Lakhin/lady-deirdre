@@ -8,7 +8,10 @@
 [//]: # (the original work.)
 [//]: # ()
 [//]: # (Please include the following statement at the end of the Pull Request)
-[//]: # (description to confirm your acceptance of these terms.)
+[//]: # (description to confirm your acceptance of these terms, and put your)
+[//]: # (signature. You can use your name as a signature.)
 
 I agree to the terms and conditions of the [General License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md)
 and assign all rights to my changes in this Pull Request to Ilya Lakhin.
+
+(your signature)
