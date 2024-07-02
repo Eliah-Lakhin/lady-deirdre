@@ -37,21 +37,21 @@
 The syntax API shares many similarities with the lexis API architecture:
 
 1. The syntax grammar, implemented by
-   the [Node](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.Node.html)
+   the [Node](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.Node.html)
    type, is distinct from the syntax tree manager responsible for actual parsing
    and storage of the syntax tree.
 2. The syntax tree manager implements
-   the [SyntaxTree](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.SyntaxTree.html)
+   the [SyntaxTree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxTree.html)
    trait, providing access to the parsed syntax tree through its functions.
 3. There are several syntax manager implementations with distinct sets of
    features and performance characteristics.
 4. Individual nodes within the syntax tree are addressed using
-   the [NodeRef](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/struct.NodeRef.html)
+   the [NodeRef](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.NodeRef.html)
    referential object, which points to concrete node instances owned by the
    syntax tree manager.
 
 The simplest implementation of the syntax tree manager is
-the [ImmutableSyntaxTree](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/struct.ImmutableSyntaxTree.html),
+the [ImmutableSyntaxTree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.ImmutableSyntaxTree.html),
 which performs one-time parsing without incremental reparsing capabilities but
 has the fastest computation performance.
 
@@ -81,7 +81,7 @@ The above code is verbose because it requires manual setup of the TokenBuffer
 and its token cursor.
 
 More commonly, we can utilize the
-immutable [Document](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/units/enum.Document.html),
+immutable [Document](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html),
 which is backed by the TokenBuffer and ImmutableSyntaxTree under the hood.
 Through this object, we can directly scan and parse the source code text. This
 object implements both the SourceCode and SyntaxTree traits, allowing us to

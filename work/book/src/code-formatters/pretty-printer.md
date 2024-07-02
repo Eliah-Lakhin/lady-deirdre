@@ -47,7 +47,7 @@ following lines in accordance with the nesting of the groups.
 
 ## Printing Words
 
-The [PrettyPrinter::word](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.word)
+The [PrettyPrinter::word](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.word)
 function inputs a string word token into the printer, which will be printed on
 the current line of the output, thus increasing the line length.
 
@@ -66,19 +66,19 @@ forcibly break lines. In such cases, you should use the *hardbreak* function.
 To separate the words in the output of the printer, you utilize one of the
 pretty printer's "blank" token functions:
 
-- [PrettyPrinter::blank](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.blank)
+- [PrettyPrinter::blank](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.blank)
   is the default blank token, interpreted either as a single whitespace or a
   line break. You call this function when the next word should be separated from
   the previous one, possibly with a line break, depending on the printing
   algorithm's decision.
 
-- [PrettyPrinter::hardbreak](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.hardbreak)
+- [PrettyPrinter::hardbreak](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.hardbreak)
   is a blank token that enforces the printer to always interpret it as a line
   break. You call this function, for instance, when printing the inner content
   of multi-line comments, as the structure of the comment's text typically needs
   to be preserved.
 
-- [PrettyPrinter::softbreak](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.softbreak)
+- [PrettyPrinter::softbreak](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.softbreak)
   is similar to the *blank* function, but if the printer's algorithm decides to
   preserve the next token on the line, it does not insert whitespace. This
   function is useful, for example, to delimit the `.` dot tokens in a
@@ -115,13 +115,13 @@ more suitable.
 ```
 
 Content breaking occurs within word groups. To initiate a new group, you use
-either [PrettyPrinter::cbox](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.cbox)
-or [PrettyPrinter::ibox](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.ibox).
+either [PrettyPrinter::cbox](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.cbox)
+or [PrettyPrinter::ibox](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.ibox).
 The former
 begins a consistent word group, while the latter starts an inconsistent group.
 
 Each group must be closed by
-calling [PrettyPrinter::end](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.end).
+calling [PrettyPrinter::end](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.end).
 
 Both *cbox* and *ibox* functions accept indentation level shifting for the
 group, represented by a signed integer. Positive values increase the inner
@@ -132,7 +132,7 @@ with whitespace according to the current indentation level.
 ## Overriding Indentations
 
 You can manually adjust line indentation by calling
-the [PrettyPrinter::indent](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.indent)
+the [PrettyPrinter::indent](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.indent)
 function **immediately after** submitting any of the blank tokens. If the
 algorithm interprets the submitted token as a line break, the next line, as well
 as all subsequent lines, will be shifted accordingly.
@@ -153,7 +153,7 @@ are situations where it's preferable to keep the parental content aligned in
 line and splitting of the nested groups instead.
 
 In such cases, you can utilize
-the [PrettyPrinter::neverbreak](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.neverbreak)
+the [PrettyPrinter::neverbreak](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.neverbreak)
 function, which instructs the printer to reset the current line length counter
 to zero. Consequently, the algorithm assumes that the previously submitted text
 fits on the line, and begins splitting from the subsequent nested submissions.
@@ -173,8 +173,8 @@ single line.
 
 This formatting rule depends on whether the algorithm decides to insert a line
 break at the blank token. To address this, you can use
-the [PrettyPrinter::pre_break](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.pre_break)
-and [PrettyPrinter::pre_space](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html#method.pre_space)
+the [PrettyPrinter::pre_break](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.pre_break)
+and [PrettyPrinter::pre_space](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html#method.pre_space)
 functions to configure the preceding blank token.
 
 Both functions must be called **immediately after** submitting the blank token.

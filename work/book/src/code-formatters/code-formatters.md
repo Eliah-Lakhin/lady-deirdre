@@ -47,11 +47,11 @@ their respective lines.
 Lady Deirdre offers two tools to aid in implementing the code formatter:
 
 1. The
-   [ParseTree](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/struct.ParseTree.html)
+   [ParseTree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.ParseTree.html)
    builder constructs a concrete parsing tree. Unlike abstract syntax trees, it
    intentionally preserves all original source code whitespaces and comments.
 2. The
-   [PrettyPrinter](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/format/struct.PrettyPrinter.html)
+   [PrettyPrinter](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.PrettyPrinter.html)
    tool automatically decides on splitting the text into lines and determines
    line indentation to ensure that the final lines are aligned according to the
    predefined maximum line length.

@@ -35,7 +35,7 @@
 # Syntax Grammar
 
 You define the syntax grammar using
-the [Node derive macro](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/derive.Node.html)
+the [Node derive macro](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/derive.Node.html)
 on an arbitrary enum type that serves as the type for the syntax tree nodes.
 
 Unlike the token enum, the node enum variants are required to have bodies with
@@ -139,7 +139,7 @@ this guide.
 ## Macro API
 
 In this chapter, I will intentionally omit some details, referring you to
-the [macro documentation](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/derive.Node.html)
+the [macro documentation](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/derive.Node.html)
 for a more verbose description of the available features, and to
 the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/syntax.rs)
 as an example of a node implementation that utilizes most of the macro's
@@ -237,7 +237,7 @@ Examples:
 - In `foo: $Bar?`, the "foo" field would have the type TokenRef because "Bar"
   can be matched no more than one time. If the parser never matches "Bar", the
   "foo" field receives the
-  value [TokenRef::nil](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/struct.TokenRef.html#method.nil).
+  value [TokenRef::nil](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenRef.html#method.nil).
 
 ## Guidelines
 
@@ -256,7 +256,7 @@ Examples:
    indirectly by capturing the starting and ending nodes of this node, these
    captures would help Lady Deirdre properly understand the starting and ending
    sites of the node. This is especially important for functions such as
-   the [NodeRef::span](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/struct.NodeRef.html#method.span)
+   the [NodeRef::span](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.NodeRef.html#method.span)
    function.
 
    In particular, for this reason, in
@@ -271,7 +271,7 @@ Examples:
    child is a token.
 
    For instance,
-   the [traverse_tree](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree)
+   the [traverse_tree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree)
    function relies on this metadata when performing the syntax tree depth-first
    traversal.
 

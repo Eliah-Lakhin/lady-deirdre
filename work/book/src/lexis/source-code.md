@@ -35,18 +35,18 @@
 # Source Code
 
 Lady Deirdre distinguishes between the scanner's implementation, carried out by
-the [Token](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/trait.Token.html)
+the [Token](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.Token.html)
 type, and the source code manager, responsible for actual code storage and
 lexical scanning through interaction with the scanner's implementation.
 
 Each source code manager implements
-a [SourceCode](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/trait.SourceCode.html)
+a [SourceCode](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.SourceCode.html)
 trait, providing a minimal set of features enabling inspection of its content,
 including the source code text and its lexical structure.
 
 The crate offers specialized source code managers with distinct API options and
 performance characteristics. For instance, while
-the [TokenBuffer](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/lexis/struct.TokenBuffer.html)
+the [TokenBuffer](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenBuffer.html)
 lacks general incremental rescanning capabilities, it offers slightly better
 performance than the
-mutable [Document](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/units/enum.Document.html).
+mutable [Document](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html).

@@ -102,7 +102,7 @@ assert_eq!(string, "123");
 ```
 
 Each of these functions is infallible; they will return
-a [nil](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/struct.NodeRef.html#method.nil)
+a [nil](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.NodeRef.html#method.nil)
 NodeRef if they cannot fulfill the request. Therefore, we should be confident
 about the node configuration we are trying to query.
 
@@ -110,13 +110,13 @@ about the node configuration we are trying to query.
 
 You can perform a depth-first traversal of the entire syntax tree or a specific
 branch using
-the [SyntaxTree::traverse_tree](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree)
-and [SyntaxTree::traverse_subtree](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_subtree)
+the [SyntaxTree::traverse_tree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree)
+and [SyntaxTree::traverse_subtree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_subtree)
 functions, respectively.
 
 Both functions require a visitor object to be passed as an argument. This object
 should implement
-a [Visitor](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.Visitor.html)
+a [Visitor](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.Visitor.html)
 trait, which includes functions that will be triggered when the traversal
 procedure visits a node or token in the tree, according to the node-child
 relationships between the nodes.
