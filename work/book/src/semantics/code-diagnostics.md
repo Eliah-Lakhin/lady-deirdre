@@ -64,7 +64,6 @@ function to retrieve a copy of the current diagnostics sets, you can leverage
 the version number of the attribute value to determine whether this set needs to
 be republished to the client.
 
-[^syntaxerror]:
-The [Document::errors](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.errors)
+[^syntaxerror]: The [Document::errors](https://docs.rs/lady-deirdre/2.0.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.errors)
 function would provide you with an iterator over all syntax errors within the
 compilation unit.

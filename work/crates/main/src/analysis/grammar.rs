@@ -71,6 +71,9 @@ use crate::{
 /// The [Node] supertrait of this trait provides lexical and syntax components
 /// of the programming language. The rest of the trait's API related to the
 /// semantics description.
+///
+/// **NOTE**: This trait API is not stabilized yet. New trait members may be
+/// added in future minor versions of Lady Deirdre.
 pub trait Grammar: Node + AbstractFeature {
     /// A syntax tree node classifier that indexes the nodes by classes.
     ///
