@@ -67,7 +67,7 @@ static RAW_PROPERTIES: &[PropDesc] = &[
     },
     PropDesc {
         raw_names: &["Uppercase"],
-        table_name: "LOWERCASE_TABLE",
+        table_name: "UPPERCASE_TABLE",
         field_name: "upper",
     },
     PropDesc {
@@ -83,12 +83,12 @@ static RAW_PROPERTIES: &[PropDesc] = &[
     PropDesc {
         raw_names: &["XID_Start"],
         table_name: "XID_START_TABLE",
-        field_name: "xidstart",
+        field_name: "xid_start",
     },
     PropDesc {
-        raw_names: &["XID_CONTINUE"],
+        raw_names: &["XID_Continue"],
         table_name: "XID_CONTINUE_TABLE",
-        field_name: "xidcontinue",
+        field_name: "xid_continue",
     },
 ];
 
