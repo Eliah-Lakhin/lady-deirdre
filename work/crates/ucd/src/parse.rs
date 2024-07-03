@@ -32,92 +32,99 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-//TODO check warnings regularly
-#![allow(warnings)]
+use std::process::exit;
 
-mod download;
-mod generate;
-mod parse;
+use ahash::{AHashMap, AHashSet};
+use ucd_parse::{parse, UnicodeDataExpander};
 
-use std::{env::args, process::exit};
+use crate::{PropDesc, RAW_PROPERTIES, UCD_DOWNLOADS_DIR};
 
-static UCD_DOWNLOADS_DIR: &str = "downloads";
+pub(super) fn parse_raw_data() -> Vec<(&'static PropDesc, AHashSet<u32>)> {
+    println!("Parsing raw UCD data...");
 
-static UCD_URL: &str = "https://www.unicode.org/Public/UCD/latest/ucd/";
+    let mut data = AHashMap::new();
 
-static UCD_RESOURCES: &[&str] = &[
-    "DerivedCoreProperties.txt",
-    "PropList.txt",
-    "UnicodeData.txt",
-    "SpecialCasing.txt",
-];
-
-static GENERATED_FILE: &str = "ucd_gen.txt";
-
-static RAW_PROPERTIES: &[PropDesc] = &[
-    PropDesc {
-        raw_names: &["Alphabetic"],
-        table_name: "ALPHABETIC_TABLE",
-        field_name: "alpha",
-    },
-    PropDesc {
-        raw_names: &["Lowercase"],
-        table_name: "LOWERCASE_TABLE",
-        field_name: "lower",
-    },
-    PropDesc {
-        raw_names: &["Uppercase"],
-        table_name: "LOWERCASE_TABLE",
-        field_name: "upper",
-    },
-    PropDesc {
-        raw_names: &["White_Space"],
-        table_name: "WHITE_SPACE_TABLE",
-        field_name: "space",
-    },
-    PropDesc {
-        raw_names: &["N", "Nd", "Nl", "No"],
-        table_name: "NUM_TABLE",
-        field_name: "num",
-    },
-    PropDesc {
-        raw_names: &["XID_Start"],
-        table_name: "XID_START_TABLE",
-        field_name: "xidstart",
-    },
-    PropDesc {
-        raw_names: &["XID_CONTINUE"],
-        table_name: "XID_CONTINUE_TABLE",
-        field_name: "xidcontinue",
-    },
-];
-
-#[derive(PartialEq, Eq, Hash)]
-struct PropDesc {
-    raw_names: &'static [&'static str],
-    table_name: &'static str,
-    field_name: &'static str,
-}
-
-fn main() {
-    let mut arg = match args().skip(1).next() {
-        Some(arg) => arg,
-
-        None => {
-            eprintln!("Missing command. Available commands are: \"download\", \"generate\"");
+    let raw_core_properties = match parse::<_, ucd_parse::CoreProperty>(&UCD_DOWNLOADS_DIR) {
+        Ok(props) => {
+            println!("Raw Core Properties parsed.");
+            props
+        }
+        Err(error) => {
+            eprintln!("Core Properties parse error: {error}");
             exit(1);
         }
     };
 
-    match arg.as_str() {
-        "download" => download::download(),
-        "generate" => generate::generate(),
+    for raw in raw_core_properties {
+        let Some(desc) = RAW_PROPERTIES
+            .iter()
+            .find(|desc| desc.raw_names.contains(&raw.property.as_str()))
+        else {
+            continue;
+        };
 
-        other => {
-            eprintln!(
-                "Unknown command {other}. Available commands are: \"download\", \"generate\"",
-            );
-            exit(1);
+        let code_points = data.entry(desc).or_insert_with(AHashSet::new);
+
+        for code_point in raw.codepoints {
+            let _ = code_points.insert(code_point.value());
         }
     }
+
+    let raw_properties = match parse::<_, ucd_parse::Property>(&UCD_DOWNLOADS_DIR) {
+        Ok(props) => {
+            println!("Raw Properties parsed.");
+            props
+        }
+        Err(error) => {
+            eprintln!("Properties parse error: {error}");
+            exit(1);
+        }
+    };
+
+    for raw in raw_properties {
+        let Some(desc) = RAW_PROPERTIES
+            .iter()
+            .find(|desc| desc.raw_names.contains(&raw.property.as_str()))
+        else {
+            continue;
+        };
+
+        let code_points = data.entry(desc).or_insert_with(AHashSet::new);
+
+        for code_point in raw.codepoints {
+            let _ = code_points.insert(code_point.value());
+        }
+    }
+
+    let raw_unicode_data = match parse::<_, ucd_parse::UnicodeData>(&UCD_DOWNLOADS_DIR) {
+        Ok(props) => {
+            println!("Unicode Data parsed.");
+            props
+        }
+        Err(error) => {
+            eprintln!("Unicode Data parse error: {error}");
+            exit(1);
+        }
+    };
+
+    for raw in UnicodeDataExpander::new(raw_unicode_data) {
+        let Some(desc) = RAW_PROPERTIES
+            .iter()
+            .find(|desc| desc.raw_names.contains(&raw.general_category.as_str()))
+        else {
+            continue;
+        };
+
+        let code_points = data.entry(desc).or_insert_with(AHashSet::new);
+
+        let _ = code_points.insert(raw.codepoint.value());
+    }
+
+    println!("Raw UCD data parsing finished.");
+
+    let mut sorted = data.into_iter().collect::<Vec<_>>();
+
+    sorted.sort_by_key(|(prop, _)| prop.field_name);
+
+    sorted
 }

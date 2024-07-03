@@ -32,92 +32,58 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-//TODO check warnings regularly
-#![allow(warnings)]
+use std::{
+    fs::{create_dir_all, write},
+    path::Path,
+    process::{exit, Command},
+};
 
-mod download;
-mod generate;
-mod parse;
+use crate::{UCD_DOWNLOADS_DIR, UCD_RESOURCES, UCD_URL};
 
-use std::{env::args, process::exit};
+pub(super) fn download() {
+    println!("Downloading UCD data...");
 
-static UCD_DOWNLOADS_DIR: &str = "downloads";
+    let downloads_dir = Path::new(UCD_DOWNLOADS_DIR);
 
-static UCD_URL: &str = "https://www.unicode.org/Public/UCD/latest/ucd/";
-
-static UCD_RESOURCES: &[&str] = &[
-    "DerivedCoreProperties.txt",
-    "PropList.txt",
-    "UnicodeData.txt",
-    "SpecialCasing.txt",
-];
-
-static GENERATED_FILE: &str = "ucd_gen.txt";
-
-static RAW_PROPERTIES: &[PropDesc] = &[
-    PropDesc {
-        raw_names: &["Alphabetic"],
-        table_name: "ALPHABETIC_TABLE",
-        field_name: "alpha",
-    },
-    PropDesc {
-        raw_names: &["Lowercase"],
-        table_name: "LOWERCASE_TABLE",
-        field_name: "lower",
-    },
-    PropDesc {
-        raw_names: &["Uppercase"],
-        table_name: "LOWERCASE_TABLE",
-        field_name: "upper",
-    },
-    PropDesc {
-        raw_names: &["White_Space"],
-        table_name: "WHITE_SPACE_TABLE",
-        field_name: "space",
-    },
-    PropDesc {
-        raw_names: &["N", "Nd", "Nl", "No"],
-        table_name: "NUM_TABLE",
-        field_name: "num",
-    },
-    PropDesc {
-        raw_names: &["XID_Start"],
-        table_name: "XID_START_TABLE",
-        field_name: "xidstart",
-    },
-    PropDesc {
-        raw_names: &["XID_CONTINUE"],
-        table_name: "XID_CONTINUE_TABLE",
-        field_name: "xidcontinue",
-    },
-];
-
-#[derive(PartialEq, Eq, Hash)]
-struct PropDesc {
-    raw_names: &'static [&'static str],
-    table_name: &'static str,
-    field_name: &'static str,
-}
-
-fn main() {
-    let mut arg = match args().skip(1).next() {
-        Some(arg) => arg,
-
-        None => {
-            eprintln!("Missing command. Available commands are: \"download\", \"generate\"");
-            exit(1);
-        }
-    };
-
-    match arg.as_str() {
-        "download" => download::download(),
-        "generate" => generate::generate(),
-
-        other => {
-            eprintln!(
-                "Unknown command {other}. Available commands are: \"download\", \"generate\"",
-            );
-            exit(1);
-        }
+    if downloads_dir.exists() {
+        eprintln!(
+            "Downloads dir {downloads_dir:?} already exists. Delete this directory manually.",
+        );
+        exit(1);
     }
+
+    if let Err(error) = create_dir_all(downloads_dir) {
+        eprintln!("Failed to created downloads dir {downloads_dir:?}: {error}");
+        exit(1);
+    }
+
+    println!("Downloads dir {downloads_dir:?} created.");
+
+    for resource in UCD_RESOURCES {
+        let url = UCD_URL.to_owned() + resource;
+
+        let output = match Command::new("curl").arg(&url).output() {
+            Ok(output) => output,
+
+            Err(error) => {
+                eprintln!("Curl failed to fetch {url:?}: {error}",);
+                exit(1);
+            }
+        };
+
+        let file_name = downloads_dir.join(resource);
+
+        match write(file_name.as_path(), output.stdout) {
+            Ok(()) => {
+                println!("Remote file {url} saved to {file_name:?}.");
+            }
+
+            Err(error) => {
+                eprintln!("Field to save remote file {url} to {file_name:?}: {error}");
+                exit(1);
+            }
+        };
+    }
+
+    println!("UCD data downloading finished.");
 }
