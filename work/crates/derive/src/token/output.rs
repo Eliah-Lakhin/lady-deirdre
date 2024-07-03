@@ -40,20 +40,20 @@ use std::{
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::ToTokens;
-use syn::{spanned::Spanned, LitByte, LitStr};
+use syn::{LitByte, LitStr, spanned::Spanned};
 
 use crate::{
     token::{automata::Terminal, chars::Class, TokenInput},
     utils::{
-        expect_some,
-        null,
-        system_panic,
         Dump,
+        expect_some,
         Facade,
+        null,
         PredictableCollection,
         Set,
         SetImpl,
         State,
+        system_panic,
     },
 };
 
@@ -69,6 +69,7 @@ pub(super) struct Output<'a> {
     unicode: BTreeMap<State, Set<char>>,
     upper: Option<State>,
     lower: Option<State>,
+    alpha_only: Option<State>,
     num: Option<State>,
     space: Option<State>,
     alphabetic: Option<State>,
@@ -90,6 +91,7 @@ impl<'a> Output<'a> {
             unicode: BTreeMap::new(),
             upper: None,
             lower: None,
+            alpha_only: None,
             num: None,
             space: None,
             alphabetic: None,
@@ -244,6 +246,14 @@ impl<'a> Output<'a> {
             statements.push_branching(quote!(if char::is_lowercase(ch) #handle));
         }
 
+        if let Some(to) = self.alpha_only {
+            let mut handle = self.handle(to, true);
+            handle.surround = true;
+
+            statements.push_branching(quote!(if char::is_alphabetic(ch)
+                && !char::is_uppercase(ch) && !char::is_lowercase(ch) #handle));
+        }
+
         if let Some(to) = self.alphabetic {
             let mut handle = self.handle(to, true);
             handle.surround = true;
@@ -284,9 +294,21 @@ impl<'a> Output<'a> {
     }
 
     fn merge_classes(&mut self) {
-        if self.upper.is_some() && self.upper == self.lower {
-            self.alphabetic = self.upper;
+        if self.alpha_only.is_some()
+            && self.alpha_only == self.upper
+            && self.alpha_only == self.lower
+        {
+            self.alphabetic = self.alpha_only;
             self.upper = None;
+            self.lower = None;
+            self.alpha_only = None;
+        }
+
+        if self.upper.is_some() && self.upper == self.alphabetic {
+            self.upper = None;
+        }
+
+        if self.lower.is_some() && self.lower == self.alphabetic {
             self.lower = None;
         }
 
@@ -296,9 +318,34 @@ impl<'a> Output<'a> {
             self.num = None;
         }
 
-        if self.other.is_some() && self.other == self.space && self.other == self.alphanumeric {
-            self.space = None;
-            self.alphanumeric = None;
+        if self.other.is_some() {
+            if self.upper == self.other {
+                self.upper = None;
+            }
+
+            if self.lower == self.other {
+                self.lower = None;
+            }
+
+            if self.alpha_only == self.other {
+                self.alpha_only = None;
+            }
+
+            if self.alphabetic == self.other {
+                self.alphabetic = None;
+            }
+
+            if self.space == self.other {
+                self.space = None;
+            }
+
+            if self.num == self.other {
+                self.num = None;
+            }
+
+            if self.alphanumeric == self.other {
+                self.alphanumeric = None;
+            }
         }
     }
 
@@ -316,6 +363,10 @@ impl<'a> Output<'a> {
         }
 
         if self.lower.is_some() {
+            return true;
+        }
+
+        if self.alpha_only.is_some() {
             return true;
         }
 
@@ -425,6 +476,11 @@ impl<'a> Output<'a> {
             Class::Lower => {
                 self.lower = Some(to);
                 self.insert_ascii_class(Class::Lower, to);
+            }
+
+            Class::Alpha => {
+                self.alpha_only = Some(to);
+                self.insert_ascii_class(Class::Alpha, to);
             }
 
             Class::Num => {

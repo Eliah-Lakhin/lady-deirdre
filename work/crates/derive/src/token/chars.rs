@@ -36,11 +36,11 @@ use std::fmt::{Display, Formatter};
 
 use proc_macro2::Span;
 use syn::{
+    LitChar,
     parse::{Lookahead1, Parse, ParseStream},
     punctuated::Punctuated,
-    spanned::Spanned,
-    LitChar,
     Result,
+    spanned::Spanned,
 };
 
 use crate::{
@@ -65,14 +65,14 @@ impl Parse for CharSet {
             if lookahead.peek(char_kw::alpha) {
                 return Ok(Self {
                     span: input.parse::<char_kw::alpha>()?.span,
-                    classes: Set::new([Class::Upper, Class::Lower]),
+                    classes: Set::new([Class::Upper, Class::Lower, Class::Alpha]),
                 });
             }
 
             if lookahead.peek(char_kw::alphanum) {
                 return Ok(Self {
                     span: input.parse::<char_kw::alphanum>()?.span,
-                    classes: Set::new([Class::Upper, Class::Lower, Class::Num]),
+                    classes: Set::new([Class::Upper, Class::Lower, Class::Alpha, Class::Num]),
                 });
             }
 
@@ -156,28 +156,6 @@ impl CharSet {
         if lookahead.peek(Token![$]) {
             return true;
         }
-        // if lookahead.peek(char_kw::alpha) {
-        // }
-        //
-        // if lookahead.peek(char_kw::alphanum) {
-        //     return true;
-        // }
-        //
-        // if lookahead.peek(char_kw::upper) {
-        //     return true;
-        // }
-        //
-        // if lookahead.peek(char_kw::lower) {
-        //     return true;
-        // }
-        //
-        // if lookahead.peek(char_kw::num) {
-        //     return true;
-        // }
-        //
-        // if lookahead.peek(char_kw::space) {
-        //     return true;
-        // }
 
         if lookahead.peek(syn::LitChar) {
             return true;
@@ -232,6 +210,7 @@ pub(super) enum Class {
     Char(char),
     Upper,
     Lower,
+    Alpha,
     Num,
     Space,
     Other,
@@ -244,6 +223,7 @@ impl Display for Class {
             Self::Char(ch) => formatter.write_fmt(format_args!("{:?}", ch)),
             Self::Upper => formatter.write_str("$Upper"),
             Self::Lower => formatter.write_str("$Lower"),
+            Self::Alpha => formatter.write_str("$Alpha"),
             Self::Num => formatter.write_str("$Num"),
             Self::Space => formatter.write_str("$Space"),
             Self::Other => formatter.write_str("_"),
@@ -258,6 +238,7 @@ impl Class {
             Self::Char(this) => this == ch,
             Self::Upper => ch.is_uppercase(),
             Self::Lower => ch.is_lowercase(),
+            Self::Alpha => ch.is_alphabetic() && !ch.is_uppercase() && !ch.is_lowercase(),
             Self::Num => ch.is_numeric(),
             Self::Space => ch.is_whitespace(),
             Self::Other => true,

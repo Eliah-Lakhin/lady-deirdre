@@ -64,14 +64,12 @@
 //!
 //! Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин). All rights reserved.
 
-#[macro_use]
-extern crate quote;
-
-#[macro_use]
-extern crate syn;
-
 extern crate core;
 extern crate proc_macro;
+#[macro_use]
+extern crate quote;
+#[macro_use]
+extern crate syn;
 
 use std::str::FromStr;
 
@@ -295,20 +293,17 @@ mod utils;
 ///    The inverted version of the previous operator that matches any character
 ///    outside of the specified set.
 ///
-///  - Uppercase character: `$upper`. Match any Unicode uppercase character
-///    as specified in the [char::is_uppercase] function.
+///  - Any Unicode uppercase character: `$upper`.
 ///
-///  - Lowercase character: `$lower`. Match any Unicode lowercase character
-///    as specified in the [char::is_lowercase] function.
+///  - Any Unicode lowercase character: `$lower`.
 ///
-///  - Numeric character: `$num`. Match any Unicode numeric character
-///    as specified in the [char::is_numeric] function.
+///  - Any Unicode numeric character: `$num`.
 ///
-///  - Whitespace character: `$span`. Match any Unicode whitespace character
-///    as specified in the [char::is_whitespace] function.
+///  - Any Unicode whitespace character: `$space`.
 ///
-///  - Alphabetic character: `$alpha`. Match any Unicode alphabetic character
-///    as specified in the [char::is_alphabetic] function.
+///  - Any Unicode alphabetic character: `$alpha`.
+///
+///  - Any Unicode alphabetic or numeric character: `$alphanum`.
 ///
 ///  - A concatenation of the rules: `<expr1> & <expr2>` or just `<expr1> <expr2>`.
 ///    Matches `<expr1>`, then matches `<expr2>`. The concatenation expression

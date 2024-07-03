@@ -34,8 +34,8 @@
 
 use proc_macro2::{Ident, Span};
 use syn::{
-    parse::{Lookahead1, ParseStream},
     LitStr,
+    parse::{Lookahead1, ParseStream},
     Result,
 };
 
@@ -46,12 +46,11 @@ use crate::{
         input::{Alphabet, InlineMap, VariantMap},
     },
     utils::{
+        Applicability,
+        AutomataContext,
         dump_kw,
         error,
         expect_some,
-        system_panic,
-        Applicability,
-        AutomataContext,
         Expression,
         ExpressionOperand,
         ExpressionOperator,
@@ -59,6 +58,7 @@ use crate::{
         Set,
         SetImpl,
         Strategy,
+        system_panic,
     },
 };
 
@@ -129,6 +129,7 @@ impl RegexImpl for Regex {
 
                 let mut upper = true;
                 let mut lower = true;
+                let mut alpha = true;
                 let mut num = true;
                 let mut space = true;
 
@@ -146,6 +147,11 @@ impl RegexImpl for Regex {
                         Class::Lower => {
                             alphabet.retain(|ch| !Class::Lower.includes(ch));
                             lower = false;
+                        }
+
+                        Class::Alpha => {
+                            alphabet.retain(|ch| !Class::Alpha.includes(ch));
+                            alpha = false;
                         }
 
                         Class::Num => {
@@ -172,6 +178,10 @@ impl RegexImpl for Regex {
 
                 if lower {
                     generics.push(Class::Lower);
+                }
+
+                if alpha {
+                    generics.push(Class::Alpha);
                 }
 
                 if num {
@@ -220,6 +230,7 @@ impl RegexImpl for Regex {
                     Class::Char(_) => (),
                     Class::Upper => *self = expand_class(*span, Class::Upper, alphabet),
                     Class::Lower => *self = expand_class(*span, Class::Lower, alphabet),
+                    Class::Alpha => *self = expand_class(*span, Class::Alpha, alphabet),
                     Class::Num => *self = expand_class(*span, Class::Num, alphabet),
                     Class::Space => *self = expand_class(*span, Class::Space, alphabet),
                     Class::Other => system_panic!("Explicit Other class."),
