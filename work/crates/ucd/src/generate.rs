@@ -112,12 +112,15 @@ impl Emitter {
         };
 
         emitter.emit_notice();
-        emitter.emit_ucd_interface(&input);
+        emitter.emit_char_properties_object(&input);
+        emitter.emit_char_trait(&input);
         emitter.emit_trie_type();
 
         for (prop, code_points) in &input {
             emitter.emit_table(*prop, code_points);
         }
+
+        emitter.emit_tests();
 
         emitter.output
     }
@@ -127,8 +130,139 @@ impl Emitter {
         self.blank_ln();
     }
 
-    fn emit_ucd_interface(&mut self, input: &[(&'static PropDesc, AHashSet<u32>)]) {
-        self.write_ln("pub trait UCD {");
+    fn emit_char_properties_object(&mut self, input: &[(&'static PropDesc, AHashSet<u32>)]) {
+        self.write_ln("/// A configuration for Unicode character properties.");
+        self.write_ln("///");
+        self.write_ln("/// This configuration specifies [character properties](https://en.wikipedia.org/wiki/Unicode_character_property)");
+        self.write_ln("/// of the [char] type.");
+        self.write_ln("///");
+        self.write_ln("/// Using the [Char::has_properties] function, you can check");
+        self.write_ln("/// if a character has specified properties:");
+        self.write_ln("/// `assert!('a'.has_properties(CharProperties::new().with_lower()))`.");
+        self.write_ln("///");
+        self.write_ln("/// The configuration is inclusive, meaning that that if a character");
+        self.write_ln("/// has at least one of the configured property, has_properties");
+        self.write("/// returns true: ");
+        self.write_ln(
+            "`assert!('a'.has_properties(CharProperties::new().with_alpha().with_num()))`.",
+        );
+        self.write_ln("///");
+        self.write_ln("/// By default, this object does not have any configured properties.");
+        self.write_ln("/// Therefore, the has_properties function returns false: ");
+        self.write_ln("/// `assert!(!'b'.has_properties(CharProperties::new()))`.");
+        self.write_ln("///");
+        self.write_ln("/// **Note**: This object is not stabilized yet. New members may be");
+        self.write_ln("/// added in future minor versions of Lady Deirdre. The exact behavior");
+        self.write_ln("/// of already included properties may change over time too to better");
+        self.write("/// match the recent updates in ");
+        self.write_ln("the [Unicode Character Database](https://www.unicode.org/ucd/).");
+        self.write_ln("#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]");
+        self.write_ln("#[non_exhaustive]");
+        self.write_ln("pub struct CharProperties {");
+
+        for (prop, _) in input {
+            self.write("    /// Includes ");
+
+            let mut first = true;
+
+            for prop in prop.raw_names {
+                match first {
+                    true => first = false,
+                    false => self.write(", or "),
+                }
+
+                self.write("`");
+                self.write(prop);
+                self.write("`");
+            }
+
+            match prop.raw_names.len() > 1 {
+                true => self.write_ln(" character properties."),
+                false => self.write_ln(" character property."),
+            }
+
+            self.write("    pub ");
+            self.write(prop.field_name);
+            self.write_ln(": bool,");
+        }
+
+        self.write_ln("}");
+        self.blank_ln();
+
+        self.write_ln("impl Default for CharProperties {");
+        self.write_ln("    #[inline(always)]");
+        self.write_ln("    fn default() -> Self {");
+        self.write_ln("        Self::new()");
+        self.write_ln("    }");
+        self.write_ln("}");
+        self.blank_ln();
+
+        self.write_ln("impl CharProperties {");
+
+        self.write_ln("    /// Returns a new instance with all configuration properties");
+        self.write_ln("    /// set to false.");
+        self.write_ln("    #[inline(always)]");
+        self.write_ln("    pub const fn new() -> Self {");
+        self.write_ln("        Self {");
+
+        for (prop, _) in input {
+            self.write("            ");
+            self.write(prop.field_name);
+            self.write_ln(": false,");
+        }
+
+        self.write_ln("        }");
+        self.write_ln("    }");
+
+        for (prop, _) in input {
+            self.blank_ln();
+
+            self.write("    /// Includes ");
+
+            let mut first = true;
+
+            for prop in prop.raw_names {
+                match first {
+                    true => first = false,
+                    false => self.write(", or "),
+                }
+
+                self.write("`");
+                self.write(prop);
+                self.write("`");
+            }
+
+            match prop.raw_names.len() > 1 {
+                true => self.write_ln(" character properties."),
+                false => self.write_ln(" character property."),
+            }
+
+            self.write_ln("    #[inline(always)]");
+            self.write("    pub const fn with_");
+            self.write(prop.field_name);
+            self.write_ln("(mut self) -> Self {");
+            self.write("        self.");
+            self.write(prop.field_name);
+            self.write_ln(" = true;");
+            self.blank_ln();
+            self.write_ln("        self");
+            self.write_ln("    }");
+        }
+
+        self.write_ln("}");
+        self.blank_ln();
+    }
+
+    fn emit_char_trait(&mut self, input: &[(&'static PropDesc, AHashSet<u32>)]) {
+        self.write_ln("/// An extension trait that provides functions to reveal a character's");
+        self.write_ln("/// Unicode properties.");
+        self.write_ln("///");
+        self.write_ln("/// **Note**: This interface is not stabilized yet. New members may be");
+        self.write_ln("/// added in future minor versions of Lady Deirdre. The exact behavior");
+        self.write_ln("/// of already included functions may change over time too to better");
+        self.write("/// match the recent updates in ");
+        self.write_ln("the [Unicode Character Database](https://www.unicode.org/ucd/).");
+        self.write_ln("pub trait Char {");
 
         let mut first = true;
 
@@ -138,15 +272,40 @@ impl Emitter {
                 false => self.blank_ln(),
             }
 
-            self.write("    fn is_ucd_");
+            self.write("    /// Returns true if the character has ");
+
+            let mut first = true;
+
+            for prop in prop.raw_names {
+                match first {
+                    true => first = false,
+                    false => self.write(", or "),
+                }
+
+                self.write("`");
+                self.write(prop);
+                self.write("`");
+            }
+
+            match prop.raw_names.len() > 1 {
+                true => self.write_ln(" properties."),
+                false => self.write_ln(" property."),
+            }
+
+            self.write("    fn is_");
             self.write(prop.field_name);
             self.write_ln("(self) -> bool;");
         }
 
+        self.blank_ln();
+        self.write_ln("    /// Returns true if the character has at least one of the specified");
+        self.write_ln("    /// properties. See [CharProperties] for details.");
+        self.write_ln("    fn has_properties(self, props: CharProperties) -> bool;");
+
         self.write_ln("}");
         self.blank_ln();
 
-        self.write_ln("impl UCD for char {");
+        self.write_ln("impl Char for char {");
 
         first = true;
 
@@ -157,7 +316,7 @@ impl Emitter {
             }
 
             self.write_ln("    #[inline(always)]");
-            self.write("    fn is_ucd_");
+            self.write("    fn is_");
             self.write(prop.field_name);
             self.write_ln("(self) -> bool {");
             self.write("        ");
@@ -166,47 +325,69 @@ impl Emitter {
             self.write_ln("    }");
         }
 
+        self.blank_ln();
+        self.write_ln("    fn has_properties(self, props: CharProperties) -> bool {");
+
+        first = true;
+
+        for (prop, _) in input {
+            match first {
+                true => first = false,
+                false => self.blank_ln(),
+            }
+
+            self.write("        if props.");
+            self.write(prop.field_name);
+            self.write(" && self.is_");
+            self.write(prop.field_name);
+            self.write_ln("() {");
+            self.write_ln("            return true;");
+            self.write_ln("        }");
+        }
+
+        self.blank_ln();
+        self.write_ln("        false");
+        self.write_ln("    }");
         self.write_ln("}");
         self.blank_ln();
     }
 
     fn emit_trie_type(&mut self) {
-        self.write_ln(
-            r#"struct UCDTrie {
-    r1: [u64; 32],
-    r2: [u8; 992],
-    r3: &'static [u64],
-    r4: [u8; 256],
-    r5: &'static [u8],
-    r6: &'static [u64],
-}
-
-impl UCDTrie {
-    #[inline(always)]
-    fn lookup(&self, code_point: usize) -> bool {
-        if code_point < 0x800 {
-            return Self::check_chunk(self.r1[code_point >> 6], code_point);
-        }
-
-        if code_point < 0x10000 {
-            let child = self.r2[(code_point >> 6) - 0x20];
-
-            return Self::check_chunk(self.r3[child as usize], code_point);
-        }
-
-        let child = self.r4[(code_point >> 12) - 0x10];
-        let leaf = self.r5[((child as usize) << 6) + ((code_point >> 6) & 0x3f)];
-
-        Self::check_chunk(self.r6[leaf as usize], code_point)
-    }
-
-    #[inline(always)]
-    fn check_chunk(chunk: u64, code_point: usize) -> bool {
-        ((chunk >> (code_point & 63)) & 1) != 0
-    }
-}"#,
-        );
-
+        self.write_ln("struct UCDTrie {");
+        self.write_ln("    r1: [u64; 32],");
+        self.write_ln("    r2: [u8; 992],");
+        self.write_ln("    r3: &'static [u64],");
+        self.write_ln("    r4: [u8; 256],");
+        self.write_ln("    r5: &'static [u8],");
+        self.write_ln("    r6: &'static [u64],");
+        self.write_ln("}");
+        self.write_ln("");
+        self.write_ln("impl UCDTrie {");
+        self.write_ln("    #[inline(always)]");
+        self.write_ln("    fn lookup(&self, code_point: usize) -> bool {");
+        self.write_ln("        if code_point < 0x800 {");
+        self.write("            ");
+        self.write_ln("return Self::check_chunk(self.r1[code_point >> 6], code_point);");
+        self.write_ln("        }");
+        self.write_ln("");
+        self.write_ln("        if code_point < 0x10000 {");
+        self.write_ln("            let child = self.r2[(code_point >> 6) - 0x20];");
+        self.write_ln("");
+        self.write_ln("            return Self::check_chunk(self.r3[child as usize], code_point);");
+        self.write_ln("        }");
+        self.write_ln("");
+        self.write_ln("        let child = self.r4[(code_point >> 12) - 0x10];");
+        self.write("        ");
+        self.write_ln("let leaf = self.r5[((child as usize) << 6) + ((code_point >> 6) & 0x3f)];");
+        self.write_ln("");
+        self.write_ln("        Self::check_chunk(self.r6[leaf as usize], code_point)");
+        self.write_ln("    }");
+        self.write_ln("");
+        self.write_ln("    #[inline(always)]");
+        self.write_ln("    fn check_chunk(chunk: u64, code_point: usize) -> bool {");
+        self.write_ln("        ((chunk >> (code_point & 63)) & 1) != 0");
+        self.write_ln("    }");
+        self.write_ln("}");
         self.blank_ln();
     }
 
@@ -267,6 +448,39 @@ impl UCDTrie {
         self.write_ln(",");
 
         self.write_ln("};");
+        self.blank_ln();
+    }
+
+    fn emit_tests(&mut self) {
+        self.write_ln("#[cfg(test)]");
+        self.write_ln("mod tests {");
+        self.write_ln("    use super::Char;");
+        self.blank_ln();
+        self.write_ln("    #[test]");
+        self.write_ln("    fn test_char_properties() {");
+        self.write_ln("        for ch in '\\0'..'\\u{10ffff}' {");
+        self.write_ln("            match ch.is_whitespace() {");
+        self.write_ln("                true => assert!(ch.is_space()),");
+        self.write_ln("                false => assert!(!ch.is_space()),");
+        self.write_ln("            }");
+        self.blank_ln();
+        self.write_ln("            match ch.is_numeric() {");
+        self.write_ln("                true => assert!(ch.is_num()),");
+        self.write_ln("                false => assert!(!ch.is_num()),");
+        self.write_ln("            }");
+        self.blank_ln();
+        self.write_ln("            match ch.is_uppercase() {");
+        self.write_ln("                true => assert!(ch.is_upper()),");
+        self.write_ln("                false => assert!(!ch.is_upper()),");
+        self.write_ln("            }");
+        self.blank_ln();
+        self.write_ln("            match ch.is_lowercase() {");
+        self.write_ln("                true => assert!(ch.is_lower()),");
+        self.write_ln("                false => assert!(!ch.is_lower()),");
+        self.write_ln("            }");
+        self.write_ln("        }");
+        self.write_ln("    }");
+        self.write_ln("}");
         self.blank_ln();
     }
 
