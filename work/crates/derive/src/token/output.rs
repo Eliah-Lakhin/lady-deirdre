@@ -134,7 +134,7 @@ impl<'a> Output<'a> {
                     _ => Self::pattern(set),
                 };
 
-                let handle = self.handle(to, false);
+                let handle = self.handle(to, false, false);
 
                 quote!(#pattern => #handle)
             })
@@ -186,7 +186,7 @@ impl<'a> Output<'a> {
                     statements.push(quote!(unsafe {
                         #core::lexis::LexisSession::consume(session)
                     }));
-                    statements.append(self.handle(to, true));
+                    statements.append(self.handle(to, true, false));
                 }
             }
 
@@ -201,7 +201,7 @@ impl<'a> Output<'a> {
             .into_iter()
             .map(|(to, set)| {
                 let pattern = Self::pattern(set);
-                let handle = self.handle(to, true);
+                let handle = self.handle(to, true, true);
 
                 quote!(#pattern => #handle)
             })
@@ -220,7 +220,7 @@ impl<'a> Output<'a> {
 
         if let Some((properties, to)) = self.properties {
             let matcher = Self::properties_matcher(Span::call_site(), properties);
-            let mut handle = self.handle(to, true);
+            let mut handle = self.handle(to, true, true);
             handle.surround = true;
 
             statements.push_branching(quote!(if #matcher #handle));
@@ -229,7 +229,7 @@ impl<'a> Output<'a> {
         match self.other {
             None => statements.push(quote!(break)),
             Some(to) => {
-                let handle = self.handle(to, true);
+                let handle = self.handle(to, true, false);
                 statements.append(handle);
             }
         }
@@ -253,7 +253,7 @@ impl<'a> Output<'a> {
         false
     }
 
-    fn handle(&mut self, to: State, unicode: bool) -> Statements {
+    fn handle(&mut self, to: State, unicode: bool, force_continue: bool) -> Statements {
         let mut statements = Statements::default();
 
         if let Some(index) = self.input.products.get(&to) {
@@ -318,6 +318,10 @@ impl<'a> Output<'a> {
                     let _ = self.pending.insert(to);
 
                     statements.push(quote!(state = #to))
+                }
+
+                if force_continue {
+                    statements.push(quote!(continue));
                 }
             }
         };
