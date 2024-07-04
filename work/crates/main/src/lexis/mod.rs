@@ -43,6 +43,7 @@ mod session;
 mod site;
 mod span;
 mod token;
+mod ucd;
 
 pub(crate) const CHUNK_SIZE: Length = 5;
 
@@ -59,4 +60,5 @@ pub use crate::lexis::{
     site::{ByteIndex, Length, Site, SiteRef, ToSite, NIL_SITE_REF},
     span::{PositionSpan, SiteRefSpan, SiteSpan, ToSpan},
     token::{Token, TokenCount, TokenRef, NIL_TOKEN_REF},
+    ucd::{Char, CharProperties},
 };

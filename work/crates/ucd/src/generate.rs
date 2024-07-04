@@ -138,18 +138,18 @@ impl Emitter {
         self.write_ln("///");
         self.write_ln("/// Using the [Char::has_properties] function, you can check");
         self.write_ln("/// if a character has specified properties:");
-        self.write_ln("/// `assert!('a'.has_properties(CharProperties::new().with_lower()))`.");
+        self.write_ln("/// `assert!('a'.has_properties(&CharProperties::new().with_lower()))`.");
         self.write_ln("///");
         self.write_ln("/// The configuration is inclusive, meaning that that if a character");
         self.write_ln("/// has at least one of the configured property, has_properties");
         self.write("/// returns true: ");
         self.write_ln(
-            "`assert!('a'.has_properties(CharProperties::new().with_alpha().with_num()))`.",
+            "`assert!('a'.has_properties(&CharProperties::new().with_alpha().with_num()))`.",
         );
         self.write_ln("///");
         self.write_ln("/// By default, this object does not have any configured properties.");
         self.write_ln("/// Therefore, the has_properties function returns false: ");
-        self.write_ln("/// `assert!(!'b'.has_properties(CharProperties::new()))`.");
+        self.write_ln("/// `assert!(!'b'.has_properties(&CharProperties::new()))`.");
         self.write_ln("///");
         self.write_ln("/// **Note**: This object is not stabilized yet. New members may be");
         self.write_ln("/// added in future minor versions of Lady Deirdre. The exact behavior");
@@ -160,7 +160,14 @@ impl Emitter {
         self.write_ln("#[non_exhaustive]");
         self.write_ln("pub struct CharProperties {");
 
+        let mut first = true;
+
         for (prop, _) in input {
+            match first {
+                true => first = false,
+                false => self.blank_ln(),
+            }
+
             self.write("    /// Includes ");
 
             let mut first = true;
@@ -168,7 +175,7 @@ impl Emitter {
             for prop in prop.raw_names {
                 match first {
                     true => first = false,
-                    false => self.write(", or "),
+                    false => self.write(", "),
                 }
 
                 self.write("`");
@@ -224,7 +231,7 @@ impl Emitter {
             for prop in prop.raw_names {
                 match first {
                     true => first = false,
-                    false => self.write(", or "),
+                    false => self.write(", "),
                 }
 
                 self.write("`");
@@ -279,7 +286,7 @@ impl Emitter {
             for prop in prop.raw_names {
                 match first {
                     true => first = false,
-                    false => self.write(", or "),
+                    false => self.write(", "),
                 }
 
                 self.write("`");
@@ -300,7 +307,7 @@ impl Emitter {
         self.blank_ln();
         self.write_ln("    /// Returns true if the character has at least one of the specified");
         self.write_ln("    /// properties. See [CharProperties] for details.");
-        self.write_ln("    fn has_properties(self, props: CharProperties) -> bool;");
+        self.write_ln("    fn has_properties(self, props: &CharProperties) -> bool;");
 
         self.write_ln("}");
         self.blank_ln();
@@ -326,7 +333,7 @@ impl Emitter {
         }
 
         self.blank_ln();
-        self.write_ln("    fn has_properties(self, props: CharProperties) -> bool {");
+        self.write_ln("    fn has_properties(self, props: &CharProperties) -> bool {");
 
         first = true;
 
@@ -554,20 +561,4 @@ impl Emitter {
 
         (root, child)
     }
-
-    /*
-
-    def compute_trie(rawdata, chunksize):
-        root = []
-        childmap = {}
-        child_data = []
-        for i in range(len(rawdata) / chunksize):
-            data = rawdata[i * chunksize: (i + 1) * chunksize]
-            child = '|'.join(map(str, data))
-            if child not in childmap:
-                childmap[child] = len(childmap)
-                child_data.extend(data)
-            root.append(childmap[child])
-        return (root, child_data)
-         */
 }
