@@ -36,15 +36,18 @@ use std::fmt::{Display, Formatter};
 
 use proc_macro2::Span;
 use syn::{
-    LitChar,
     parse::{Lookahead1, Parse, ParseStream},
     punctuated::Punctuated,
-    Result,
     spanned::Spanned,
+    LitChar,
+    Result,
 };
 
 use crate::{
-    token::regex::{Operand, Operator, Regex},
+    token::{
+        regex::{Operand, Operator, Regex},
+        ucd::CharProperties,
+    },
     utils::{error, PredictableCollection, Set, SetImpl},
 };
 

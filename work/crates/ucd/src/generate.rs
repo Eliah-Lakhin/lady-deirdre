@@ -156,7 +156,7 @@ impl Emitter {
         self.write_ln("/// of already included properties may change over time too to better");
         self.write("/// match the recent updates in ");
         self.write_ln("the [Unicode Character Database](https://www.unicode.org/ucd/).");
-        self.write_ln("#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]");
+        self.write_ln("#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]");
         self.write_ln("#[non_exhaustive]");
         self.write_ln("pub struct CharProperties {");
 
@@ -193,6 +193,51 @@ impl Emitter {
             self.write_ln(": bool,");
         }
 
+        self.write_ln("}");
+        self.blank_ln();
+
+        self.write_ln("impl std::fmt::Display for CharProperties {");
+        self.write_ln("    #[inline(always)]");
+        self.write("    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>)");
+        self.write_ln(" -> std::fmt::Result {");
+        self.write_ln("        formatter.write_str(\"$\")?;");
+        self.blank_ln();
+        self.write_ln("        let mut props = Vec::new();");
+
+        for (prop, _) in input {
+            self.blank_ln();
+            self.write("        if self.");
+            self.write(prop.field_name);
+            self.write_ln(" {");
+            self.write("            props.push(\"");
+            self.write(prop.field_name);
+            self.write_ln("\");");
+            self.write_ln("        }");
+        }
+
+        self.blank_ln();
+        self.write_ln("        if props.len() == 1 {");
+        self.write_ln("            formatter.write_str(props[0])?;");
+        self.write_ln("            return Ok(());");
+        self.write_ln("        }");
+        self.blank_ln();
+        self.write_ln("        formatter.write_str(\"{\")?;");
+        self.blank_ln();
+        self.write_ln("        let mut first = true;");
+        self.blank_ln();
+        self.write_ln("        for prop in props {");
+        self.write_ln("            match first {");
+        self.write_ln("                true => first = false,");
+        self.write_ln("                false => formatter.write_str(\" | \")?,");
+        self.write_ln("            }");
+        self.blank_ln();
+        self.write_ln("            formatter.write_str(prop)?;");
+        self.write_ln("        }");
+        self.blank_ln();
+        self.write_ln("        formatter.write_str(\"}\")?;");
+        self.blank_ln();
+        self.write_ln("        Ok(())");
+        self.write_ln("    }");
         self.write_ln("}");
         self.blank_ln();
 

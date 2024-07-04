@@ -38,6 +38,8 @@ mod input;
 mod opt;
 mod output;
 mod regex;
+#[path = "../../../main/src/lexis/ucd.rs"]
+mod ucd;
 mod variant;
 
 pub use crate::token::input::TokenInput;
