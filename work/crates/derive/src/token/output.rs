@@ -43,7 +43,7 @@ use quote::ToTokens;
 use syn::{spanned::Spanned, LitByte, LitStr};
 
 use crate::{
-    token::{automata::Terminal, chars::Class, TokenInput},
+    token::{automata::Terminal, chars::Class, ucd::CharProperties, TokenInput},
     utils::{
         expect_some,
         null,
@@ -67,12 +67,7 @@ pub(super) struct Output<'a> {
     from: State,
     ascii: BTreeMap<State, Set<u8>>,
     unicode: BTreeMap<State, Set<char>>,
-    upper: Option<State>,
-    lower: Option<State>,
-    num: Option<State>,
-    space: Option<State>,
-    alphabetic: Option<State>,
-    alphanumeric: Option<State>,
+    properties: Option<(CharProperties, State)>,
     other: Option<State>,
 }
 
@@ -88,12 +83,7 @@ impl<'a> Output<'a> {
             from: 0,
             ascii: BTreeMap::new(),
             unicode: BTreeMap::new(),
-            upper: None,
-            lower: None,
-            num: None,
-            space: None,
-            alphabetic: None,
-            alphanumeric: None,
+            properties: None,
             other: None,
         };
 
@@ -144,13 +134,11 @@ impl<'a> Output<'a> {
                     _ => Self::pattern(set),
                 };
 
-                let handle = self.handle(to, false);
+                let handle = self.handle(to, false, false);
 
                 quote!(#pattern => #handle)
             })
             .collect::<Vec<_>>();
-
-        self.merge_classes();
 
         let fallback = self.fallback();
 
@@ -198,7 +186,7 @@ impl<'a> Output<'a> {
                     statements.push(quote!(unsafe {
                         #core::lexis::LexisSession::consume(session)
                     }));
-                    statements.append(self.handle(to, true));
+                    statements.append(self.handle(to, true, false));
                 }
             }
 
@@ -213,7 +201,7 @@ impl<'a> Output<'a> {
             .into_iter()
             .map(|(to, set)| {
                 let pattern = Self::pattern(set);
-                let handle = self.handle(to, true);
+                let handle = self.handle(to, true, true);
 
                 quote!(#pattern => #handle)
             })
@@ -230,76 +218,23 @@ impl<'a> Output<'a> {
             ))
         }
 
-        if let Some(to) = self.upper {
-            let mut handle = self.handle(to, true);
+        if let Some((properties, to)) = self.properties {
+            let matcher = Self::properties_matcher(Span::call_site(), properties);
+            let mut handle = self.handle(to, true, true);
             handle.surround = true;
 
-            statements.push_branching(quote!(if char::is_uppercase(ch) #handle));
-        }
-
-        if let Some(to) = self.lower {
-            let mut handle = self.handle(to, true);
-            handle.surround = true;
-
-            statements.push_branching(quote!(if char::is_lowercase(ch) #handle));
-        }
-
-        if let Some(to) = self.alphabetic {
-            let mut handle = self.handle(to, true);
-            handle.surround = true;
-
-            statements.push_branching(quote!(if char::is_alphabetic(ch) #handle));
-        }
-
-        if let Some(to) = self.num {
-            let mut handle = self.handle(to, true);
-            handle.surround = true;
-
-            statements.push_branching(quote!(if char::is_numeric(ch) #handle));
-        }
-
-        if let Some(to) = self.alphanumeric {
-            let mut handle = self.handle(to, true);
-            handle.surround = true;
-
-            statements.push_branching(quote!(if char::is_alphanumeric(ch) #handle));
-        }
-
-        if let Some(to) = self.space {
-            let mut handle = self.handle(to, true);
-            handle.surround = true;
-
-            statements.push_branching(quote!(if char::is_whitespace(ch) #handle));
+            statements.push_branching(quote!(if #matcher #handle));
         }
 
         match self.other {
             None => statements.push(quote!(break)),
             Some(to) => {
-                let handle = self.handle(to, true);
+                let handle = self.handle(to, true, false);
                 statements.append(handle);
             }
         }
 
         statements
-    }
-
-    fn merge_classes(&mut self) {
-        if self.upper.is_some() && self.upper == self.lower {
-            self.alphabetic = self.upper;
-            self.upper = None;
-            self.lower = None;
-        }
-
-        if self.alphabetic.is_some() && self.alphabetic == self.num {
-            self.alphanumeric = self.alphabetic;
-            self.alphabetic = None;
-            self.num = None;
-        }
-
-        if self.other.is_some() && self.other == self.space && self.other == self.alphanumeric {
-            self.space = None;
-            self.alphanumeric = None;
-        }
     }
 
     fn requires_char(&self) -> bool {
@@ -311,34 +246,14 @@ impl<'a> Output<'a> {
             return true;
         }
 
-        if self.upper.is_some() {
-            return true;
-        }
-
-        if self.lower.is_some() {
-            return true;
-        }
-
-        if self.num.is_some() {
-            return true;
-        }
-
-        if self.space.is_some() {
-            return true;
-        }
-
-        if self.alphabetic.is_some() {
-            return true;
-        }
-
-        if self.alphanumeric.is_some() {
+        if self.properties.is_some() {
             return true;
         }
 
         false
     }
 
-    fn handle(&mut self, to: State, unicode: bool) -> Statements {
+    fn handle(&mut self, to: State, unicode: bool, force_continue: bool) -> Statements {
         let mut statements = Statements::default();
 
         if let Some(index) = self.input.products.get(&to) {
@@ -404,6 +319,10 @@ impl<'a> Output<'a> {
 
                     statements.push(quote!(state = #to))
                 }
+
+                if force_continue {
+                    statements.push(quote!(continue));
+                }
             }
         };
 
@@ -417,24 +336,9 @@ impl<'a> Output<'a> {
                 false => self.insert_unicode(*ch, to),
             },
 
-            Class::Upper => {
-                self.upper = Some(to);
-                self.insert_ascii_class(Class::Upper, to);
-            }
-
-            Class::Lower => {
-                self.lower = Some(to);
-                self.insert_ascii_class(Class::Lower, to);
-            }
-
-            Class::Num => {
-                self.num = Some(to);
-                self.insert_ascii_class(Class::Num, to);
-            }
-
-            Class::Space => {
-                self.space = Some(to);
-                self.insert_ascii_class(Class::Space, to);
+            Class::Props(props) => {
+                self.properties = Some((*props, to));
+                self.insert_ascii_class(Class::Props(*props), to);
             }
 
             Class::Other => {
@@ -486,12 +390,7 @@ impl<'a> Output<'a> {
     fn reset(&mut self) {
         self.ascii.clear();
         self.unicode.clear();
-        self.upper = None;
-        self.lower = None;
-        self.num = None;
-        self.space = None;
-        self.alphabetic = None;
-        self.alphanumeric = None;
+        self.properties = None;
         self.other = None;
     }
 
@@ -552,6 +451,60 @@ impl<'a> Output<'a> {
         let groups = expect_some!(groups, "Empty pattern.",);
 
         quote!(#( #groups )|*)
+    }
+
+    fn properties_matcher(span: Span, properties: CharProperties) -> TokenStream {
+        let core = span.face_core();
+
+        let mut setters = Vec::new();
+        let mut single = None;
+
+        if properties.alpha {
+            setters.push(quote_spanned!(span=> props.alpha = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_alpha(ch)));
+        }
+
+        if properties.lower {
+            setters.push(quote_spanned!(span=> props.lower = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_lower(ch)));
+        }
+
+        if properties.num {
+            setters.push(quote_spanned!(span=> props.num = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_num(ch)));
+        }
+
+        if properties.space {
+            setters.push(quote_spanned!(span=> props.space = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_space(ch)));
+        }
+
+        if properties.upper {
+            setters.push(quote_spanned!(span=> props.upper = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_upper(ch)));
+        }
+
+        if properties.xid_continue {
+            setters.push(quote_spanned!(span=> props.xid_continue = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_xid_continue(ch)));
+        }
+
+        if properties.xid_start {
+            setters.push(quote_spanned!(span=> props.xid_start = true;));
+            single = Some(quote_spanned!(span=> #core::lexis::Char::is_xid_start(ch)));
+        }
+
+        if setters.len() == 1 {
+            return expect_some!(single, "Missing single matcher.",);
+        }
+
+        quote_spanned! (span=> #core::lexis::Char::has_properties(&const {
+            let mut props = #core::lexis::CharProperties::new();
+
+            #( #setters )*
+
+            props
+        }))
     }
 }
 

@@ -34,6 +34,7 @@
 
 use std::fmt::{Display, Formatter};
 
+use proc_macro2::Span;
 use syn::Result;
 
 use crate::{
@@ -165,12 +166,78 @@ impl AutomataImpl for TokenAutomata {
 
         Ok(products)
     }
+
+    fn check_property_conflicts(&self, span: Span) -> Result<()> {
+        for (_, outgoing) in self.transitions().view() {
+            let mut other = false;
+            let mut props = Vec::new();
+
+            for (through, to) in outgoing {
+                let Terminal::Class(class) = through else {
+                    continue;
+                };
+
+                match class {
+                    Class::Char(_) => continue,
+                    Class::Props(through) => {
+                        props.push((through, to));
+                    }
+                    Class::Other => {
+                        other = true;
+                    }
+                }
+
+                if other {
+                    if let Some((through, _)) = props.first() {
+                        return Err(error!(
+                            span,
+                            "Char properties choice ambiguity.\n\
+                            Choice branching in form of \"{through} | .\" or \
+                            \"{through} | ^[...]\" is forbidden.",
+                        ));
+                    }
+                }
+
+                if props.len() > 1 {
+                    let (first_props, first_state) = &props[0];
+                    let (second_props, second_state) = &props[1];
+
+                    return match first_state == second_state {
+                        true => {
+                            let union = first_props.union(**second_props);
+
+                            Err(error!(
+                                span,
+                                "Char properties choice ambiguity.\n\
+                                Choice branching in form of \"{first_props} | \
+                                {second_props}\" is forbidden.\n\
+                                Consider introducing union property class \
+                                instead: {union}.",
+                            ))
+                        }
+
+                        false => Err(error!(
+                            span,
+                            "Char properties choice ambiguity.\n\
+                            Choice branching between two distinct property \
+                            classes ({first_props} and {second_props}) \
+                            is forbidden.",
+                        )),
+                    };
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 pub(super) trait AutomataImpl {
     fn merge(&mut self, scope: &mut Scope, variants: &Variants) -> Result<()>;
 
     fn filter_out(&mut self, variants: &Variants) -> Result<ProductMap>;
+
+    fn check_property_conflicts(&self, span: Span) -> Result<()>;
 }
 
 pub(super) struct Scope {

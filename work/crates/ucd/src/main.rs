@@ -32,14 +32,92 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod automata;
-mod chars;
-mod input;
-mod opt;
-mod output;
-mod regex;
-#[path = "../../../main/src/lexis/ucd.rs"]
-mod ucd;
-mod variant;
+//TODO check warnings regularly
+#![allow(warnings)]
 
-pub use crate::token::input::TokenInput;
+mod download;
+mod generate;
+mod parse;
+
+use std::{env::args, process::exit};
+
+static UCD_DOWNLOADS_DIR: &str = "downloads";
+
+static UCD_URL: &str = "https://www.unicode.org/Public/UCD/latest/ucd/";
+
+static UCD_RESOURCES: &[&str] = &[
+    "DerivedCoreProperties.txt",
+    "PropList.txt",
+    "UnicodeData.txt",
+    "SpecialCasing.txt",
+];
+
+static GENERATED_FILE: &str = "ucd_gen.txt";
+
+static RAW_PROPERTIES: &[PropDesc] = &[
+    PropDesc {
+        raw_names: &["Alphabetic"],
+        table_name: "ALPHABETIC_TABLE",
+        field_name: "alpha",
+    },
+    PropDesc {
+        raw_names: &["Lowercase"],
+        table_name: "LOWERCASE_TABLE",
+        field_name: "lower",
+    },
+    PropDesc {
+        raw_names: &["Uppercase"],
+        table_name: "UPPERCASE_TABLE",
+        field_name: "upper",
+    },
+    PropDesc {
+        raw_names: &["White_Space"],
+        table_name: "WHITE_SPACE_TABLE",
+        field_name: "space",
+    },
+    PropDesc {
+        raw_names: &["N", "Nd", "Nl", "No"],
+        table_name: "NUM_TABLE",
+        field_name: "num",
+    },
+    PropDesc {
+        raw_names: &["XID_Start"],
+        table_name: "XID_START_TABLE",
+        field_name: "xid_start",
+    },
+    PropDesc {
+        raw_names: &["XID_Continue"],
+        table_name: "XID_CONTINUE_TABLE",
+        field_name: "xid_continue",
+    },
+];
+
+#[derive(PartialEq, Eq, Hash)]
+struct PropDesc {
+    raw_names: &'static [&'static str],
+    table_name: &'static str,
+    field_name: &'static str,
+}
+
+fn main() {
+    let mut arg = match args().skip(1).next() {
+        Some(arg) => arg,
+
+        None => {
+            eprintln!("Missing command. Available commands are: \"download\", \"generate\"");
+            exit(1);
+        }
+    };
+
+    match arg.as_str() {
+        "download" => download::download(),
+        "generate" => generate::generate(),
+
+        other => {
+            eprintln!(
+                "Unknown command {other}. Available commands are: \"download\", \"generate\"",
+            );
+            exit(1);
+        }
+    }
+}
