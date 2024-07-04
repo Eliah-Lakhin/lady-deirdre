@@ -301,6 +301,50 @@ impl Emitter {
             self.write_ln("    }");
         }
 
+        self.blank_ln();
+        self.write_ln("    /// Creates a union of two property configurations.");
+        self.write_ln("    ///");
+        self.write_ln("    /// The resulting configuration includes a property if at least one of");
+        self.write_ln("    /// two specified configuration objects includes this property.");
+        self.write_ln("    #[inline(always)]");
+        self.write_ln("    pub const fn union(mut self, other: Self) -> Self {");
+
+        for (prop, _) in input {
+            self.write("        self.");
+            self.write(prop.field_name);
+            self.write(" = self.");
+            self.write(prop.field_name);
+            self.write(" || other.");
+            self.write(prop.field_name);
+            self.write_ln(";");
+        }
+
+        self.blank_ln();
+        self.write_ln("        self");
+        self.write_ln("    }");
+
+        self.blank_ln();
+        self.write_ln("    /// Creates an intersection of two property configurations.");
+        self.write_ln("    ///");
+        self.write_ln("    /// The resulting configuration includes a property if both specified");
+        self.write_ln("    /// configuration objects include this property.");
+        self.write_ln("    #[inline(always)]");
+        self.write_ln("    pub const fn intersect(mut self, other: Self) -> Self {");
+
+        for (prop, _) in input {
+            self.write("        self.");
+            self.write(prop.field_name);
+            self.write(" = self.");
+            self.write(prop.field_name);
+            self.write(" && other.");
+            self.write(prop.field_name);
+            self.write_ln(";");
+        }
+
+        self.blank_ln();
+        self.write_ln("        self");
+        self.write_ln("    }");
+
         self.write_ln("}");
         self.blank_ln();
     }

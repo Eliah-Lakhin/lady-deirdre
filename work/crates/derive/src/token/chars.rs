@@ -46,7 +46,7 @@ use syn::{
 use crate::{
     token::{
         regex::{Operand, Operator, Regex},
-        ucd::CharProperties,
+        ucd::{Char, CharProperties},
     },
     utils::{error, PredictableCollection, Set, SetImpl},
 };
@@ -65,49 +65,36 @@ impl Parse for CharSet {
             let _ = input.parse::<Token![$]>()?;
             let lookahead = input.lookahead1();
 
-            if lookahead.peek(char_kw::alpha) {
+            let mut props = CharProperties::new();
+
+            if lookahead.peek(syn::token::Brace) {
+                let content;
+                braced!(content in input);
+
+                let span = content.span();
+
+                let components =
+                    Punctuated::<CharProp, Token![|]>::parse_separated_nonempty(&content)?;
+
+                for prop in components {
+                    prop.append_to(&mut props);
+                }
+
                 return Ok(Self {
-                    span: input.parse::<char_kw::alpha>()?.span,
-                    classes: Set::new([Class::Upper, Class::Lower, Class::Alpha]),
+                    span,
+                    classes: Set::new([Class::Props(props)]),
                 });
             }
 
-            if lookahead.peek(char_kw::alphanum) {
-                return Ok(Self {
-                    span: input.parse::<char_kw::alphanum>()?.span,
-                    classes: Set::new([Class::Upper, Class::Lower, Class::Alpha, Class::Num]),
-                });
-            }
+            let prop = CharProp::lookahead(input, lookahead)?;
+            let span = prop.span();
 
-            if lookahead.peek(char_kw::upper) {
-                return Ok(Self {
-                    span: input.parse::<char_kw::upper>()?.span,
-                    classes: Set::new([Class::Upper]),
-                });
-            }
+            prop.append_to(&mut props);
 
-            if lookahead.peek(char_kw::lower) {
-                return Ok(Self {
-                    span: input.parse::<char_kw::lower>()?.span,
-                    classes: Set::new([Class::Lower]),
-                });
-            }
-
-            if lookahead.peek(char_kw::num) {
-                return Ok(Self {
-                    span: input.parse::<char_kw::num>()?.span,
-                    classes: Set::new([Class::Num]),
-                });
-            }
-
-            if lookahead.peek(char_kw::space) {
-                return Ok(Self {
-                    span: input.parse::<char_kw::space>()?.span,
-                    classes: Set::new([Class::Space]),
-                });
-            }
-
-            return Err(lookahead.error());
+            return Ok(Self {
+                span,
+                classes: Set::new([Class::Props(props)]),
+            });
         }
 
         if lookahead.peek(syn::LitChar) {
@@ -167,13 +154,30 @@ impl CharSet {
         false
     }
 
-    pub(super) fn parse_brackets(input: ParseStream) -> Result<Self> {
+    pub(super) fn parse_brackets(input: ParseStream, exclusion: bool) -> Result<Self> {
         let content;
         bracketed!(content in input);
 
         let span = content.span();
 
         let components = Punctuated::<Self, Token![,]>::parse_separated_nonempty(&content)?;
+
+        if exclusion {
+            for component in &components {
+                for class in &component.classes {
+                    let Class::Props(_) = &class else {
+                        continue;
+                    };
+
+                    if !exclusion {
+                        return Err(error!(
+                            component.span,
+                            "Property classes in the exclusion syntax are forbidden.",
+                        ));
+                    }
+                }
+            }
+        }
 
         Ok(components.into_iter().fold(
             Self {
@@ -211,11 +215,7 @@ impl CharSet {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub(super) enum Class {
     Char(char),
-    Upper,
-    Lower,
-    Alpha,
-    Num,
-    Space,
+    Props(CharProperties),
     Other,
 }
 
@@ -224,11 +224,7 @@ impl Display for Class {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Char(ch) => formatter.write_fmt(format_args!("{:?}", ch)),
-            Self::Upper => formatter.write_str("$Upper"),
-            Self::Lower => formatter.write_str("$Lower"),
-            Self::Alpha => formatter.write_str("$Alpha"),
-            Self::Num => formatter.write_str("$Num"),
-            Self::Space => formatter.write_str("$Space"),
+            Self::Props(props) => Display::fmt(props, formatter),
             Self::Other => formatter.write_str("_"),
         }
     }
@@ -239,21 +235,104 @@ impl Class {
     pub(super) fn includes(&self, ch: &char) -> bool {
         match self {
             Self::Char(this) => this == ch,
-            Self::Upper => ch.is_uppercase(),
-            Self::Lower => ch.is_lowercase(),
-            Self::Alpha => ch.is_alphabetic() && !ch.is_uppercase() && !ch.is_lowercase(),
-            Self::Num => ch.is_numeric(),
-            Self::Space => ch.is_whitespace(),
+            Self::Props(props) => ch.has_properties(props),
             Self::Other => true,
+        }
+    }
+}
+
+enum CharProp {
+    Alpha(Span),
+    Lower(Span),
+    Num(Span),
+    Space(Span),
+    Upper(Span),
+    XidContinue(Span),
+    XidStart(Span),
+}
+
+impl Parse for CharProp {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let lookahead = input.lookahead1();
+
+        Self::lookahead(input, lookahead)
+    }
+}
+
+impl CharProp {
+    #[inline(always)]
+    fn lookahead(input: ParseStream, lookahead: Lookahead1) -> Result<Self> {
+        if lookahead.peek(char_kw::alpha) {
+            let span = input.parse::<char_kw::alpha>()?.span;
+            return Ok(Self::Alpha(span));
+        }
+
+        if lookahead.peek(char_kw::lower) {
+            let span = input.parse::<char_kw::lower>()?.span;
+            return Ok(Self::Lower(span));
+        }
+
+        if lookahead.peek(char_kw::num) {
+            let span = input.parse::<char_kw::num>()?.span;
+            return Ok(Self::Num(span));
+        }
+
+        if lookahead.peek(char_kw::space) {
+            let span = input.parse::<char_kw::space>()?.span;
+            return Ok(Self::Space(span));
+        }
+
+        if lookahead.peek(char_kw::upper) {
+            let span = input.parse::<char_kw::upper>()?.span;
+            return Ok(Self::Upper(span));
+        }
+
+        if lookahead.peek(char_kw::xid_continue) {
+            let span = input.parse::<char_kw::xid_continue>()?.span;
+            return Ok(Self::XidContinue(span));
+        }
+
+        if lookahead.peek(char_kw::xid_start) {
+            let span = input.parse::<char_kw::xid_start>()?.span;
+            return Ok(Self::XidStart(span));
+        }
+
+        Err(lookahead.error())
+    }
+
+    #[inline(always)]
+    fn append_to(self, props: &mut CharProperties) {
+        match self {
+            Self::Alpha(_) => props.alpha = true,
+            Self::Lower(_) => props.lower = true,
+            Self::Num(_) => props.num = true,
+            Self::Space(_) => props.space = true,
+            Self::Upper(_) => props.upper = true,
+            Self::XidContinue(_) => props.xid_continue = true,
+            Self::XidStart(_) => props.xid_start = true,
+        }
+    }
+
+    #[inline(always)]
+    fn span(&self) -> Span {
+        match self {
+            Self::Alpha(span) => *span,
+            Self::Lower(span) => *span,
+            Self::Num(span) => *span,
+            Self::Space(span) => *span,
+            Self::Upper(span) => *span,
+            Self::XidContinue(span) => *span,
+            Self::XidStart(span) => *span,
         }
     }
 }
 
 mod char_kw {
     syn::custom_keyword!(alpha);
-    syn::custom_keyword!(alphanum);
-    syn::custom_keyword!(upper);
     syn::custom_keyword!(lower);
     syn::custom_keyword!(num);
     syn::custom_keyword!(space);
+    syn::custom_keyword!(upper);
+    syn::custom_keyword!(xid_continue);
+    syn::custom_keyword!(xid_start);
 }

@@ -34,8 +34,8 @@
 
 use proc_macro2::{Ident, Span};
 use syn::{
-    LitStr,
     parse::{Lookahead1, ParseStream},
+    LitStr,
     Result,
 };
 
@@ -46,11 +46,12 @@ use crate::{
         input::{Alphabet, InlineMap, VariantMap},
     },
     utils::{
-        Applicability,
-        AutomataContext,
         dump_kw,
         error,
         expect_some,
+        system_panic,
+        Applicability,
+        AutomataContext,
         Expression,
         ExpressionOperand,
         ExpressionOperator,
@@ -58,7 +59,6 @@ use crate::{
         Set,
         SetImpl,
         Strategy,
-        system_panic,
     },
 };
 
@@ -127,41 +127,14 @@ impl RegexImpl for Regex {
             Self::Operand(Operand::Exclusion(set)) => {
                 let mut alphabet = alphabet.clone();
 
-                let mut upper = true;
-                let mut lower = true;
-                let mut alpha = true;
-                let mut num = true;
-                let mut space = true;
-
                 for exclusion in &set.classes {
                     match exclusion {
                         Class::Char(ch) => {
                             let _ = alphabet.remove(ch);
                         }
 
-                        Class::Upper => {
-                            alphabet.retain(|ch| !Class::Upper.includes(ch));
-                            upper = false;
-                        }
-
-                        Class::Lower => {
-                            alphabet.retain(|ch| !Class::Lower.includes(ch));
-                            lower = false;
-                        }
-
-                        Class::Alpha => {
-                            alphabet.retain(|ch| !Class::Alpha.includes(ch));
-                            alpha = false;
-                        }
-
-                        Class::Num => {
-                            alphabet.retain(|ch| !Class::Num.includes(ch));
-                            num = false;
-                        }
-
-                        Class::Space => {
-                            alphabet.retain(|ch| !Class::Space.includes(ch));
-                            space = false;
+                        Class::Props(_) => {
+                            system_panic!("Exclusion contains Property class.");
                         }
 
                         Class::Other => {
@@ -170,40 +143,14 @@ impl RegexImpl for Regex {
                     }
                 }
 
-                let mut generics = Vec::with_capacity(4);
+                let regex = alphabet.into_iter().map(|ch| Class::Char(ch)).fold(
+                    Self::Operand(Operand::Class(set.span, Class::Other)),
+                    |left, right| {
+                        let right = Self::Operand(Operand::Class(set.span, right));
 
-                if upper {
-                    generics.push(Class::Upper);
-                }
-
-                if lower {
-                    generics.push(Class::Lower);
-                }
-
-                if alpha {
-                    generics.push(Class::Alpha);
-                }
-
-                if num {
-                    generics.push(Class::Num);
-                }
-
-                if space {
-                    generics.push(Class::Space);
-                }
-
-                let regex = alphabet
-                    .into_iter()
-                    .map(|ch| Class::Char(ch))
-                    .chain(generics)
-                    .fold(
-                        Self::Operand(Operand::Class(set.span, Class::Other)),
-                        |left, right| {
-                            let right = Self::Operand(Operand::Class(set.span, right));
-
-                            Self::Binary(Box::new(left), Operator::Union, Box::new(right))
-                        },
-                    );
+                        Self::Binary(Box::new(left), Operator::Union, Box::new(right))
+                    },
+                );
 
                 *self = regex;
             }
@@ -228,11 +175,9 @@ impl RegexImpl for Regex {
 
                 match class {
                     Class::Char(_) => (),
-                    Class::Upper => *self = expand_class(*span, Class::Upper, alphabet),
-                    Class::Lower => *self = expand_class(*span, Class::Lower, alphabet),
-                    Class::Alpha => *self = expand_class(*span, Class::Alpha, alphabet),
-                    Class::Num => *self = expand_class(*span, Class::Num, alphabet),
-                    Class::Space => *self = expand_class(*span, Class::Space, alphabet),
+                    Class::Props(props) => {
+                        *self = expand_class(*span, Class::Props(*props), alphabet)
+                    }
                     Class::Other => system_panic!("Explicit Other class."),
                 }
             }
@@ -573,7 +518,7 @@ impl ExpressionOperand<Operator> for Operand {
         }
 
         if lookahead.peek(syn::token::Bracket) {
-            let set = CharSet::parse_brackets(input)?;
+            let set = CharSet::parse_brackets(input, false)?;
 
             let expr = expect_some!(set.into_expr(), "Empty CharSet.",);
 
@@ -582,7 +527,7 @@ impl ExpressionOperand<Operator> for Operand {
 
         if lookahead.peek(Token![^]) {
             let _ = input.parse::<Token![^]>()?;
-            let set = CharSet::parse_brackets(input)?;
+            let set = CharSet::parse_brackets(input, true)?;
 
             return Ok(Regex::Operand(Operand::Exclusion(set)));
         }

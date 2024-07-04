@@ -403,6 +403,8 @@ impl TryFrom<DeriveInput> for TokenInput {
 
         automata.merge(&mut scope, &variants)?;
 
+        automata.check_property_conflicts(ident.span())?;
+
         scope.set_strategy(opt.into_strategy());
         scope.optimize(&mut automata);
 
