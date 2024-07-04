@@ -303,7 +303,12 @@ mod utils;
 ///
 ///  - Any Unicode alphabetic character: `$alpha`.
 ///
-///  - Any Unicode alphabetic or numeric character: `$alphanum`.
+///  - Any Unicode identifier's start character: `$xid_start`.
+///
+///  - Any Unicode identifier's continuation character: `$xid_continue`.
+///
+///  - A class of the character property combinations: `${alpha | num | space}`.
+///    The property names are any combinations of the names listed above above.
 ///
 ///  - A concatenation of the rules: `<expr1> & <expr2>` or just `<expr1> <expr2>`.
 ///    Matches `<expr1>`, then matches `<expr2>`. The concatenation expression
