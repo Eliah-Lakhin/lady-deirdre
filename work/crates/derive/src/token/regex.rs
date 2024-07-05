@@ -32,6 +32,8 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
+use std::mem::take;
+
 use proc_macro2::{Ident, Span};
 use syn::{
     parse::{Lookahead1, ParseStream},
@@ -75,6 +77,12 @@ impl RegexImpl for Regex {
 
             Self::Operand(Operand::Dump(_, inner)) => inner.name(),
 
+            Self::Operand(Operand::Transform(_, inner)) => {
+                let inner = expect_some!(inner, "Empty transformation.",);
+
+                inner.name()
+            }
+
             Self::Operand(_) => None,
 
             Self::Binary(left, Operator::Concat, right) => {
@@ -92,11 +100,50 @@ impl RegexImpl for Regex {
         }
     }
 
+    fn transform(&mut self, config: &TransformConfig) {
+        match self {
+            Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
+
+            Self::Operand(Operand::Dump(_, inner)) => inner.transform(config),
+
+            Self::Operand(Operand::Transform(feature, inner)) => {
+                let mut inner = expect_some!(take(inner), "Empty transformation.",);
+
+                let config = config.add(feature);
+
+                inner.transform(&config);
+
+                *self = *inner;
+            }
+
+            Self::Operand(Operand::Class(span, class)) => {
+                if let Some(new_regex) = config.transform_class(span, class) {
+                    *self = new_regex;
+                }
+            }
+
+            Self::Operand(Operand::Exclusion(set)) => {
+                config.transform_char_set(set);
+            }
+
+            Self::Binary(left, _, right) => {
+                left.transform(config);
+                right.transform(config);
+            }
+
+            Self::Unary(_, inner) => inner.transform(config),
+        }
+    }
+
     fn alphabet(&self) -> Alphabet {
         match self {
             Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
 
             Self::Operand(Operand::Dump(_, inner)) => inner.alphabet(),
+
+            Self::Operand(Operand::Transform(_, _)) => {
+                system_panic!("Unresolved transformation.");
+            }
 
             Self::Operand(Operand::Class(_, Class::Char(ch))) => Set::new([*ch]),
 
@@ -123,6 +170,10 @@ impl RegexImpl for Regex {
             Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
 
             Self::Operand(Operand::Dump(_, inner)) => inner.expand(alphabet),
+
+            Self::Operand(Operand::Transform(_, _)) => {
+                system_panic!("Unresolved transformation.");
+            }
 
             Self::Operand(Operand::Exclusion(set)) => {
                 let mut alphabet = alphabet.clone();
@@ -288,6 +339,12 @@ impl RegexImpl for Regex {
                 inner.inline(inline_map, variant_map)?;
             }
 
+            Self::Operand(Operand::Transform(_, inner)) => {
+                let inner = expect_some!(inner, "Empty transformation.",);
+
+                inner.inline(inline_map, variant_map)?;
+            }
+
             Self::Operand(Operand::Class(_, _)) => (),
 
             Self::Operand(Operand::Exclusion(_)) => (),
@@ -312,6 +369,12 @@ impl RegexImpl for Regex {
             }
 
             Self::Operand(Operand::Dump(_, inner)) => {
+                inner.set_span(span);
+            }
+
+            Self::Operand(Operand::Transform(_, inner)) => {
+                let inner = expect_some!(inner, "Empty transformation.",);
+
                 inner.set_span(span);
             }
 
@@ -355,6 +418,10 @@ impl RegexImpl for Regex {
                 ))
             }
 
+            Self::Operand(Operand::Transform(_, _)) => {
+                system_panic!("Unresolved transformation.");
+            }
+
             Self::Binary(left, op, right) => {
                 let left = left.encode(scope)?;
                 let right = right.encode(scope)?;
@@ -383,6 +450,8 @@ impl RegexImpl for Regex {
 pub(super) trait RegexImpl {
     fn name(&self) -> Option<String>;
 
+    fn transform(&mut self, config: &TransformConfig);
+
     fn alphabet(&self) -> Alphabet;
 
     fn expand(&mut self, alphabet: &Alphabet);
@@ -392,6 +461,93 @@ pub(super) trait RegexImpl {
     fn set_span(&mut self, span: Span);
 
     fn encode(&self, scope: &mut Scope) -> Result<TokenAutomata>;
+}
+
+#[derive(Clone)]
+pub(super) enum TransformFeature {
+    CaseInsensitive,
+}
+
+#[derive(Default, Clone, Copy)]
+pub(super) struct TransformConfig {
+    case_insensitive: bool,
+}
+
+impl TransformConfig {
+    #[inline(always)]
+    pub(super) fn add(mut self, feature: &TransformFeature) -> Self {
+        match feature {
+            TransformFeature::CaseInsensitive => {
+                self.case_insensitive = true;
+            }
+        }
+
+        self
+    }
+
+    #[inline(always)]
+    pub(super) fn transform_class(&self, span: &Span, class: &Class) -> Option<Regex> {
+        let Class::Char(ch) = class else {
+            return None;
+        };
+
+        let mut transformed = self.transform_char(*ch).into_iter();
+
+        let first = transformed.next()?;
+
+        let mut accumulator = Regex::Operand(Operand::Class(*span, Class::Char(first)));
+
+        for next in transformed {
+            accumulator = Regex::Binary(
+                Box::new(accumulator),
+                Operator::Union,
+                Box::new(Regex::Operand(Operand::Class(*span, Class::Char(next)))),
+            );
+        }
+
+        Some(accumulator)
+    }
+
+    #[inline(always)]
+    pub(super) fn transform_char_set(&self, char_set: &mut CharSet) {
+        if !self.case_insensitive {
+            return;
+        }
+
+        let mut transformed = Set::empty();
+
+        for class in char_set.classes.iter() {
+            let Class::Char(ch) = class else {
+                continue;
+            };
+
+            transformed.append(self.transform_char(*ch));
+        }
+
+        for ch in transformed {
+            let _ = char_set.classes.insert(Class::Char(ch));
+        }
+    }
+
+    #[inline(always)]
+    fn transform_char(&self, ch: char) -> Set<char> {
+        if !self.case_insensitive {
+            return Set::empty();
+        }
+
+        let mut uppercase = ch.to_uppercase().collect::<Set<char>>();
+        let lowercase = ch.to_lowercase().collect::<Set<char>>();
+
+        if uppercase == lowercase {
+            return Set::empty();
+        }
+
+        uppercase.append(lowercase);
+
+        let _ = uppercase.insert(ch);
+
+        uppercase
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -475,6 +631,7 @@ impl ExpressionOperator for Operator {
 pub(super) enum Operand {
     Unresolved(Ident),
     Dump(Span, Box<Regex>),
+    Transform(TransformFeature, Option<Box<Regex>>),
     Class(Span, Class),
     Exclusion(CharSet),
 }
@@ -548,6 +705,24 @@ impl ExpressionOperand<Operator> for Operand {
             return Ok(Regex::Operand(Operand::Dump(span, Box::new(inner))));
         }
 
+        if lookahead.peek(functions_kw::i) {
+            let _ = input.parse::<functions_kw::i>()?;
+
+            let content;
+            parenthesized!(content in input);
+
+            let inner = content.parse::<Regex>()?;
+
+            if !content.is_empty() {
+                return Err(content.error("Unexpected expression end."));
+            }
+
+            return Ok(Regex::Operand(Operand::Transform(
+                TransformFeature::CaseInsensitive,
+                Some(Box::new(inner)),
+            )));
+        }
+
         if lookahead.peek(syn::Ident) {
             let ident = input.parse::<Ident>()?;
 
@@ -593,6 +768,10 @@ impl ExpressionOperand<Operator> for Operand {
             return true;
         }
 
+        if input.peek(functions_kw::i) {
+            return true;
+        }
+
         if input.peek(syn::Ident) {
             return true;
         }
@@ -603,4 +782,8 @@ impl ExpressionOperand<Operator> for Operand {
 
         false
     }
+}
+
+mod functions_kw {
+    syn::custom_keyword!(i);
 }
