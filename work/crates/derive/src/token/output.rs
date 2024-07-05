@@ -254,7 +254,24 @@ impl<'a> Output<'a> {
     }
 
     fn handle(&mut self, to: State, unicode: bool, force_continue: bool) -> Statements {
+        let transit = self
+            .input
+            .automata
+            .transitions()
+            .outgoing(&to)
+            .filter(|view| !view.is_empty())
+            .is_some();
+
         let mut statements = Statements::default();
+
+        if transit && self.buffering {
+            let string = self.input.ident.span().face_string();
+
+            match unicode {
+                false => statements.push(quote!(#string::push(&mut buffer, byte as char))),
+                true => statements.push(quote!(#string::push(&mut buffer, ch))),
+            }
+        }
 
         if let Some(index) = self.input.products.get(&to) {
             let core = self.input.ident.span().face_core();
@@ -293,27 +310,10 @@ impl<'a> Output<'a> {
             }
         }
 
-        let transit = self
-            .input
-            .automata
-            .transitions()
-            .outgoing(&to)
-            .filter(|view| !view.is_empty())
-            .is_some();
-
         match transit {
             false => statements.push(quote!(break)),
 
             true => {
-                if self.buffering {
-                    let string = self.input.ident.span().face_string();
-
-                    match unicode {
-                        false => statements.push(quote!(#string::push(&mut buffer, byte as char))),
-                        true => statements.push(quote!(#string::push(&mut buffer, ch))),
-                    }
-                }
-
                 if self.from != to {
                     let _ = self.pending.insert(to);
 
