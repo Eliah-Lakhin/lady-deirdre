@@ -293,6 +293,9 @@ mod utils;
 ///    The inverted version of the previous operator that matches any character
 ///    outside of the specified set.
 ///
+///  - Case-insensitive matching: `i("foo")`.
+///    Matches "foo", "FOO", "Foo", and other case-insensitive variants.
+///
 ///  - Any Unicode uppercase character: `$upper`.
 ///
 ///  - Any Unicode lowercase character: `$lower`.
