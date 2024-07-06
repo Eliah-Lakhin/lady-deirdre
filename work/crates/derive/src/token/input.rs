@@ -54,7 +54,7 @@ use crate::{
     token::{
         automata::{AutomataImpl, Scope, Terminal, TokenAutomata},
         opt::Opt,
-        regex::{Regex, RegexImpl},
+        regex::{Regex, RegexImpl, TransformConfig},
         variant::{TokenVariant, EOI, MISMATCH},
     },
     utils::{
@@ -206,6 +206,7 @@ impl TryFrom<DeriveInput> for TokenInput {
                     }
 
                     regex.inline(&inline_map, &variant_map)?;
+                    regex.transform(&TransformConfig::default());
 
                     let _ = inline_map.insert(name, regex);
                 }
@@ -278,6 +279,7 @@ impl TryFrom<DeriveInput> for TokenInput {
             if let Some((_, rule)) = &mut variant.rule {
                 parsable += 1;
                 rule.inline(&inline_map, &variant_map)?;
+                rule.transform(&TransformConfig::default());
                 alphabet.append(rule.alphabet());
             }
         }
