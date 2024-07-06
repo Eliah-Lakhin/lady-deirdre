@@ -205,8 +205,8 @@ impl TryFrom<DeriveInput> for TokenInput {
                         ));
                     }
 
-                    regex.transform(&TransformConfig::default());
                     regex.inline(&inline_map, &variant_map)?;
+                    regex.transform(&TransformConfig::default());
 
                     let _ = inline_map.insert(name, regex);
                 }
@@ -278,8 +278,8 @@ impl TryFrom<DeriveInput> for TokenInput {
 
             if let Some((_, rule)) = &mut variant.rule {
                 parsable += 1;
-                rule.transform(&TransformConfig::default());
                 rule.inline(&inline_map, &variant_map)?;
+                rule.transform(&TransformConfig::default());
                 alphabet.append(rule.alphabet());
             }
         }

@@ -104,7 +104,7 @@ impl RegexImpl for Regex {
         match self {
             Self::Operand(Operand::Unresolved(_)) => system_panic!("Unresolved operand."),
 
-            Self::Operand(Operand::Dump(_, inner)) => inner.transform(config),
+            Self::Operand(Operand::Dump(_, inner)) => inner.transform(&TransformConfig::default()),
 
             Self::Operand(Operand::Transform(feature, inner)) => {
                 let mut inner = expect_some!(take(inner), "Empty transformation.",);
