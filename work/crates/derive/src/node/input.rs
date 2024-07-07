@@ -499,10 +499,6 @@ impl TryFrom<DeriveInput> for NodeInput {
         }
 
         for (_, variant) in &variants {
-            if variant.root.is_some() {
-                continue;
-            }
-
             let rule = match &variant.rule {
                 None => continue,
                 Some(rule) => rule,
