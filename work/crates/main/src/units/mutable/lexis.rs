@@ -338,6 +338,7 @@ impl<N: Node> Cursor<N> {
                 }
 
                 if self.tail.is_dangling() {
+                    self.byte = 0;
                     return 0xFF;
                 }
 
@@ -354,6 +355,7 @@ impl<N: Node> Cursor<N> {
 
             false => {
                 if self.tail.is_dangling() {
+                    self.byte = 0;
                     return 0xFF;
                 }
 
