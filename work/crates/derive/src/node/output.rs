@@ -228,6 +228,11 @@ impl NodeInput {
             None => quote_spanned!(span=> #core::analysis::VoidClassifier::<Self>),
         };
 
+        let common = match &self.common {
+            Some(ty) => ty.to_token_stream(),
+            None => quote_spanned!(span=> #core::analysis::VoidFeature::<Self>),
+        };
+
         let (impl_generics, type_generics, where_clause) = self.generics.ty.split_for_impl();
 
         let capacity = self.variants.len();
@@ -263,6 +268,8 @@ impl NodeInput {
             #where_clause
             {
                 type Classifier = #classifier;
+
+                type CommonSemantics = #common;
 
                 #[allow(unused_variables)]
                 fn init<

@@ -73,6 +73,7 @@ pub struct NodeInput {
     pub(super) generics: ParserGenerics,
     pub(super) token: Type,
     pub(super) classifier: Option<Type>,
+    pub(super) common: Option<Type>,
     pub(super) trivia: Option<Rule>,
     pub(super) recovery: Option<Recovery>,
     pub(crate) dump: Dump,
@@ -131,6 +132,7 @@ impl TryFrom<DeriveInput> for NodeInput {
 
         let mut token = None;
         let mut classifier = None;
+        let mut common = None;
         let mut trivia = None;
         let mut recovery = None;
         let mut dump = Dump::None;
@@ -163,6 +165,14 @@ impl TryFrom<DeriveInput> for NodeInput {
                     }
 
                     classifier = Some(attr.parse_args::<Type>()?);
+                }
+
+                "semantics" => {
+                    if common.is_some() {
+                        return Err(error!(span, "Duplicate Semantics attribute.",));
+                    }
+
+                    common = Some(attr.parse_args::<Type>()?);
                 }
 
                 "trivia" => {
@@ -562,6 +572,7 @@ impl TryFrom<DeriveInput> for NodeInput {
             generics,
             token,
             classifier,
+            common,
             trivia,
             recovery,
             dump,

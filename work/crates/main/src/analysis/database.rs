@@ -101,11 +101,11 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Database<N, H, S> {
 }
 
 pub(super) trait AbstractDatabase: Send + Sync + 'static {
-    fn deregister_attribute(&self, id: Id, entry: &Entry);
+    fn deregister_record(&self, id: Id, entry: &Entry);
 }
 
 impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> AbstractDatabase for Database<N, H, S> {
-    fn deregister_attribute(&self, id: Id, entry: &Entry) {
+    fn deregister_record(&self, id: Id, entry: &Entry) {
         let Some(mut records_guard) = self.records.get_mut(&id) else {
             return;
         };

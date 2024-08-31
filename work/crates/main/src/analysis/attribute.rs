@@ -182,7 +182,7 @@ impl<C: Computable> Drop for Attr<C> {
             return;
         };
 
-        database.deregister_attribute(attr_ref.id, &attr_ref.entry);
+        database.deregister_record(attr_ref.id, &attr_ref.entry);
     }
 }
 
@@ -231,7 +231,7 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 
         let node_ref = *node_ref;
 
-        let (database, entry) = initializer.register_attribute::<C>(node_ref);
+        let (database, entry) = initializer.register_record::<C>(node_ref);
 
         self.inner = AttrInner::Init {
             attr_ref: AttrRef { id, entry },
@@ -252,7 +252,7 @@ impl<C: Computable + Eq> Feature for Attr<C> {
             panic!("Attribute and Compilation Unit mismatch.");
         }
 
-        invalidator.invalidate_attribute(&attr_ref.entry);
+        invalidator.invalidate_record(&attr_ref.entry);
     }
 }
 

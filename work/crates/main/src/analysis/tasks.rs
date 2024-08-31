@@ -510,6 +510,11 @@ pub trait AbstractTask<N: Grammar, H: TaskHandle, S: SyncBuildHasher>: TaskSeale
 
         Ok(class_to_nodes.nodes.clone())
     }
+
+    #[inline(always)]
+    fn common_semantics(&self) -> &N::CommonSemantics {
+        &self.analyzer().common
+    }
 }
 
 pub trait TaskSealed<N: Grammar, H: TaskHandle, S: SyncBuildHasher> {

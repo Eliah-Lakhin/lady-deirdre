@@ -90,6 +90,8 @@ pub trait Grammar: Node + AbstractFeature {
     /// ```
     type Classifier: Classifier<Node = Self>;
 
+    type CommonSemantics: Feature<Node = Self>;
+
     /// Initializes a new node semantics.
     ///
     /// This function should only be called once the node is created
@@ -336,7 +338,7 @@ impl<N: Node> Classifier for VoidClassifier<N> {
 ///
 /// Note that the feature creation, initialization, invalidation, and
 /// destruction are controlled by the Analyzer. The end-user code usually
-/// doesn’t need to call related functions manually.
+/// doesn't need to call related functions manually.
 pub trait Feature: AbstractFeature {
     /// A type of the [Grammar] to which this semantic feature belongs.
     type Node: Grammar;
@@ -540,7 +542,7 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Identifiable for Initial
 
 impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Initializer<'a, N, H, S> {
     #[inline(always)]
-    pub(super) fn register_attribute<C: Computable<Node = N> + Eq>(
+    pub(super) fn register_record<C: Computable<Node = N> + Eq>(
         &mut self,
         node_ref: NodeRef,
     ) -> (Weak<dyn AbstractDatabase>, Entry) {
@@ -588,7 +590,7 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Identifiable for Invalid
 
 impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Invalidator<'a, N, H, S> {
     #[inline(always)]
-    pub(super) fn invalidate_attribute(&mut self, entry: &Entry) {
+    pub(super) fn invalidate_record(&mut self, entry: &Entry) {
         let Some(record) = self.records.get(entry) else {
             return;
         };
