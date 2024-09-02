@@ -54,7 +54,7 @@ use crate::{
         ScopeAttr,
         TaskHandle,
     },
-    arena::{Entry, Id, Identifiable, Repo},
+    arena::{Entry, Id, Identifiable},
     lexis::ToSpan,
     report::ld_unreachable,
     sync::{Shared, SyncBuildHasher, TableReadGuard},

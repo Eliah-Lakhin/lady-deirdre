@@ -34,8 +34,8 @@
 
 use std::{
     cmp::Ordering,
-    fmt::{Debug, Display, Formatter},
-    hash::{Hash, Hasher, RandomState},
+    fmt::{Debug, Formatter},
+    hash::{Hash, Hasher},
     marker::PhantomData,
     ops::Deref,
     sync::Weak,
@@ -43,15 +43,13 @@ use std::{
 
 use crate::{
     analysis::{
-        database::{AbstractDatabase, AttrRecordData, DocRecords, SlotRecordData},
-        lock::TimeoutRwLockReadGuard,
+        database::AbstractDatabase,
         AbstractFeature,
         AbstractTask,
         AnalysisError,
         AnalysisResult,
         AttrContext,
         AttrRef,
-        Computable,
         Feature,
         Grammar,
         Initializer,
@@ -61,11 +59,10 @@ use crate::{
         SemanticAccess,
         SlotReadGuard,
         TaskHandle,
-        TriggerHandle,
         NIL_ATTR_REF,
     },
     arena::{Entry, Id, Identifiable},
-    sync::{SyncBuildHasher, TableReadGuard},
+    sync::SyncBuildHasher,
     syntax::{Key, NodeRef},
 };
 

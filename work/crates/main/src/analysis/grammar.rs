@@ -58,7 +58,6 @@ use crate::{
         AnalysisResult,
         AttrRef,
         Computable,
-        Revision,
         ScopeAttr,
         SlotRef,
         TaskHandle,

@@ -42,14 +42,7 @@ use std::{
 
 use crate::{
     analysis::{
-        database::{
-            AttrRecord,
-            AttrRecordCache,
-            AttrRecordData,
-            CacheDeps,
-            DocRecords,
-            SlotRecordData,
-        },
+        database::{AttrRecordCache, AttrRecordData, CacheDeps, DocRecords, SlotRecordData},
         lock::TimeoutRwLockReadGuard,
         AnalysisError,
         AnalysisResult,
@@ -67,7 +60,7 @@ use crate::{
         DOC_REMOVED_EVENT,
         DOC_UPDATED_EVENT,
     },
-    arena::{Id, Repo},
+    arena::Id,
     report::ld_unreachable,
     sync::{Shared, SyncBuildHasher, TableReadGuard},
     syntax::{NodeRef, NIL_NODE_REF},

@@ -57,7 +57,7 @@ use crate::{
         TaskPriority,
         TriggerHandle,
     },
-    arena::{Id, Repo},
+    arena::Id,
     sync::{SyncBuildHasher, Table},
     syntax::NodeRef,
 };

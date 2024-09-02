@@ -34,15 +34,10 @@
 
 use std::{
     any::TypeId,
-    cell::UnsafeCell,
     collections::HashSet,
     ops::{Deref, DerefMut},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Condvar,
-        Mutex,
-    },
-    time::{Duration, Instant},
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
 
 use crate::{
@@ -61,7 +56,7 @@ use crate::{
         TaskHandle,
     },
     arena::{Entry, Id, Repo},
-    report::{ld_assert, ld_unreachable},
+    report::ld_unreachable,
     sync::{Shared, SyncBuildHasher, Table},
     syntax::NodeRef,
 };
@@ -139,8 +134,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> DocRecords<N, H, S> {
     }
 }
 
-pub(super) type AttrRecord<N: Grammar, H: TaskHandle, S: SyncBuildHasher> =
-    TimeoutRwLock<AttrRecordData<N, H, S>>;
+pub(super) type AttrRecord<N, H, S> = TimeoutRwLock<AttrRecordData<N, H, S>>;
 
 impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> AttrRecord<N, H, S> {
     #[inline(always)]
