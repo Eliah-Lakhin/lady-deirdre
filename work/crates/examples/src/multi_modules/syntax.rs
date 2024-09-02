@@ -32,12 +32,84 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-//TODO check warnings regularly
-#![allow(warnings)]
+use lady_deirdre::{
+    analysis::{Semantics, VoidFeature},
+    lexis::TokenRef,
+    syntax::{Node, NodeRef},
+};
 
-pub mod chain_analysis;
-pub mod expr_parser;
-pub mod json_formatter;
-pub mod json_grammar;
-pub mod json_highlight;
-pub mod multi_modules;
+use crate::multi_modules::{
+    lexis::MultiModulesToken,
+    semantics::{CommonSemantics, KeySemantics, ModuleSemantics},
+};
+
+#[derive(Node)]
+#[token(MultiModulesToken)]
+#[trivia($Whitespace)]
+#[semantics(CommonSemantics)]
+pub enum MultiModulesNode {
+    #[root]
+    #[rule(defs: Def*)]
+    Root {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        defs: Vec<NodeRef>,
+        #[semantics]
+        semantics: Semantics<ModuleSemantics>,
+    },
+
+    #[rule(key: Key $Assign value: (Ref | Num) $Semicolon)]
+    Def {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        key: NodeRef,
+        #[child]
+        value: NodeRef,
+        #[semantics]
+        semantics: Semantics<VoidFeature<MultiModulesNode>>,
+    },
+
+    #[rule(token: $Ident)]
+    Key {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        token: TokenRef,
+        #[semantics]
+        semantics: Semantics<KeySemantics>,
+    },
+
+    #[rule(module: $Ident $DoubleColon ident: $Ident)]
+    Ref {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        module: TokenRef,
+        #[child]
+        ident: TokenRef,
+        #[semantics]
+        semantics: Semantics<VoidFeature<MultiModulesNode>>,
+    },
+
+    #[rule(token: $Num)]
+    Num {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        token: TokenRef,
+        #[semantics]
+        semantics: Semantics<VoidFeature<MultiModulesNode>>,
+    },
+}

@@ -33,7 +33,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use std::{
-    any::{type_name, TypeId},
+    any::TypeId,
     collections::HashSet,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicU64, Ordering},

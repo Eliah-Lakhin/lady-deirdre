@@ -32,12 +32,35 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-//TODO check warnings regularly
-#![allow(warnings)]
+use lady_deirdre::lexis::Token;
 
-pub mod chain_analysis;
-pub mod expr_parser;
-pub mod json_formatter;
-pub mod json_grammar;
-pub mod json_highlight;
-pub mod multi_modules;
+#[derive(Token, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MultiModulesToken {
+    EOI = 0,
+
+    Mismatch = 1,
+
+    #[rule(['a'..'z'] ['a'..'z', '0'..'9', '_']*)]
+    #[describe("ident")]
+    Ident,
+
+    #[rule(['0'..'9']+)]
+    #[describe("number")]
+    Num,
+
+    #[rule("=")]
+    #[describe("=")]
+    Assign,
+
+    #[rule("::")]
+    #[describe("::")]
+    DoubleColon,
+
+    #[rule(";")]
+    #[describe(";")]
+    Semicolon,
+
+    #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
+    Whitespace,
+}
