@@ -692,6 +692,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
             common.init(&mut initializer);
 
             if initializer.inserts {
+                let _ = db.commit_revision();
                 db.records.insert(Id::nil(), records);
             }
         }

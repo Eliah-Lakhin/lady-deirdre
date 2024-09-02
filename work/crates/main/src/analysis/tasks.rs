@@ -512,7 +512,7 @@ pub trait AbstractTask<N: Grammar, H: TaskHandle, S: SyncBuildHasher>: TaskSeale
     }
 
     #[inline(always)]
-    fn common_semantics(&self) -> &N::CommonSemantics {
+    fn common(&self) -> &N::CommonSemantics {
         &self.analyzer().common
     }
 }

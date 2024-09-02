@@ -321,6 +321,11 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> AttrContext<'a, N, H, S>
         let _ = self.deps.events.insert((id, event));
     }
 
+    #[inline(always)]
+    pub fn common(&self) -> &'a N::CommonSemantics {
+        &self.analyzer.common
+    }
+
     /// Returns Ok if the underlying task has not been
     /// [signaled](TaskHandle::is_triggered) for graceful shutdown yet;
     /// otherwise returns an [Interrupted](AnalysisError::Interrupted) error.

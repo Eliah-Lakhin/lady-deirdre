@@ -195,6 +195,7 @@ impl<N: Grammar, S: SyncBuildHasher> AttrRecordCache<N, S> {
     pub(super) unsafe fn downcast_unchecked<T: 'static>(&self) -> &T {
         let memo = self.memo.deref();
 
+        #[cfg(debug_assertions)]
         if memo.attr_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
@@ -209,6 +210,7 @@ impl<N: Grammar, S: SyncBuildHasher> AttrRecordCache<N, S> {
     pub(super) unsafe fn downcast_unchecked_mut<T: 'static>(&mut self) -> &mut T {
         let memo = self.memo.deref_mut();
 
+        #[cfg(debug_assertions)]
         if memo.attr_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
@@ -283,6 +285,7 @@ impl SlotRecordData {
     pub(super) unsafe fn downcast_unchecked<T: 'static>(&self) -> &T {
         let memo = self.memo.deref();
 
+        #[cfg(debug_assertions)]
         if memo.slot_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
@@ -297,6 +300,7 @@ impl SlotRecordData {
     pub(super) unsafe fn downcast_unchecked_mut<T: 'static>(&mut self) -> &mut T {
         let memo = Box::deref_mut(&mut self.memo);
 
+        #[cfg(debug_assertions)]
         if memo.slot_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
@@ -311,7 +315,7 @@ pub(super) trait SlotMemo: Send + Sync + 'static {
     fn slot_memo_type_id(&self) -> TypeId;
 }
 
-impl<T: Send + Sync + 'static> SlotMemo for T {
+impl<T: Default + Send + Sync + 'static> SlotMemo for T {
     #[inline(always)]
     fn slot_memo_type_id(&self) -> TypeId {
         TypeId::of::<T>()
