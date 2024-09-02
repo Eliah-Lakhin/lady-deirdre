@@ -32,84 +32,35 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use lady_deirdre::{
-    analysis::{Semantics, VoidFeature},
-    lexis::TokenRef,
-    syntax::{Node, NodeRef},
-};
+use lady_deirdre::lexis::Token;
 
-use crate::multi_modules::{
-    lexis::MultiModulesToken,
-    semantics::{CommonSemantics, KeySemantics, ModuleSemantics},
-};
+#[derive(Token, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SharedSemanticsToken {
+    EOI = 0,
 
-#[derive(Node)]
-#[token(MultiModulesToken)]
-#[trivia($Whitespace)]
-#[semantics(CommonSemantics)]
-pub enum MultiModulesNode {
-    #[root]
-    #[rule(defs: Def*)]
-    Root {
-        #[node]
-        node: NodeRef,
-        #[parent]
-        parent: NodeRef,
-        #[child]
-        defs: Vec<NodeRef>,
-        #[semantics]
-        semantics: Semantics<ModuleSemantics>,
-    },
+    Mismatch = 1,
 
-    #[rule(key: Key $Assign value: (Ref | Num) $Semicolon)]
-    Def {
-        #[node]
-        node: NodeRef,
-        #[parent]
-        parent: NodeRef,
-        #[child]
-        key: NodeRef,
-        #[child]
-        value: NodeRef,
-        #[semantics]
-        semantics: Semantics<VoidFeature<MultiModulesNode>>,
-    },
+    #[rule(['a'..'z'] ['a'..'z', '0'..'9', '_']*)]
+    #[describe("ident")]
+    Ident,
 
-    #[rule(token: $Ident)]
-    Key {
-        #[node]
-        node: NodeRef,
-        #[parent]
-        parent: NodeRef,
-        #[child]
-        token: TokenRef,
-        #[semantics]
-        semantics: Semantics<KeySemantics>,
-    },
+    #[rule(['0'..'9']+)]
+    #[describe("number")]
+    Num,
 
-    #[rule(module: $Ident $DoubleColon ident: $Ident)]
-    Ref {
-        #[node]
-        node: NodeRef,
-        #[parent]
-        parent: NodeRef,
-        #[child]
-        module: TokenRef,
-        #[child]
-        ident: TokenRef,
-        #[semantics]
-        semantics: Semantics<VoidFeature<MultiModulesNode>>,
-    },
+    #[rule("=")]
+    #[describe("=")]
+    Assign,
 
-    #[rule(token: $Num)]
-    Num {
-        #[node]
-        node: NodeRef,
-        #[parent]
-        parent: NodeRef,
-        #[child]
-        token: TokenRef,
-        #[semantics]
-        semantics: Semantics<VoidFeature<MultiModulesNode>>,
-    },
+    #[rule("::")]
+    #[describe("::")]
+    DoubleColon,
+
+    #[rule(";")]
+    #[describe(";")]
+    Semicolon,
+
+    #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
+    Whitespace,
 }

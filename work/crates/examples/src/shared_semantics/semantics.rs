@@ -55,16 +55,16 @@ use lady_deirdre::{
 };
 use log::debug;
 
-use crate::multi_modules::syntax::MultiModulesNode;
+use crate::shared_semantics::syntax::SharedSemanticsNode;
 
 #[derive(Feature)]
-#[node(MultiModulesNode)]
+#[node(SharedSemanticsNode)]
 pub struct CommonSemantics {
-    pub modules: Slot<MultiModulesNode, HashMap<String, Id>>,
+    pub modules: Slot<SharedSemanticsNode, HashMap<String, Id>>,
 }
 
 #[derive(Feature)]
-#[node(MultiModulesNode)]
+#[node(SharedSemanticsNode)]
 pub struct ModuleSemantics {
     #[scoped]
     pub tables: Attr<ModuleTables>,
@@ -77,7 +77,7 @@ pub struct ModuleTables {
 }
 
 impl Computable for ModuleTables {
-    type Node = MultiModulesNode;
+    type Node = SharedSemanticsNode;
 
     fn compute<H: TaskHandle, S: SyncBuildHasher>(
         context: &mut AttrContext<Self::Node, H, S>,
@@ -88,7 +88,7 @@ impl Computable for ModuleTables {
         let doc_read = context.read_doc(root_ref.id).unwrap_abnormal()?;
         let doc = doc_read.deref();
 
-        let Some(MultiModulesNode::Root { defs, .. }) = root_ref.deref(doc) else {
+        let Some(SharedSemanticsNode::Root { defs, .. }) = root_ref.deref(doc) else {
             return Ok(Self::default());
         };
 
@@ -96,11 +96,11 @@ impl Computable for ModuleTables {
         let mut def_table = HashMap::new();
 
         for def_ref in defs {
-            let Some(MultiModulesNode::Def { key, value, .. }) = def_ref.deref(doc) else {
+            let Some(SharedSemanticsNode::Def { key, value, .. }) = def_ref.deref(doc) else {
                 continue;
             };
 
-            let Some(MultiModulesNode::Key { token, .. }) = key.deref(doc) else {
+            let Some(SharedSemanticsNode::Key { token, .. }) = key.deref(doc) else {
                 continue;
             };
 
@@ -111,7 +111,7 @@ impl Computable for ModuleTables {
             let _ = key_table.insert(*key, key_string.to_string());
 
             match value.deref(doc) {
-                Some(MultiModulesNode::Num { token, .. }) => {
+                Some(SharedSemanticsNode::Num { token, .. }) => {
                     let Some(num_string) = token.string(doc) else {
                         continue;
                     };
@@ -123,7 +123,7 @@ impl Computable for ModuleTables {
                     let _ = def_table.insert(key_string.to_string(), Definition::Num { value });
                 }
 
-                Some(MultiModulesNode::Ref { module, ident, .. }) => {
+                Some(SharedSemanticsNode::Ref { module, ident, .. }) => {
                     let Some(module_string) = module.string(doc) else {
                         continue;
                     };
@@ -159,7 +159,7 @@ pub enum Definition {
 }
 
 #[derive(Feature)]
-#[node(MultiModulesNode)]
+#[node(SharedSemanticsNode)]
 pub struct KeySemantics {
     pub resolution: Attr<KeyResolution>,
 }
@@ -172,7 +172,7 @@ pub enum KeyResolution {
 }
 
 impl Computable for KeyResolution {
-    type Node = MultiModulesNode;
+    type Node = SharedSemanticsNode;
 
     fn compute<H: TaskHandle, S: SyncBuildHasher>(
         context: &mut AttrContext<Self::Node, H, S>,
@@ -184,7 +184,7 @@ impl Computable for KeyResolution {
         let module_doc = doc_read.deref();
         let root_ref = module_doc.root_node_ref();
 
-        let Some(MultiModulesNode::Root { semantics, .. }) = root_ref.deref(module_doc) else {
+        let Some(SharedSemanticsNode::Root { semantics, .. }) = root_ref.deref(module_doc) else {
             return Ok(Self::Unresolved);
         };
 
@@ -220,7 +220,8 @@ impl Computable for KeyResolution {
             let module_doc = doc_read.deref();
             let root_ref = module_doc.root_node_ref();
 
-            let Some(MultiModulesNode::Root { semantics, .. }) = root_ref.deref(module_doc) else {
+            let Some(SharedSemanticsNode::Root { semantics, .. }) = root_ref.deref(module_doc)
+            else {
                 return Ok(Self::Unresolved);
             };
 
@@ -248,7 +249,7 @@ impl Computable for KeyResolution {
 }
 
 fn log_attr<C: Any, H: TaskHandle, S: SyncBuildHasher>(
-    context: &mut AttrContext<MultiModulesNode, H, S>,
+    context: &mut AttrContext<SharedSemanticsNode, H, S>,
 ) -> AnalysisResult<()> {
     let node_ref = context.node_ref();
     let doc_read = context.read_doc(node_ref.id).unwrap_abnormal()?;

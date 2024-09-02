@@ -57,11 +57,11 @@ mod tests {
         syntax::{PolyRef, SyntaxTree},
     };
 
-    use crate::multi_modules::{semantics::KeyResolution, syntax::MultiModulesNode};
+    use crate::shared_semantics::{semantics::KeyResolution, syntax::SharedSemanticsNode};
 
     #[test]
     fn test_multi_modules() {
-        let analyzer = Analyzer::<MultiModulesNode>::new(AnalyzerConfig::default());
+        let analyzer = Analyzer::<SharedSemanticsNode>::new(AnalyzerConfig::default());
 
         {
             let handle = TriggerHandle::new();
@@ -80,12 +80,6 @@ mod tests {
                     true
                 })
                 .unwrap();
-        }
-
-        {
-            let handle = TriggerHandle::new();
-            let task = analyzer.analyze(&handle, 1).unwrap();
-            println!("{:#}\n", DisplayModules(&task));
         }
 
         {
@@ -110,11 +104,11 @@ mod tests {
         {
             let handle = TriggerHandle::new();
             let task = analyzer.analyze(&handle, 1).unwrap();
-            println!("{:#}\n", DisplayModules(&task));
+            println!("{:#}", DisplayModules(&task));
         }
     }
 
-    struct DisplayModules<'a>(&'a AnalysisTask<'a, MultiModulesNode>);
+    struct DisplayModules<'a>(&'a AnalysisTask<'a, SharedSemanticsNode>);
 
     impl<'a> Display for DisplayModules<'a> {
         fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
@@ -128,16 +122,16 @@ mod tests {
 
                 snippet.set_caption(doc.id().name());
 
-                let MultiModulesNode::Root { defs, .. } = doc.root() else {
+                let SharedSemanticsNode::Root { defs, .. } = doc.root() else {
                     unreachable!("Malformed root");
                 };
 
                 for def_ref in defs {
-                    let Some(MultiModulesNode::Def { key, .. }) = def_ref.deref(doc) else {
+                    let Some(SharedSemanticsNode::Def { key, .. }) = def_ref.deref(doc) else {
                         continue;
                     };
 
-                    let Some(MultiModulesNode::Key {
+                    let Some(SharedSemanticsNode::Key {
                         token, semantics, ..
                     }) = key.deref(doc)
                     else {

@@ -37,8 +37,8 @@
 This crate contains examples showcasing the core features of Lady Deirdre.
 
 The source code of each example is accompanied by detailed explanations and
-comments in the [User Guide](https://lady-deirdre.lakhin.com/). Therefore, it is recommended to explore them
-alongside the corresponding chapters of the guide.
+comments in the [User Guide](https://lady-deirdre.lakhin.com/). Therefore, it is
+recommended to explore them alongside the corresponding chapters of the guide.
 
 Each example is located in its own crate module within the "src" directory.
 The root "mod.rs" file of each module includes runnable tests that demonstrate
@@ -75,6 +75,18 @@ specific features of the example.
   evolving source code.
 
   Relevant User Guide chapter: [Semantics](https://lady-deirdre.lakhin.com/semantics/semantics.html).
+
+- [Shared Semantics](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/shared_semantics).
+
+  Illustrates how to organize cross-file semantic connections.
+
+  The source code of the files contains a set of key-value pairs, where the key
+  is any identifier, and the value is either a numeric value or a reference to
+  another identifier within the same file or a different one. This example
+  demonstrates resolving key values through a system of references down to their
+  numeric values.
+
+  Relevant User Guide chapter: [Multi-File Analysis](https://lady-deirdre.lakhin.com/semantics/multi-file-analysis.html).
 
 - [JSON Formatter](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples/src/json_formatter).
 

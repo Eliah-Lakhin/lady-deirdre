@@ -68,6 +68,7 @@
     - [Granularity](semantics/granularity.md)
     - [The Analyzer](semantics/the-analyzer.md)
     - [Tasks Management](semantics/tasks-management.md)
+    - [Multi-File Analysis](semantics/multi-file-analysis.md)
     - [Language Server Design](semantics/language-server-design.md)
     - [Configuration Issues](semantics/configuration-issues.md)
     - [Code Diagnostics](semantics/code-diagnostics.md)
