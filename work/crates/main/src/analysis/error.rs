@@ -115,10 +115,14 @@ pub enum AnalysisError {
     /// This error is an **abnormal** error.
     UninitAttribute,
 
+    UninitSlot,
+
     /// The referred attribute does not exist in the Analyzer's semantic graph.
     ///
     /// This error is an **abnormal** error.
     MissingAttribute,
+
+    MissingSlot,
 
     /// An attempt to access a [Semantics](crate::analysis::Semantics) object
     /// which is not fully initialized.
@@ -170,7 +174,9 @@ impl Display for AnalysisError {
             Self::ImmutableDocument => "An attempt to write into immutable document.",
             Self::InvalidSpan => "Provided span is not valid for the specified document.",
             Self::UninitAttribute => "An attempt to access uninitialized attribute object.",
+            Self::UninitSlot => "An attempt to access uninitialized slot object.",
             Self::MissingAttribute => "Referred attribute does not exist in the analyzer.",
+            Self::MissingSlot => "Referred slot does not exist in the analyzer.",
             Self::UninitSemantics => "An attempt to access uninitialized semantics object.",
             Self::MissingSemantics => "Node variant does not have semantics.",
             Self::TypeMismatch => "Incorrect attribute type.",

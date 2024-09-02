@@ -58,7 +58,9 @@ use crate::{
         MutationAccess,
         Revision,
         SemanticAccess,
+        SlotRef,
         TaskHandle,
+        NIL_SLOT_REF,
     },
     arena::{Entry, Id, Identifiable},
     sync::SyncBuildHasher,
@@ -182,7 +184,7 @@ impl<C: Computable> Drop for Attr<C> {
             return;
         };
 
-        database.deregister_record(attr_ref.id, &attr_ref.entry);
+        database.deregister_attribute(attr_ref.id, &attr_ref.entry);
     }
 }
 
@@ -190,6 +192,11 @@ impl<C: Computable> AbstractFeature for Attr<C> {
     #[inline(always)]
     fn attr_ref(&self) -> &AttrRef {
         self.as_ref()
+    }
+
+    #[inline(always)]
+    fn slot_ref(&self) -> &SlotRef {
+        &NIL_SLOT_REF
     }
 
     #[inline(always)]
@@ -231,7 +238,7 @@ impl<C: Computable + Eq> Feature for Attr<C> {
 
         let node_ref = *node_ref;
 
-        let (database, entry) = initializer.register_record::<C>(node_ref);
+        let (database, entry) = initializer.register_attribute::<C>(node_ref);
 
         self.inner = AttrInner::Init {
             attr_ref: AttrRef { id, entry },
@@ -252,7 +259,7 @@ impl<C: Computable + Eq> Feature for Attr<C> {
             panic!("Attribute and Compilation Unit mismatch.");
         }
 
-        invalidator.invalidate_record(&attr_ref.entry);
+        invalidator.invalidate_attribute(&attr_ref.entry);
     }
 }
 
@@ -389,12 +396,15 @@ pub struct AttrRef {
 impl Debug for AttrRef {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        match self.is_nil() {
-            false => formatter.write_fmt(format_args!(
-                "AttrRef(id: {:?}, entry: {:?})",
+        match (self.id.is_nil(), self.entry.is_nil()) {
+            (false, _) => formatter.write_fmt(format_args!(
+                "Attr(id: {:?}, entry: {:?})",
                 self.id, self.entry,
             )),
-            true => formatter.write_str("AttrRef(Nil)"),
+
+            (true, false) => formatter.write_fmt(format_args!("Attr(entry: {:?})", self.entry)),
+
+            (true, true) => formatter.write_str("Attr(Nil)"),
         }
     }
 }
@@ -431,7 +441,7 @@ impl AttrRef {
     /// attribute within any Analyzer.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.entry.is_nil()
+        self.id.is_nil() && self.entry.is_nil()
     }
 
     /// Requests a copy of the attribute's value.
@@ -524,7 +534,7 @@ impl AttrRef {
             }
         };
 
-        let Some(record) = records.get(&self.entry) else {
+        let Some(record) = records.attrs.get(&self.entry) else {
             return;
         };
 
@@ -549,7 +559,7 @@ impl AttrRef {
             return false;
         };
 
-        records.contains(&self.entry)
+        records.attrs.contains(&self.entry)
     }
 }
 

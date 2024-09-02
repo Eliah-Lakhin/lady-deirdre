@@ -42,7 +42,15 @@ use std::{
 
 use crate::{
     analysis::{
-        database::{CacheDeps, Record, RecordCache, RecordReadGuard},
+        database::{
+            AttrRecord,
+            AttrRecordCache,
+            AttrRecordData,
+            CacheDeps,
+            DocRecords,
+            SlotRecordData,
+        },
+        lock::TimeoutRwLockReadGuard,
         AnalysisError,
         AnalysisResult,
         Analyzer,
@@ -51,7 +59,9 @@ use crate::{
         DocumentReadGuard,
         Event,
         Grammar,
+        MutationAccess,
         Revision,
+        SlotRef,
         TaskHandle,
         TriggerHandle,
         DOC_REMOVED_EVENT,
@@ -353,8 +363,13 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> AttrContext<'a, N, H, S>
     }
 
     #[inline(always)]
-    pub(super) fn track(&mut self, dep: &AttrRef) {
+    pub(super) fn track_attr(&mut self, dep: &AttrRef) {
         let _ = self.deps.attrs.insert(*dep);
+    }
+
+    #[inline(always)]
+    pub(super) fn track_slot(&mut self, dep: &SlotRef) {
+        let _ = self.deps.slots.insert(*dep);
     }
 
     #[inline(always)]
@@ -381,8 +396,9 @@ pub struct AttrReadGuard<
     S: SyncBuildHasher = RandomState,
 > {
     pub(super) data: &'a C,
-    pub(super) cell_guard: RecordReadGuard<'a, <C as Computable>::Node, H, S>,
-    pub(super) records_guard: TableReadGuard<'a, Id, Repo<Record<C::Node, H, S>>, S>,
+    pub(super) cell_guard:
+        TimeoutRwLockReadGuard<'a, AttrRecordData<<C as Computable>::Node, H, S>>,
+    pub(super) records_guard: TableReadGuard<'a, Id, DocRecords<C::Node, H, S>, S>,
 }
 
 impl<'a, C: Computable + Debug, H: TaskHandle, S: SyncBuildHasher> Debug
@@ -440,7 +456,7 @@ impl AttrRef {
                 return Err(AnalysisError::MissingDocument);
             };
 
-            let Some(record) = records_guard.get(&self.entry) else {
+            let Some(record) = records_guard.attrs.get(&self.entry) else {
                 return Err(AnalysisError::MissingAttribute);
             };
 
@@ -455,7 +471,7 @@ impl AttrRef {
                         false => unsafe { cache.downcast_unchecked::<C>() },
                     };
 
-                    context.track(self);
+                    context.track_attr(self);
 
                     // Safety: Prolongs lifetime to Analyzer's lifetime.
                     //         The reference will ve valid for as long as the parent guard is held.
@@ -465,8 +481,11 @@ impl AttrRef {
                     //         The guard will ve valid for as long as the parent guard is held.
                     let cell_guard = unsafe {
                         transmute::<
-                            RecordReadGuard<<C as Computable>::Node, H, S>,
-                            RecordReadGuard<'a, <C as Computable>::Node, H, S>,
+                            TimeoutRwLockReadGuard<AttrRecordData<<C as Computable>::Node, H, S>>,
+                            TimeoutRwLockReadGuard<
+                                'a,
+                                AttrRecordData<<C as Computable>::Node, H, S>,
+                            >,
                         >(record_read_guard)
                     };
 
@@ -474,8 +493,8 @@ impl AttrRef {
                     //         The reference will ve valid for as long as the Analyzer is held.
                     let records_guard = unsafe {
                         transmute::<
-                            TableReadGuard<Id, Repo<Record<<C as Computable>::Node, H, S>>, S>,
-                            TableReadGuard<'a, Id, Repo<Record<<C as Computable>::Node, H, S>>, S>,
+                            TableReadGuard<Id, DocRecords<<C as Computable>::Node, H, S>, S>,
+                            TableReadGuard<'a, Id, DocRecords<<C as Computable>::Node, H, S>, S>,
                         >(records_guard)
                     };
 
@@ -503,7 +522,7 @@ impl AttrRef {
                 return Err(AnalysisError::MissingDocument);
             };
 
-            let Some(record) = records.get(&self.entry) else {
+            let Some(record) = records.attrs.get(&self.entry) else {
                 return Err(AnalysisError::MissingAttribute);
             };
 
@@ -524,7 +543,7 @@ impl AttrRef {
                 let memo = record_data.function.invoke(&mut forked)?;
                 let deps = forked.into_deps();
 
-                record_data.cache = Some(RecordCache {
+                record_data.cache = Some(AttrRecordCache {
                     dirty: false,
                     updated_at: context.revision,
                     memo,
@@ -574,6 +593,27 @@ impl AttrRef {
                 }
             }
 
+            if !cache.dirty && !cache.deps.as_ref().slots.is_empty() {
+                for slot_ref in &cache.deps.as_ref().slots {
+                    let Some(dep_records) = context.analyzer.db.records.get(&slot_ref.id) else {
+                        cache.dirty = true;
+                        break;
+                    };
+
+                    let Some(dep_record) = dep_records.slots.get(&slot_ref.entry) else {
+                        cache.dirty = true;
+                        break;
+                    };
+
+                    let dep_record_read_guard = dep_record.read(&context.analyzer.db.timeout)?;
+
+                    if dep_record_read_guard.revision > record_data.verified_at {
+                        cache.dirty = true;
+                        break;
+                    }
+                }
+            }
+
             if !cache.dirty && !cache.deps.as_ref().attrs.is_empty() {
                 let mut deps_verified = true;
 
@@ -583,7 +623,7 @@ impl AttrRef {
                         break;
                     };
 
-                    let Some(dep_record) = dep_records.get(&attr_ref.entry) else {
+                    let Some(dep_record) = dep_records.attrs.get(&attr_ref.entry) else {
                         cache.dirty = true;
                         break;
                     };
@@ -639,7 +679,7 @@ impl AttrRef {
             let new_deps = forked.into_deps();
 
             // Safety: New and previous values produced by the same Cell function.
-            let same = unsafe { cache.memo.memo_eq(new_memo.as_ref()) };
+            let same = unsafe { cache.memo.attr_memo_eq(new_memo.as_ref()) };
 
             cache.dirty = false;
             cache.memo = new_memo;
@@ -653,5 +693,164 @@ impl AttrRef {
 
             return Ok(());
         }
+    }
+}
+
+#[allow(dead_code)]
+pub struct SlotReadGuard<
+    'a,
+    T: Default + Send + Sync + 'static,
+    N: Grammar,
+    H: TaskHandle = TriggerHandle,
+    S: SyncBuildHasher = RandomState,
+> {
+    pub(super) revision: Revision,
+    pub(super) data: &'a T,
+    pub(super) cell_guard: TimeoutRwLockReadGuard<'a, SlotRecordData>,
+    pub(super) records_guard: TableReadGuard<'a, Id, DocRecords<N, H, S>, S>,
+}
+
+impl<'a, T, N, H, S> Debug for SlotReadGuard<'a, T, N, H, S>
+where
+    T: Debug + Default + Send + Sync + 'static,
+    N: Grammar,
+    H: TaskHandle,
+    S: SyncBuildHasher,
+{
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self.data, formatter)
+    }
+}
+
+impl<'a, T, N, H, S> Display for SlotReadGuard<'a, T, N, H, S>
+where
+    T: Display + Default + Send + Sync + 'static,
+    N: Grammar,
+    H: TaskHandle,
+    S: SyncBuildHasher,
+{
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self.data, formatter)
+    }
+}
+
+impl<'a, T, N, H, S> Deref for SlotReadGuard<'a, T, N, H, S>
+where
+    T: Default + Send + Sync + 'static,
+    N: Grammar,
+    H: TaskHandle,
+    S: SyncBuildHasher,
+{
+    type Target = T;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        self.data
+    }
+}
+
+impl SlotRef {
+    // Safety: If `CHECK == false` then `T` properly describes underlying slot's computable data.
+    pub(super) unsafe fn fetch<
+        'a,
+        const CHECK: bool,
+        T: Default + Send + Sync + 'static,
+        N: Grammar,
+        H: TaskHandle,
+        S: SyncBuildHasher,
+    >(
+        &self,
+        context: &mut AttrContext<'a, N, H, S>,
+    ) -> AnalysisResult<SlotReadGuard<'a, T, N, H, S>> {
+        let Some(records_guard) = context.analyzer.db.records.get(&self.id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        let Some(record) = records_guard.slots.get(&self.entry) else {
+            return Err(AnalysisError::MissingSlot);
+        };
+
+        let record_read_guard = record.read(&context.analyzer.db.timeout)?;
+
+        let data = match CHECK {
+            true => record_read_guard.downcast::<T>()?,
+
+            // Safety: Upheld by the caller.
+            false => unsafe { record_read_guard.downcast_unchecked::<T>() },
+        };
+
+        context.track_slot(self);
+
+        let revision = record_read_guard.revision;
+
+        // Safety: Prolongs lifetime to Analyzer's lifetime.
+        //         The reference will ve valid for as long as the parent guard is held.
+        let data = unsafe { transmute::<&T, &'a T>(data) };
+
+        // Safety: Prolongs lifetime to Analyzer's lifetime.
+        //         The guard will ve valid for as long as the parent guard is held.
+        let cell_guard = unsafe {
+            transmute::<
+                TimeoutRwLockReadGuard<SlotRecordData>,
+                TimeoutRwLockReadGuard<'a, SlotRecordData>,
+            >(record_read_guard)
+        };
+
+        // Safety: Prolongs lifetime to Analyzer's lifetime.
+        //         The reference will ve valid for as long as the Analyzer is held.
+        let records_guard = unsafe {
+            transmute::<
+                TableReadGuard<Id, DocRecords<N, H, S>, S>,
+                TableReadGuard<'a, Id, DocRecords<N, H, S>, S>,
+            >(records_guard)
+        };
+
+        Ok(SlotReadGuard {
+            revision,
+            data,
+            cell_guard,
+            records_guard,
+        })
+    }
+
+    // Safety: If `CHECK == false` then `T` properly describes underlying slot's computable data.
+    pub(super) unsafe fn change<
+        'a,
+        const CHECK: bool,
+        T: Default + Send + Sync + 'static,
+        N: Grammar,
+        H: TaskHandle,
+        S: SyncBuildHasher,
+    >(
+        &self,
+        task: &mut impl MutationAccess<N, H, S>,
+        map: impl FnOnce(&mut T) -> bool,
+    ) -> AnalysisResult<()> {
+        let Some(records_guard) = task.analyzer().db.records.get(&self.id) else {
+            return Err(AnalysisError::MissingDocument);
+        };
+
+        let Some(record) = records_guard.slots.get(&self.entry) else {
+            return Err(AnalysisError::MissingSlot);
+        };
+
+        let mut record_write_guard = record.write(&task.analyzer().db.timeout)?;
+
+        let data = match CHECK {
+            true => record_write_guard.downcast_mut::<T>()?,
+
+            // Safety: Upheld by the caller.
+            false => unsafe { record_write_guard.downcast_unchecked_mut::<T>() },
+        };
+
+        let mutated = map(data);
+
+        if mutated {
+            record_write_guard.revision = task.analyzer().db.commit_revision();
+        }
+
+        Ok(())
     }
 }

@@ -41,7 +41,7 @@ use std::{
 
 use crate::{
     analysis::{
-        database::Database,
+        database::{Database, DocRecords},
         entry::DocEntry,
         manager::{TaskKind, TaskManager},
         AnalysisResult,
@@ -680,7 +680,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
         let mut common = <N::CommonSemantics as Feature>::new(NodeRef::nil());
 
         {
-            let mut records = Repo::new();
+            let mut records = DocRecords::new();
 
             let mut initializer: Initializer<'_, N, H, S> = Initializer {
                 id: Id::nil(),

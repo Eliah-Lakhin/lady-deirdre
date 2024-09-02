@@ -39,14 +39,16 @@ mod database;
 mod entry;
 mod error;
 mod grammar;
+mod lock;
 mod manager;
 mod scope;
+mod slot;
 mod tasks;
 
 pub use crate::analysis::{
     analyzer::{Analyzer, AnalyzerConfig},
     attribute::{Attr, AttrRef, NIL_ATTR_REF},
-    compute::{AttrContext, AttrReadGuard, Computable, SharedComputable},
+    compute::{AttrContext, AttrReadGuard, Computable, SharedComputable, SlotReadGuard},
     database::Revision,
     entry::{
         DocumentReadGuard,
@@ -71,6 +73,7 @@ pub use crate::analysis::{
     },
     manager::{TaskHandle, TaskPriority, TriggerHandle},
     scope::{Scope, ScopeAttr},
+    slot::{Slot, SlotRef, NIL_SLOT_REF},
     tasks::{
         AbstractTask,
         AnalysisTask,

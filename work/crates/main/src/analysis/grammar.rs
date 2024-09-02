@@ -46,15 +46,25 @@ pub use lady_deirdre_derive::Feature;
 
 use crate::{
     analysis::{
-        database::{AbstractDatabase, Record},
+        database::{
+            AbstractDatabase,
+            AttrRecord,
+            AttrRecordData,
+            DocRecords,
+            SlotRecord,
+            SlotRecordData,
+        },
         AnalysisError,
         AnalysisResult,
         AttrRef,
         Computable,
+        Revision,
         ScopeAttr,
+        SlotRef,
         TaskHandle,
         TriggerHandle,
         NIL_ATTR_REF,
+        NIL_SLOT_REF,
     },
     arena::{Entry, Id, Identifiable, Repo},
     sync::SyncBuildHasher,
@@ -392,6 +402,8 @@ pub trait AbstractFeature {
     /// an attribute or a composite object.
     fn attr_ref(&self) -> &AttrRef;
 
+    fn slot_ref(&self) -> &SlotRef;
+
     /// Returns a sub-feature of this feature by `key`.
     ///
     /// If there is no corresponding sub-feature the function returns
@@ -465,7 +477,7 @@ pub struct Initializer<
 > {
     pub(super) id: Id,
     pub(super) database: Weak<dyn AbstractDatabase>,
-    pub(super) records: &'a mut Repo<Record<N, H, S>>,
+    pub(super) records: &'a mut DocRecords<N, H, S>,
 }
 
 /// A marker-[feature](Feature) of the syntax tree nodes with empty
@@ -497,6 +509,11 @@ impl<N: Grammar> AbstractFeature for VoidFeature<N> {
     #[inline(always)]
     fn attr_ref(&self) -> &AttrRef {
         &NIL_ATTR_REF
+    }
+
+    #[inline(always)]
+    fn slot_ref(&self) -> &SlotRef {
+        &NIL_SLOT_REF
     }
 
     #[inline(always)]
@@ -542,13 +559,27 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Identifiable for Initial
 
 impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Initializer<'a, N, H, S> {
     #[inline(always)]
-    pub(super) fn register_record<C: Computable<Node = N> + Eq>(
+    pub(super) fn register_attribute<C: Computable<Node = N> + Eq>(
         &mut self,
         node_ref: NodeRef,
     ) -> (Weak<dyn AbstractDatabase>, Entry) {
         (
             self.database.clone(),
-            self.records.insert(Record::new::<C>(node_ref)),
+            self.records
+                .attrs
+                .insert(AttrRecord::new(AttrRecordData::new::<C>(node_ref))),
+        )
+    }
+
+    #[inline(always)]
+    pub(super) fn register_slot<T: Default + Send + Sync + 'static>(
+        &mut self,
+    ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        (
+            self.database.clone(),
+            self.records
+                .slots
+                .insert(SlotRecord::new(SlotRecordData::new::<T>())),
         )
     }
 }
@@ -578,7 +609,7 @@ pub struct Invalidator<
     S: SyncBuildHasher = RandomState,
 > {
     pub(super) id: Id,
-    pub(super) records: &'a mut Repo<Record<N, H, S>>,
+    pub(super) records: &'a mut Repo<AttrRecord<N, H, S>>,
 }
 
 impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Identifiable for Invalidator<'a, N, H, S> {
@@ -590,7 +621,7 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Identifiable for Invalid
 
 impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Invalidator<'a, N, H, S> {
     #[inline(always)]
-    pub(super) fn invalidate_record(&mut self, entry: &Entry) {
+    pub(super) fn invalidate_attribute(&mut self, entry: &Entry) {
         let Some(record) = self.records.get(entry) else {
             return;
         };
@@ -674,6 +705,15 @@ impl<F: Feature> AbstractFeature for Semantics<F> {
         };
 
         inner.attr_ref()
+    }
+
+    #[inline(always)]
+    fn slot_ref(&self) -> &SlotRef {
+        let Ok(inner) = self.get() else {
+            return &NIL_SLOT_REF;
+        };
+
+        inner.slot_ref()
     }
 
     #[inline(always)]
