@@ -686,9 +686,14 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
                 id: Id::nil(),
                 database: Arc::downgrade(&db) as Weak<_>,
                 records: &mut records,
+                inserts: false,
             };
 
             common.init(&mut initializer);
+
+            if initializer.inserts {
+                db.records.insert(Id::nil(), records);
+            }
         }
 
         let tasks = TaskManager::new();

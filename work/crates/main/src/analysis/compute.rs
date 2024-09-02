@@ -818,7 +818,7 @@ impl SlotRef {
         S: SyncBuildHasher,
     >(
         &self,
-        task: &mut impl MutationAccess<N, H, S>,
+        task: &impl MutationAccess<N, H, S>,
         map: impl FnOnce(&mut T) -> bool,
     ) -> AnalysisResult<()> {
         let Some(records_guard) = task.analyzer().db.records.get(&self.id) else {

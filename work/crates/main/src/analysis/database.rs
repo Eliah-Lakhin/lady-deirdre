@@ -33,7 +33,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use std::{
-    any::TypeId,
+    any::{type_name, TypeId},
     collections::HashSet,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicU64, Ordering},
@@ -180,36 +180,42 @@ pub(super) struct AttrRecordCache<N: Grammar, S: SyncBuildHasher> {
 impl<N: Grammar, S: SyncBuildHasher> AttrRecordCache<N, S> {
     #[inline(always)]
     pub(super) fn downcast<T: 'static>(&self) -> AnalysisResult<&T> {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = self.memo.deref();
+
+        if memo.attr_memo_type_id() != TypeId::of::<T>() {
             return Err(AnalysisError::TypeMismatch);
         }
 
         // Safety: Type checked above.
-        Ok(unsafe { &*(self.memo.deref() as *const dyn AttrMemo as *const T) })
+        Ok(unsafe { &*(memo as *const dyn AttrMemo as *const T) })
     }
 
     // Safety: `T` properly describes `memo` type.
     #[inline(always)]
     pub(super) unsafe fn downcast_unchecked<T: 'static>(&self) -> &T {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = self.memo.deref();
+
+        if memo.attr_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
         }
 
         // Safety: Upheld by the caller.
-        unsafe { &*(self.memo.deref() as *const dyn AttrMemo as *const T) }
+        unsafe { &*(memo as *const dyn AttrMemo as *const T) }
     }
 
     // Safety: `T` properly describes `memo` type.
     #[inline(always)]
     pub(super) unsafe fn downcast_unchecked_mut<T: 'static>(&mut self) -> &mut T {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = self.memo.deref_mut();
+
+        if memo.attr_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
         }
 
         // Safety: Upheld by the caller.
-        unsafe { &mut *(self.memo.deref_mut() as *mut dyn AttrMemo as *mut T) }
+        unsafe { &mut *(memo as *mut dyn AttrMemo as *mut T) }
     }
 }
 
@@ -250,46 +256,54 @@ impl SlotRecordData {
 
     #[inline(always)]
     pub(super) fn downcast<T: 'static>(&self) -> AnalysisResult<&T> {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = self.memo.deref();
+
+        if memo.slot_memo_type_id() != TypeId::of::<T>() {
             return Err(AnalysisError::TypeMismatch);
         }
 
         // Safety: Type checked above.
-        Ok(unsafe { &*(self.memo.deref() as *const dyn SlotMemo as *const T) })
+        Ok(unsafe { &*(memo as *const dyn SlotMemo as *const T) })
     }
 
     #[inline(always)]
     pub(super) fn downcast_mut<T: 'static>(&mut self) -> AnalysisResult<&mut T> {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = self.memo.deref_mut();
+
+        if memo.slot_memo_type_id() != TypeId::of::<T>() {
             return Err(AnalysisError::TypeMismatch);
         }
 
         // Safety: Type checked above.
-        Ok(unsafe { &mut *(self.memo.deref_mut() as *mut dyn SlotMemo as *mut T) })
+        Ok(unsafe { &mut *(memo as *mut dyn SlotMemo as *mut T) })
     }
 
     // Safety: `T` properly describes underlying `memo` type.
     #[inline(always)]
     pub(super) unsafe fn downcast_unchecked<T: 'static>(&self) -> &T {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = self.memo.deref();
+
+        if memo.slot_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
         }
 
         // Safety: Upheld by the caller.
-        unsafe { &*(self.memo.deref() as *const dyn SlotMemo as *const T) }
+        unsafe { &*(memo as *const dyn SlotMemo as *const T) }
     }
 
     // Safety: `T` properly describes underlying `memo` type.
     #[inline(always)]
     pub(super) unsafe fn downcast_unchecked_mut<T: 'static>(&mut self) -> &mut T {
-        if self.memo.slot_memo_type_id() != TypeId::of::<T>() {
+        let memo = Box::deref_mut(&mut self.memo);
+
+        if memo.slot_memo_type_id() != TypeId::of::<T>() {
             // Safety: Upheld by the caller.
             unsafe { ld_unreachable!("Incorrect memo type.") }
         }
 
         // Safety: Upheld by the caller.
-        unsafe { &mut *(self.memo.deref_mut() as *mut dyn SlotMemo as *mut T) }
+        unsafe { &mut *(memo as *mut dyn SlotMemo as *mut T) }
     }
 }
 

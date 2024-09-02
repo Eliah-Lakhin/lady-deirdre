@@ -477,6 +477,7 @@ pub struct Initializer<
     pub(super) id: Id,
     pub(super) database: Weak<dyn AbstractDatabase>,
     pub(super) records: &'a mut DocRecords<N, H, S>,
+    pub(super) inserts: bool,
 }
 
 /// A marker-[feature](Feature) of the syntax tree nodes with empty
@@ -562,6 +563,8 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Initializer<'a, N, H, S>
         &mut self,
         node_ref: NodeRef,
     ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        self.inserts = true;
+
         (
             self.database.clone(),
             self.records
@@ -574,6 +577,8 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Initializer<'a, N, H, S>
     pub(super) fn register_slot<T: Default + Send + Sync + 'static>(
         &mut self,
     ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        self.inserts = true;
+
         (
             self.database.clone(),
             self.records

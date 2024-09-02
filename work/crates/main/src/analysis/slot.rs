@@ -288,7 +288,7 @@ where
     #[inline(always)]
     pub fn mutate<H: TaskHandle, S: SyncBuildHasher>(
         &self,
-        task: &mut impl MutationAccess<N, H, S>,
+        task: &impl MutationAccess<N, H, S>,
         map: impl FnOnce(&mut T) -> bool,
     ) -> AnalysisResult<()> {
         let slot_ref = self.as_ref();
@@ -390,7 +390,7 @@ impl SlotRef {
     #[inline(always)]
     pub fn mutate<T, N, H, S>(
         &self,
-        task: &mut impl MutationAccess<N, H, S>,
+        task: &impl MutationAccess<N, H, S>,
         map: impl FnOnce(&mut T) -> bool,
     ) -> AnalysisResult<()>
     where

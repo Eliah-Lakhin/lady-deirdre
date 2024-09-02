@@ -158,6 +158,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
                 id,
                 database: Arc::downgrade(&self.db) as Weak<_>,
                 records: &mut records,
+                inserts: false,
             };
 
             for node_ref in &node_refs {
@@ -290,6 +291,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
             id,
             database: Arc::downgrade(&self.db) as Weak<_>,
             records: records.deref_mut(),
+            inserts: false,
         };
 
         for node_ref in &report.node_refs {
