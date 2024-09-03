@@ -38,7 +38,7 @@ Lexical structures (tokens) are owned by the source code managers, such as
 TokenBuffers and Documents, which implement the SourceCode trait through which
 you can access the tokens.
 
-The [TokenRef](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenRef.html)
+The [TokenRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenRef.html)
 is a convenient interface containing a composite numeric index that uniquely
 addresses a token in the source code. As a numeric index, it is a Copy and
 lifetime-independent object that you can freely use throughout your program.
@@ -48,7 +48,7 @@ code manager and may return None if the corresponding token does not exist in
 the manager.
 
 For example,
-the [TokenRef::deref](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenRef.html#method.deref)
+the [TokenRef::deref](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenRef.html#method.deref)
 function "dereferences" the token and returns Some if the token exists in the
 specified compilation unit, or None otherwise.
 
@@ -91,12 +91,12 @@ The TokenRef reference is unique in the following ways:
 2. It uniquely addresses a particular token within this unit.
 
 If the incremental source code manager (such
-as [Document](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html))
+as [Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html))
 rescans the source code fragment to which the token belongs, its TokenRef
 reference would effectively become obsolete. Every new token in the Document
 would receive a new unique instance of the TokenRef object.
 
-The [TokenRef::is_valid_ref](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenRef.html#method.is_valid_ref)
+The [TokenRef::is_valid_ref](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenRef.html#method.is_valid_ref)
 function tests the validity of the reference for a specified compilation unit.
 
 ## Nil TokenRef
@@ -106,9 +106,9 @@ references that intentionally do not address any tokens within any compilation
 unit.
 
 These TokenRefs are created with
-the [TokenRef::nil](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenRef.html#method.nil)
+the [TokenRef::nil](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenRef.html#method.nil)
 function and can be tested using
-the [is_nil](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.PolyRef.html#tymethod.is_nil)
+the [is_nil](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.PolyRef.html#tymethod.is_nil)
 function. The *is_nil* function returns true only for token references created
 this way; otherwise, it returns false, even if the TokenRef is obsolete.
 

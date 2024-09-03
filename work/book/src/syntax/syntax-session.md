@@ -38,7 +38,7 @@ Inside the hand-written parse function, you will use the `session` variable
 provided by the macro-generated code when it invokes this function.
 
 The variable is of
-type [SyntaxSession](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html),
+type [SyntaxSession](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html),
 which provides an interface to read input tokens and manage the output syntax
 tree.
 
@@ -49,7 +49,7 @@ instance of the syntax tree node as a result of the parsing procedure.
 ## Input Tokens Stream
 
 The SyntaxSession trait is at first place a supertrait
-of [TokenCursor](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.TokenCursor.html),
+of [TokenCursor](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.TokenCursor.html),
 representing an input stream for the parser.
 
 From this interface, you can read tokens' metadata ahead of the current stream
@@ -63,10 +63,10 @@ state[^lookahead].
 None of these lookahead functions move the input stream forward. Once your parse
 algorithm has observed a few tokens ahead, analyzed them, and made a decision to
 actually "consume" these tokens, the algorithm calls
-the [TokenCursor::advance](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.advance)
+the [TokenCursor::advance](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.advance)
 function, which consumes one token and moves the stream position to the next
 token,
-or [TokenCursor::skip](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.skip),
+or [TokenCursor::skip](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.skip),
 which allows you to consume several tokens.
 
 For instance, in
@@ -117,15 +117,15 @@ would use the [panic recovery](error-recovering.md#panic-recovery) procedure.
 
 To avoid manually reimplementing the panic recovery algorithm and to be
 consistent with the auto-generated parsers, Lady Deirdre exposes
-the [Recovery](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.Recovery.html)
+the [Recovery](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.Recovery.html)
 configurable object that implements this algorithm, which is also used inside
 the macro-generated code.
 
 The Recovery object has the same configuration options that you would use inside
 the `#[recovery(...)]` macro attribute:
-the [Recovery::unexpected](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.Recovery.html#method.unexpected)
+the [Recovery::unexpected](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.Recovery.html#method.unexpected)
 function adds a halting token, and
-the [Recovery::group](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.Recovery.html#method.group)
+the [Recovery::group](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.Recovery.html#method.group)
 function adds a group of tokens that should be treated as a whole.
 
 It is assumed that this object will be constructed upfront in the const context
@@ -154,7 +154,7 @@ static OPERAND_RECOVERY: Recovery =
 ```
 
 To apply the panic recovery procedure, you call
-the [Recovery::recover](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.Recovery.html#method.recover)
+the [Recovery::recover](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.Recovery.html#method.recover)
 function, passing it the `session` variable and the set of tokens the recoverer
 should look for. The function will consume as many tokens as needed according to
 the configured rules and will return an object describing whether the procedure
@@ -162,7 +162,7 @@ managed to find the required token or failed to do so due to a specific
 reason (e.g., a halting token has been reached).
 
 Regardless of the recovery result, you should report the error using
-the [SyntaxSession::failure](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.failure)
+the [SyntaxSession::failure](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.failure)
 function.
 
 ```rust,noplayground
@@ -228,11 +228,11 @@ Whenever your parser needs to descend into other rules, you basically have two
 options:
 
 1. Call
-   the [SyntaxSession::descend](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.descend)
+   the [SyntaxSession::descend](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.descend)
    function, which gives control flow back to the parsing environment.
 2. Create and parse the node manually using a pair of
-   functions: [SyntaxSession::enter](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.enter)
-   and [SyntaxSession::leave](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.leave).
+   functions: [SyntaxSession::enter](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.enter)
+   and [SyntaxSession::leave](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.leave).
 
 The result of the *descend* function would be similar to if the parsing
 environment parsed the requested node: it will advance the token cursor of
@@ -340,7 +340,7 @@ operand to the current operator's context, then parses the second operand and
 finishes the operator parser. You can repeat this procedure iteratively to
 create a left-rotated binary tree.
 
-The [SyntaxSession::lift](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.lift)
+The [SyntaxSession::lift](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.lift)
 function "transplants" the syntax tree branch created just before we enter the
 new node subparser to the context of this subparser. In particular, this
 function automatically changes the parent NodeRef of the former sibling to the
@@ -398,11 +398,11 @@ you return the final result from the overall parse procedure, and when you
 finish the inner subparsers via the *leave* function.
 
 To set up the node-to-parent relation, you can use
-the [SyntaxSession::parent_ref](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.parent_ref)
+the [SyntaxSession::parent_ref](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.parent_ref)
 function that returns a NodeRef reference to the parent node in the syntax tree
 of the currently parsed node.
 
-The [SyntaxSession::node_ref](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.node_ref)
+The [SyntaxSession::node_ref](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.node_ref)
 returns a NodeRef reference of the currently parsed node that will be deployed
 into the syntax tree when the parser finishes parsing (or subparsing) process.
 

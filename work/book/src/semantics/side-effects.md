@@ -35,7 +35,7 @@
 # Side Effects
 
 Typically, implementations of
-attribute's [Computable](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/trait.Computable.html)
+attribute's [Computable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.Computable.html)
 functions should be free of side effects: their results should not rely on the
 external environment state, and non-input attributes should be independent from
 changes in the syntax and lexical structure of the compilation units.
@@ -44,11 +44,11 @@ If the implementation has side effects that cannot be avoided, you have two ways
 to overcome the limitations of the validation procedure:
 
 1. You can invalidate any attribute manually using
-   the [Attr::invalidate](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html#method.invalidate)
+   the [Attr::invalidate](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html#method.invalidate)
    function if you are aware that the external environment state has changed.
 
 2. Inside the computable function implementation, you can use
-   the [Context::subscribe](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.AttrContext.html#method.subscribe)
+   the [Context::subscribe](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.AttrContext.html#method.subscribe)
    function to subscribe this attribute to the Analyzer-wide event that could be
    triggered independently for bulk invalidation of the semantic graph
    attributes subscribed to a specific event. The event object that you would
@@ -65,7 +65,7 @@ the state of one Analyzer could be propagated to some attributes of another
 Analyzer's setup.
 
 [^builtinevenets]: There are a couple of built-in events as well, such as
-the [DOC_UPDATED_EVENT](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/constant.DOC_UPDATED_EVENT.html),
+the [DOC_UPDATED_EVENT](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/constant.DOC_UPDATED_EVENT.html),
 which denotes document-wide edits within the specified document regardless of
 the scopes. However, the majority of the value range is available for
 user-defined events.

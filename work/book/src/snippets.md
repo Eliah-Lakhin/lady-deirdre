@@ -41,7 +41,7 @@ fragments where the issues occur.
 While there are several similar tools in the Rust ecosystem that you can use
 with this crate, Lady Deirdre provides its own solution as well.
 
-The [Snippet](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.Snippet.html)
+The [Snippet](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/format/struct.Snippet.html)
 is a configurable builder object that prints the source code text of a
 compilation unit, or a part of it, with emphasized fragments annotated with
 custom messages.
@@ -122,7 +122,7 @@ impl<'a> Display for JsonSnippet<'a> {
 ```
 
 The Snippet has several drawing configuration options that you can specify using
-the [Snippet::set_config](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.Snippet.html#method.set_config)
+the [Snippet::set_config](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/format/struct.Snippet.html#method.set_config)
 function. Here are a few:
 
 - You can show or hide line numbers, header and footer, and the outer frame.
@@ -135,16 +135,16 @@ alternated (`format!("{}")`). Otherwise, all drawing options are
 enabled (`format!("{:#}")`).
 
 In the example above, we specify the JSON syntax highlighter using
-the [Snippet::set_highlighter](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.Snippet.html#method.set_highlighter)
+the [Snippet::set_highlighter](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/format/struct.Snippet.html#method.set_highlighter)
 function.
 
 The highlighter is a stateful object that implements
-the [Highlighter](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/trait.Highlighter.html)
+the [Highlighter](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/format/trait.Highlighter.html)
 trait and instructs the Snippet on how to stylize the source code tokens. The
 Snippet builder
-calls [Highlighter::token_style](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/trait.Highlighter.html#tymethod.token_style)
+calls [Highlighter::token_style](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/format/trait.Highlighter.html#tymethod.token_style)
 for each token in the source code sequentially, and the function returns
-the [Style](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/format/struct.Style.html)
+the [Style](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/format/struct.Style.html)
 of the token.
 
 ```rust,noplayground

@@ -80,15 +80,15 @@ Common semantic features typically include:
 - Analyzer-wide reducing attributes, such as an attribute that collects all
   syntax and semantic issues detected across all managed documents.
 - External configuration metadata specified via the system of
-  [Slots](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Slot.html).
+  [Slots](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Slot.html).
   For instance, a map between file names and their document IDs within the
   Analyzer (as in the example above).
 
 You can access common semantics both inside and outside of computable
 functions. Inside a computable function, you can access common semantics
-using the [AttrContext::common](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.AttrContext.html#method.common)
+using the [AttrContext::common](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.AttrContext.html#method.common)
 method. To access the semantics outside, you would use the
-[AbstractTask::common](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/trait.AbstractTask.html#method.common)
+[AbstractTask::common](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.AbstractTask.html#method.common)
 method.
 
 ```rust,noplayground
@@ -133,7 +133,7 @@ task.common()
 
 ## Slots
 
-The primary purpose of a [Slot](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Slot.html)
+The primary purpose of a [Slot](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Slot.html)
 is to provide a convenient mechanism for injecting configuration metadata
 external to the Analyzer into the semantic graph. For instance, mapping between
 file system names and the Analyzer's document IDs can be injected through a
@@ -144,15 +144,15 @@ attributes, except that a Slot does not have an associated computable function.
 Instead, Slots have associated values of a specified type (the second generic
 argument of the `Slot<Node, ValueType>` signature).
 
-You can [snapshot](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Slot.html#method.snapshot)
+You can [snapshot](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Slot.html#method.snapshot)
 the current Slot value outside of computable functions, and you can
-[read](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Slot.html#method.read)
+[read](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Slot.html#method.read)
 Slot values within the computable functions of attributes, thereby subscribing
 those attributes to changes in the Slot, much like with normal attributes.
 
 By default, Slot values are set to the `Default` of the value type. You can
 modify the content of the Slot value using the
-[Slot::mutate](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Slot.html#method.mutate)
+[Slot::mutate](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Slot.html#method.mutate)
 method with a mutable (or exclusive) task.
 
 ```rust,noplayground

@@ -35,7 +35,7 @@
 # Overriding a Parser
 
 To recap,
-the [Node derive macro](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/derive.Node.html)
+the [Node derive macro](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/derive.Node.html)
 automatically implements parse procedures for each enum variant annotated with
 the `#[rule(...)]` macro attribute. Inside the rule, you write a regex-like
 parse expression in terms of the LL(1) grammars used by the macro to generate
@@ -49,7 +49,7 @@ written Rust function using the `#[parser(...)]` macro attribute.
 This attribute accepts a Rust expression that must return an instance of the
 enum that represents the parsing result product. As an input, you would use
 the `session` variable, which is a mutable reference to
-the [SyntaxSession](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html)
+the [SyntaxSession](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html)
 that represents the current state of the parsing environment.
 
 Usually, inside this expression, you would call your parsing function passing

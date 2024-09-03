@@ -35,7 +35,7 @@
 # Grammar Setup
 
 The central component of your compiler is
-the [Analyzer](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Analyzer.html)
+the [Analyzer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Analyzer.html)
 object. This object is responsible to manage the set of documents within the
 compilation project and their semantic graph. Further details regarding the
 Analyzer's API will be discussed in subsequent chapters. For now, our focus in
@@ -114,7 +114,7 @@ pub enum ChainNode {
 
 Each variant in the Node enum must contain a semantics field annotated with
 the `#[semantics]` attribute and of
-type [Semantics](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Semantics.html).
+type [Semantics](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Semantics.html).
 
 This field will be automatically initialized[^handwritten] and managed by the
 macro-generated code.
@@ -129,14 +129,14 @@ parameterized by the `BlockSemantics` type.
 
 If a node variant doesn't have any attributes, you can parameterize its
 Semantics object with
-the [VoidFeature](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.VoidFeature.html)
+the [VoidFeature](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.VoidFeature.html)
 type, as seen in the `Root` and `Assignment` node variants.
 
 [^handwritten]: To initialize this field manually in the hand-written parser,
 use
-the [Semantics::new](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Semantics.html#method.new)
+the [Semantics::new](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Semantics.html#method.new)
 function, passing the current NodeRef obtained from
-the [SyntaxSession::node_ref](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.node_ref)
+the [SyntaxSession::node_ref](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.node_ref)
 function.
 
 ## Feature Objects
@@ -145,7 +145,7 @@ The type you use as a parameter of the Semantics object is called a *feature*.
 
 Typically, the semantic feature is a user-defined struct type derived from the
 Feature trait using
-the [Feature derive macro](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/derive.Feature.html).
+the [Feature derive macro](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/derive.Feature.html).
 This structure consists of fields that are either attributes or other feature
 objects.
 
@@ -162,7 +162,7 @@ pub struct BlockSemantics {
 ```
 
 In the above code, all fields are semantic
-attributes ([Attr](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html)
+attributes ([Attr](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html)
 types), but you are free to use other features as field types whenever you want
 to create more complex nested structures. You can also reuse the same feature
 type and attribute types in multiple places, as long as the feature or attribute
@@ -183,7 +183,7 @@ a `#[scope]`).
 
 We will discuss attributes in more detail in the next chapters, but to give you
 a brief overview, the generic parameter
-of [Attr](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html)
+of [Attr](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html)
 specifies the type of the attribute value. This value is part of the semantic
 model and can be any user-defined type (e.g., a struct or an enum) equipped with
 a function that computes this value based on the syntax tree values and other
@@ -210,5 +210,5 @@ impl Computable for BlockAnalysis {
 
 The general requirements imposed on this type are that it should implement the
 Clone, Eq,
-and [Computable](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/trait.Computable.html)
+and [Computable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.Computable.html)
 traits.

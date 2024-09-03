@@ -98,7 +98,7 @@ compilation units.
 
 ### Compilation Units
 
-The [Document](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html)
+The [Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html)
 object represents the source code text, token stream, and syntax tree of an
 individual compilation unit.
 
@@ -147,7 +147,7 @@ syntax tree's node type.
 
 First, you need to specify the type of the lexis. Typically, you can do this
 using
-the [derive macro](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/derive.Token.html)
+the [derive macro](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/derive.Token.html)
 on your enum type, where the enum variants denote individual token types.
 The token's lexical scanning rules are described in terms of regular expressions.
 
@@ -180,7 +180,7 @@ during the syntax parsing stage.
 ### Syntax
 
 The syntax grammar is described similarly using enum types and
-the [derive macro](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/derive.Node.html).
+the [derive macro](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/derive.Node.html).
 
 The node's parsing rules are described in terms of LL(1) grammars, but you can
 also implement your own custom parsers for individual node types, allowing for
@@ -221,7 +221,7 @@ hand-written recursive-descent parsers.
 The syntax trees created by Lady Deirdre are, informally speaking, abstract
 syntax trees where all trivial elements such as whitespaces and comments are
 intentionally omitted. However, it is worth noting that you can also build a
-full [ParseTree](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.ParseTree.html)
+full [ParseTree](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.ParseTree.html)
 based on the same grammar, which has a different structure useful for
 implementing code formatters.
 
@@ -235,10 +235,10 @@ rules for fine-tuning.
 ### Ownership
 
 In Lady Deirdre, the source code tokens and syntax tree nodes are owned by the
-[Document](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html).
+[Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html).
 
-The [NodeRef](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.NodeRef.html)
-and [TokenRef](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenRef.html)
+The [NodeRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.NodeRef.html)
+and [TokenRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenRef.html)
 objects are globally unique (composite) numerical indices that point to a
 specific node or token inside the Document. They are unique in the sense that
 whenever the incremental reparser removes a node or token, the corresponding
@@ -307,7 +307,7 @@ impl Visitor for MyVisitor {
 ### Semantics
 
 The semantic graph of the compilation project consists
-of [attributes](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html).
+of [attributes](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html).
 
 An attribute represents a value of arbitrary user-defined type, along with the
 function that computes this value based on the values of other attributes read
@@ -380,7 +380,7 @@ project in a multi-threaded environment, handling concurrent requests to the
 semantic attributes. Specifically, the language server can manage parallel
 requests from the language client (code editor) in dedicated worker threads.
 
-The [Analyzer](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Analyzer.html)
+The [Analyzer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Analyzer.html)
 object manages a collection of documents of the compilation project and the
 semantic graph of the project.
 

@@ -35,7 +35,7 @@
 # Token Buffer
 
 The simplest data structure for storing the token stream is
-the [TokenBuffer](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.TokenBuffer.html).
+the [TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html).
 
 It holds both the source code text and the token stream but has limited
 incremental rescanning capabilities, only allowing appending to the end of the
@@ -46,7 +46,7 @@ You are encouraged to use token buffer if you don't need general incremental
 rescanning capabilities and if you want to store only the source code with
 tokens, or if you plan to initially load the source code and later reupload it
 to a general-purpose compilation unit storage
-like [Document](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html).
+like [Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html).
 
 Token buffer offers the fastest scanning implementation among other Lady Deirdre
 compilation unit storages, providing high performance when iterating through

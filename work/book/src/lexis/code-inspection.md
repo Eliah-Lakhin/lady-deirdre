@@ -39,23 +39,23 @@
 In Lady Deirdre, the minimal unit for indexing the source code text is the
 Unicode character.
 
-A [Site](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/type.Site.html)
+A [Site](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/type.Site.html)
 is a numeric type (an alias of `usize`) representing the absolute Unicode
 character index in a string.
 
-[SiteSpan](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/type.SiteSpan.html)
+[SiteSpan](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/type.SiteSpan.html)
 is an alias type of `Range<Site>` that denotes a fragment (or *span*) of the
 source code.
 
 Most API functions within the crate conveniently
-accept [impl ToSite](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.ToSite.html)
-or [impl ToSpan](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.ToSpan.html)
+accept [impl ToSite](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.ToSite.html)
+or [impl ToSpan](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.ToSpan.html)
 objects when users need to address specific source code
 characters or spans of characters. These traits facilitate automatic conversion
 between different representations of source code indices.
 
 One example of a source code index type is
-the [Position](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.Position.html)
+the [Position](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.Position.html)
 object, which references code in terms of the line and column within the
 line[^position]. It implements the *ToSite* trait.
 
@@ -69,13 +69,13 @@ However, a particular span instance could be invalid; for instance, `20..10` is
 invalid because its lower bound is greater than its upper bound.
 
 Certain API functions in the crate (e.g.,
-[Document::write](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html#method.write))
+[Document::write](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.write))
 require that the specified span must be valid; otherwise, the function would
 panic. This behavior aligns with Rust's behavior when indexing arrays with
 invalid ranges.
 
 You can check the validity of a range upfront using
-the [ToSpan::is_valid_span](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.ToSpan.html#tymethod.is_valid_span)
+the [ToSpan::is_valid_span](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.ToSpan.html#tymethod.is_valid_span)
 function.
 
 The RangeFull `..` object always represents the entire content and is always
@@ -94,14 +94,14 @@ assert!((Position::new(1, 2)..Position::new(3, 1)).is_valid_span(&buf));
 ```
 
 [^position]: Please note that the line and column numbers in
-the [Position](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.Position.html)
+the [Position](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.Position.html)
 object are one-based: 1 denotes the first line, 2 denotes the second line, and
 so forth.
 
 ## Text Inspection
 
 The
-following [SourceCode](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.SourceCode.html)'
+following [SourceCode](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.SourceCode.html)'
 s functions enable you to query various metadata of the compilation unit's text.
 
 ```rust,noplayground
@@ -131,16 +131,16 @@ assert_eq!(buf.lines().lines_count(), 1);
 ```
 
 From `buf.lines()`, you receive
-a [LineIndex](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.LineIndex.html)
+a [LineIndex](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.LineIndex.html)
 object that provides additional functions for querying metadata about the source
 code lines. For example, you can fetch the length of a particular line using
 this object.
 
 ## Tokens Iteration
 
-The [SourceCode::cursor](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.SourceCode.html#tymethod.cursor)
+The [SourceCode::cursor](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.SourceCode.html#tymethod.cursor)
 and its simplified
-version [chunks](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.SourceCode.html#method.chunks)
+version [chunks](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.SourceCode.html#method.chunks)
 allow you to iterate through the tokens of the source code.
 
 Both functions accept a span of the source code text and yield tokens that
@@ -158,7 +158,7 @@ are in any way related to the specified span.
 
 The *chunks* function simply returns a standard iterator over the token
 metadata. Each
-[Chunk](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/struct.Chunk.html)
+[Chunk](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.Chunk.html)
 object contains the token instance, a reference to its string, the absolute Site
 of the beginning of the token, and the substring length in Unicode
 characters[^chunk].
@@ -184,7 +184,7 @@ for Chunk {
 ```
 
 The *cursor* function returns a more
-complex [TokenCursor](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/lexis/trait.TokenCursor.html)
+complex [TokenCursor](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.TokenCursor.html)
 object that implements a cursor-like API with built-in lookahead capabilities
 and manual control over the iteration process. This object is particularly
 useful for syntax parsing and will be discussed in more detail in the subsequent

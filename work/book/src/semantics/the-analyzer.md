@@ -35,7 +35,7 @@
 # The Analyzer
 
 To recap,
-the [Analyzer](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Analyzer.html)
+the [Analyzer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Analyzer.html)
 serves as the central object of the compiler, managing the compilation project's
 set of documents and the semantic graph.
 
@@ -61,22 +61,22 @@ gain access to specific operations on the Analyzer's data[^tasks].
 The Analyzer offers three types of task objects:
 
 - The
-  [AnalysisTask](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.AnalysisTask.html):
+  [AnalysisTask](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.AnalysisTask.html):
   This task allows you to query semantic graph attributes. You can have as many
   simultaneous task objects of this type as you need.
 - The
-  [MutationTask](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.MutationTask.html):
+  [MutationTask](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.MutationTask.html):
   With this task, you can create, edit, or remove documents, and you can trigger
   analyzer-wide events. Similar to AnalysisTask, you can have multiple
   simultaneous task objects of this type.
 - The
-  [ExclusiveTask](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.ExclusiveTask.html):
+  [ExclusiveTask](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.ExclusiveTask.html):
   This task enables you to sequentially perform analysis and mutation operations
   within a single thread. However, you cannot have more than one task of this
   type simultaneously.
 
 You obtain the task objects by requesting them from the Analyzer. For instance,
-the [Analyzer::analyze](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Analyzer.html#method.analyze)
+the [Analyzer::analyze](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Analyzer.html#method.analyze)
 function returns an *AnalysisTask* instance.
 
 Each of these request functions could block the current thread if the Analyzer
@@ -136,9 +136,9 @@ assert!(!task.contains_doc(doc_id));
 ```
 
 In the above code, the `add_mutable_doc` function
-resembles [Document::new_mutable](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html#method.new_mutable),
+resembles [Document::new_mutable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.new_mutable),
 and the `write_to_doc` function
-resembles [Document::write](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/units/enum.Document.html#method.write),
+resembles [Document::write](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.write),
 except that the Document instance is managed by the Analyzer.
 
 ## Analysis Task
@@ -185,7 +185,7 @@ assert_eq!(resolution, GlobalResolution::Resolved(100));
 ```
 
 Note
-the [snapshot](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html#method.snapshot)
+the [snapshot](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html#method.snapshot)
 function in the above code that we're calling on the `global_resolution`
 attribute of the node's semantics.
 
@@ -202,19 +202,19 @@ number is useful for quickly checking if the attribute has a new value by
 comparing it with the version number received from this function previously.
 
 The second object of the pair is a copy of the attribute's value. Unlike
-the [Attr::read](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html#method.read)
+the [Attr::read](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html#method.read)
 function used within computable functions, which returns a reference to the
 value, the *snapshot* function used externally copies the value (by cloning it).
 
 For this reason, it's recommended to make the attribute's value type cheap
 to copy if the attribute is intended to be observed from outside of computable
 functions. Otherwise, you can wrap the value type
-into [Shared](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/sync/struct.Shared.html).
+into [Shared](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Shared.html).
 
 ## Exclusive Task
 
 You obtain the exclusive task using
-the [Analyzer::exclusive](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Analyzer.html#method.exclusive)
+the [Analyzer::exclusive](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Analyzer.html#method.exclusive)
 function.
 
 The Analyzer grants only one instance of this type of task at a time, but this
@@ -239,7 +239,7 @@ from reading or changing the probed text in between.
 
 From any kind of task, you can read the content of the document (both lexical
 and syntactical).
-The [read_doc](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/trait.AbstractTask.html#method.read_doc)
+The [read_doc](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.AbstractTask.html#method.read_doc)
 function returns a *DocumentReadGuard* RAII guard, through which you access the
 Document object immutably. While this guard is held, attempts to mutate this
 specific document (edit or remove) will be blocked. However, semantic analysis
@@ -250,9 +250,9 @@ mutation of compilation units.
 
 As the Analyzer is going to be a central object of the compiler, it's
 recommended to either place it in a
-[Shared](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/sync/struct.Shared.html)
+[Shared](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Shared.html)
 or a
-[Lazy](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/sync/struct.Lazy.html)
+[Lazy](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Lazy.html)
 static for easy access from multiple threads. This is somewhat analogous to
 placing a Mutex or RwLock with the program-wide state into an Arc to share it
 across threads.

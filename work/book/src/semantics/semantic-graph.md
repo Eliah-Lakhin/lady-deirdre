@@ -35,17 +35,17 @@
 # Semantic Graph
 
 A semantic
-attribute ([Attr](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html)
+attribute ([Attr](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html)
 object) consists of a cache for a value of an arbitrary user-defined type and a
 function that computes this value when invoked by the Analyzer's inner
 algorithm.
 
 Inside
-the [Computable](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/trait.Computable.html)
+the [Computable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.Computable.html)
 function that computes the value, you can access other attribute values, the
 syntax and lexical content of the compilation units, and other Analyzer-related
 elements from the `context` argument of
-the [AttrContext](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.AttrContext.html)
+the [AttrContext](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.AttrContext.html)
 type. This argument is the source of the inputs to the function, allowing you to
 infer and return the resulting attribute value.
 
@@ -212,7 +212,7 @@ impl SharedComputable for LocalResolution {
 In this snippet, particularly on the
 line `block_semantics.assignments.read(context)`, we are reading the value of
 another attribute.
-The [Attr::read](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/analysis/struct.Attr.html#method.read)
+The [Attr::read](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html#method.read)
 function takes the current `context` reference and returns a RAII read-guard of
 the attribute's value.
 

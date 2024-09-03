@@ -39,7 +39,7 @@ Instances of nodes in the syntax tree are owned by the syntax tree manager
 
 Similar to the TokenRef reference used to access individual tokens in the source
 code,
-the [NodeRef](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/struct.NodeRef.html)
+the [NodeRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.NodeRef.html)
 referential object is used to obtain access to instances of syntax tree nodes.
 
 NodeRefs are cheap to copy and are lifetime-independent objects representing
@@ -81,17 +81,17 @@ assert!(NodeRef::nil().deref(&doc).is_none());
 
 Since both NodeRef and TokenRef can serve as types for the children of syntax
 tree nodes, they both implement a generic
-trait [PolyRef](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.PolyRef.html)
+trait [PolyRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.PolyRef.html)
 that provides common functions for both.
 
 For example,
-[PolyRef::span](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.PolyRef.html#tymethod.span)
+[PolyRef::span](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.PolyRef.html#tymethod.span)
 returns the site span of the referred object's bounds.
 
 The PolyRef trait is an object-safe trait, useful for handling tree children
 without breaking the call chain. For instance, if you are confident that a
 particular instance of a PolyRef type is a NodeRef, you can use
-the [PolyRef::as_node_ref](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.PolyRef.html#tymethod.as_node_ref)
+the [PolyRef::as_node_ref](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.PolyRef.html#tymethod.as_node_ref)
 function to cast the instance to a NodeRef; otherwise, it returns a nil NodeRef
 without causing a panic if the instance is not a NodeRef.
 
@@ -119,10 +119,10 @@ assert_eq!(root_span, Position::new(1, 1)..Position::new(4, 2));
 ```
 
 Finally, Lady Deirdre provides an owned version of the PolyRef trait, known
-as [PolyVariant](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/enum.PolyVariant.html).
+as [PolyVariant](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/enum.PolyVariant.html).
 PolyVariant is a simple enum with NodeRef and TokenRef variants. You can convert
 either of these referential objects into a PolyVariant using
-the [PolyRef::as_variant](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/trait.PolyRef.html#tymethod.as_variant)
+the [PolyRef::as_variant](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.PolyRef.html#tymethod.as_variant)
 function whenever you need a generic owned referential object for the
 compilation unit's content.
 
