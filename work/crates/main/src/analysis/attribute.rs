@@ -104,6 +104,9 @@ pub static NIL_ATTR_REF: AttrRef = AttrRef::nil();
 ///
 /// The [AttrRef] can be obtained using the [AsRef] and the [Feature]
 /// implementations of the Attr.
+///
+/// See also [Slot](crate::analysis::Slot), a specialized version of an
+/// attribute that enables manual control over the attribute's value.
 #[repr(transparent)]
 pub struct Attr<C: Computable> {
     inner: AttrInner,
@@ -268,7 +271,7 @@ impl<C: Computable> Attr<C> {
     ///
     /// Returns a pair of two elements:
     ///  1. The [revision](Revision) under which the attribute's value has been
-    ///    computed.
+    ///     computed.
     ///  2. A copy of the attribute's value.
     ///
     /// This function is supposed to be called **outside** of
@@ -386,6 +389,9 @@ impl<C: Computable> Attr<C> {
 pub struct AttrRef {
     /// An identifier of the document managed by the Analyzer to which
     /// the attribute belongs.
+    ///
+    /// If the attribute belongs to the
+    /// [common semantics](Grammar::CommonSemantics), this value is [Id::nil].
     pub id: Id,
 
     /// A versioned index of the attribute instance within the Analyzer's inner

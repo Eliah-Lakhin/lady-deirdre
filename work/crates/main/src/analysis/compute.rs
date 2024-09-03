@@ -321,6 +321,15 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> AttrContext<'a, N, H, S>
         let _ = self.deps.events.insert((id, event));
     }
 
+    /// Provides access to the Analyzer's
+    /// [common semantics](Grammar::CommonSemantics), a special semantic
+    /// feature that is instantiated during the Analyzer's creation. It does
+    /// not belong to any specific document and is common across the entire
+    /// Analyzer.
+    ///
+    /// If the Analyzer's grammar does not specify common semantics, this
+    /// function returns a reference to the
+    /// [VoidFeature](crate::analysis::VoidFeature).
     #[inline(always)]
     pub fn common(&self) -> &'a N::CommonSemantics {
         &self.analyzer.common
@@ -694,6 +703,16 @@ impl AttrRef {
     }
 }
 
+/// A RAII guard that provides read-only access to
+/// the [slot](crate::analysis::Slot)'s value.
+///
+/// The underlying value can be accessed through the [Deref] implementation of
+/// this object.
+///
+/// This object is created by the [Slot::read](crate::analysis::Slot::read) and
+/// the [SlotRef::read] functions and can practically be obtain from
+/// the attribute computation context only.
+// Safety: Entries order reflects guards drop semantics.
 #[allow(dead_code)]
 pub struct SlotReadGuard<
     'a,

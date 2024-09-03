@@ -35,8 +35,7 @@
 //TODO check warnings regularly
 #![allow(warnings)]
 #![allow(unused_unsafe)]
-//TODO
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 
 //! # Lady Deirdre API Documentation
 //!

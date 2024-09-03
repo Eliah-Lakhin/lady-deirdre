@@ -66,8 +66,45 @@ use crate::{
     syntax::{Key, NodeRef},
 };
 
+/// An [SlotRef] reference that does not point to any [slot](Slot).
+///
+/// The value of this static equals to the [SlotRef::nil] value.
 pub static NIL_SLOT_REF: SlotRef = SlotRef::nil();
 
+/// A specialized version of an attribute that enables manual control over the
+/// underlying value.
+///
+/// The purpose of a Slot is to provide a conventional mechanism for injecting
+/// metadata from the environment, which is external to the Analyzer, into the
+/// Analyzer's semantic model. Slots are particularly useful in the Analyzer's
+/// [common semantics](Grammar::CommonSemantics) for storing common
+/// configurations, such as the mapping between file names and their
+/// corresponding document [IDs](Id) within the Analyzer.
+///
+/// The value of a Slot is fully integrated into the Analyzer's semantic graph
+/// and semantic model, except that the content of the value is managed manually
+/// by the API user.
+///
+/// Unlike a typical [attribute](crate::analysis::Attr), a Slot does not have an
+/// associated function that computes its value. Instead, the Slot's value is
+/// initialized using the [Default] implementation of type `T`, and the API user
+/// manually modifies the value's content using the [Slot::mutate] function.
+///
+/// This interface is similar to the [Attr](crate::analysis::Attr) object, in
+/// that attributes can [read](Slot::read) (and thus subscribe to changes in)
+/// the Slot's content within the attribute's
+/// [Computable](crate::analysis::Computable) implementation. The API user can
+/// also obtain a [snapshot](Slot::snapshot) outside of the computation
+/// procedure.
+///
+/// Note that, unlike Attr objects, Slot values will not be automatically
+/// invalidated even if the Slot is part of a scoped node. However, they may be
+/// recreated (and reset to their defaults) by the Analyzer when a document is
+/// [edited](MutationAccess::write_to_doc). Therefore, Slots within syntax tree
+/// nodes need to be maintained with extra care.
+///
+/// An associated [SlotRef] referential interface can be obtained using the
+/// [AsRef] and the [Feature] implementations of the Slot.
 #[repr(transparent)]
 pub struct Slot<N: Grammar, T: Default + Send + Sync + 'static> {
     inner: SlotInner,
@@ -268,6 +305,27 @@ where
     N: Grammar,
     T: Default + Send + Sync + 'static,
 {
+    /// Requests a copy of the slot's value.
+    ///
+    /// Returns a pair of two elements:
+    ///  1. The [revision](Revision) under which the slot's value was last
+    ///     modified.
+    ///  2. A copy of the slot's value.
+    ///
+    /// This function is supposed to be called **outside** of
+    /// the [computation context](crate::analysis::Computable::compute).
+    ///
+    /// As a general rule, if the returning revision number equals the revision
+    /// number of the previous call to the snapshot function, you can treat
+    /// both copies of the attribute value as equal. Otherwise, the equality is
+    /// not guaranteed.
+    ///
+    /// The `task` parameter grants access to the Analyzer's semantics and
+    /// could be either an [AnalysisTask](crate::analysis::AnalysisTask) or
+    /// an [ExclusiveTask](crate::analysis::ExclusiveTask).
+    ///
+    /// If the Analyzer unable to fetch the value within the current time
+    /// limits, the function returns a [Timeout](AnalysisError::Timeout) error.
     #[inline(always)]
     pub fn snapshot<H: TaskHandle, S: SyncBuildHasher>(
         &self,
@@ -285,6 +343,29 @@ where
         Ok((revision, data))
     }
 
+    /// Mutates the content of the slot's value.
+    ///
+    /// This function is supposed be called **outside** of
+    /// the [computation context](crate::analysis::Computable::compute).
+    ///
+    /// The `task` parameter grants write access to the Analyzer's semantic
+    /// model and can be either a
+    /// [MutationTask](crate::analysis::MutationTask) or an
+    /// [ExclusiveTask](crate::analysis::ExclusiveTask).
+    ///
+    /// The `map` parameter is a callback that receives mutable references to
+    /// the slot's value. This function can mutate the underlying content or
+    /// leave it unchanged, and it must return a boolean flag indicating whether
+    /// the content has been modified (`true` means that the value has been
+    /// modified).
+    ///
+    /// Failure to adhere to the `map` function's flag requirement does not
+    /// result in undefined behavior, but it could lead to inconsistencies in
+    /// the semantic model.
+    ///
+    /// If the Analyzer is unable to acquire mutation access to the slot's value
+    /// within the current time limits, the function returns a
+    /// [Timeout](AnalysisError::Timeout) error.
     #[inline(always)]
     pub fn mutate<H: TaskHandle, S: SyncBuildHasher>(
         &self,
@@ -301,6 +382,20 @@ where
         unsafe { slot_ref.change::<false, T, N, H, S>(task, map) }
     }
 
+    /// Provides read-only access to the slot's value.
+    ///
+    /// This function is supposed be called **inside** of
+    /// the computation context.
+    ///
+    /// The `context` parameter is the "context" argument of the current
+    /// [computable function](Computable::compute).
+    ///
+    /// By calling this function, the computable attribute **subscribes** to
+    /// changes in this slot, establishing a relationship between the attribute
+    /// and the slot.
+    ///
+    /// If the Analyzer is unable to fetch the value within the current time
+    /// limits, the function returns a [Timeout](AnalysisError::Timeout) error.
     #[inline(always)]
     pub fn read<'a, H: TaskHandle, S: SyncBuildHasher>(
         &self,
@@ -317,9 +412,40 @@ where
     }
 }
 
+/// A reference of the [slot](Slot) in the Analyzer's semantics graph.
+///
+/// Essentially, SlotRef is a composite index within the Analyzer’s inner
+/// database. Both components of this index form a unique pair within
+/// the lifetime of the Analyzer.
+///
+/// If the slot instance has been removed from the Analyzer's semantics
+/// graph over time, new slots within this Analyzer will never occupy
+/// the same SlotRef object. However, the SlotRef referred to the removed
+/// slot would become _invalid_.
+///
+/// You can obtain a copy of the SlotRef using the [AsRef] and
+/// the [Feature] implementations of the [Slot] object.
+///
+/// In general, it is recommended to access slot values directly using
+/// the [Slot::snapshot], [Slot::read], and [Slot::mutate] functions to avoid
+/// extra checks. However, you can use similar SlotRef functions that require
+/// specifying the type of the slot's value explicitly and involve extra checks
+/// of the type (even though these checks are relatively cheap to perform).
+///
+/// The [nil](SlotRef::nil) SlotRefs are special references that are considered
+/// to be always invalid. They intentionally don't refer any slot within
+/// any Analyzer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotRef {
+    /// An identifier of the document managed by the Analyzer to which
+    /// the slot belongs.
+    ///
+    /// If the slot belongs to the [common semantics](Grammar::CommonSemantics),
+    /// this value is [Id::nil].
     pub id: Id,
+
+    /// A versioned index of the slot instance within the Analyzer's inner
+    /// database.
     pub entry: Entry,
 }
 
@@ -354,6 +480,11 @@ impl Default for SlotRef {
 }
 
 impl SlotRef {
+    /// Returns a SlotRef that intentionally does not refer to any slot
+    /// within any Analyzer.
+    ///
+    /// If you need just a static reference to the nil SlotRef, use
+    /// the predefined [NIL_SLOT_REF] static.
     #[inline(always)]
     pub const fn nil() -> Self {
         Self {
@@ -362,11 +493,21 @@ impl SlotRef {
         }
     }
 
+    /// Returns true, if the SlotRef intentionally does not refer to any
+    /// slot within any Analyzer.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
         self.id.is_nil() && self.entry.is_nil()
     }
 
+    /// Requests a copy of the slot's value.
+    ///
+    /// This function is similar to the [Slot::snapshot] function, but requires
+    /// an additional generic parameter `T` that specifies the type of
+    /// the [Slot]'s value.
+    ///
+    /// If the `T` parameter does not match the Slot's value type, the function
+    /// returns a [TypeMismatch](AnalysisError::TypeMismatch) error.
     #[inline(always)]
     pub fn snapshot<T, N, H, S>(
         &self,
@@ -387,6 +528,14 @@ impl SlotRef {
         Ok((revision, data))
     }
 
+    /// Provides mutation access to the slot's value.
+    ///
+    /// This function is similar to the [Slot::mutate] function, but requires
+    /// an additional generic parameter `T` that specifies the type of
+    /// the [Slot]'s value.
+    ///
+    /// If the `T` parameter does not match the Slot's value type, the function
+    /// returns a [TypeMismatch](AnalysisError::TypeMismatch) error.
     #[inline(always)]
     pub fn mutate<T, N, H, S>(
         &self,
@@ -403,6 +552,14 @@ impl SlotRef {
         unsafe { self.change::<true, T, N, H, S>(task, map) }
     }
 
+    /// Provides read-only access to the slot's value.
+    ///
+    /// This function is similar to the [Slot::read] function, but requires
+    /// an additional generic parameter `T` that specifies the type of
+    /// the [Slot]'s value.
+    ///
+    /// If the `T` parameter does not match the Slot's value type, the function
+    /// returns a [TypeMismatch](AnalysisError::TypeMismatch) error.
     #[inline(always)]
     pub fn read<'a, T, N, H, S>(
         &self,
@@ -418,6 +575,14 @@ impl SlotRef {
         unsafe { self.fetch::<true, T, N, H, S>(reader) }
     }
 
+    /// Returns true if the slot referred to by this SlotRef exists in
+    /// the Analyzer's database.
+    ///
+    /// The `task` parameter could be a task that grants any kind of access to
+    /// the Analyzer:
+    /// [AnalysisTask](crate::analysis::AnalysisTask),
+    /// [MutationTask](crate::analysis::MutationTask),
+    /// or [ExclusiveTask](crate::analysis::ExclusiveTask).
     #[inline(always)]
     pub fn is_valid_ref<N: Grammar, H: TaskHandle, S: SyncBuildHasher>(
         &self,

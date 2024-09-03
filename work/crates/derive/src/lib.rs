@@ -390,6 +390,16 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 ///
 /// // Optional.
 /// //
+/// // Specifies the semantic entry-point for the common semantics shared across
+/// // all documents in the Analyzer.
+/// //
+/// // The type of this field must implement the `Feature` trait.
+/// //
+/// // If omitted, the default common semantics will be `VoidFeature<MyNode>`
+/// #[semantics(<common semantics type>)]
+///
+/// // Optional.
+/// //
 /// // Defines the expression that will be automatically parsed zero or more
 /// // times between every consumed token in the node's parse rules.
 /// //
