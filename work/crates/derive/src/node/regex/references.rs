@@ -1,37 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////
-// This file is a part of the "Lady Deirdre" Work,                            //
-// a compiler front-end foundation technology.                                //
+// This file is part of "Lady Deirdre", a compiler front-end foundation       //
+// technology.                                                                //
 //                                                                            //
-// This Work is a proprietary software with source available code.            //
+// This work is proprietary software with source-available code.              //
 //                                                                            //
-// To copy, use, distribute, and contribute into this Work you must agree to  //
-// the terms of the End User License Agreement:                               //
+// To copy, use, distribute, or contribute to this work, you must agree to    //
+// the terms of the General License Agreement:                                //
 //                                                                            //
-// https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.          //
+// https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md           //
 //                                                                            //
-// The Agreement let you use this Work in commercial and non-commercial       //
-// purposes. Commercial use of the Work is free of charge to start,           //
-// but the Agreement obligates you to pay me royalties                        //
-// under certain conditions.                                                  //
+// The agreement grants a Basic Commercial License, allowing you to use       //
+// this work in non-commercial and limited commercial products with a total   //
+// gross revenue cap. To remove this commercial limit for one of your         //
+// products, you must acquire a Full Commercial License.                      //
 //                                                                            //
-// If you want to contribute into the source code of this Work,               //
-// the Agreement obligates you to assign me all exclusive rights to           //
-// the Derivative Work or contribution made by you                            //
-// (this includes GitHub forks and pull requests to my repository).           //
+// If you contribute to the source code, documentation, or related materials, //
+// you must grant me an exclusive license to these contributions.             //
+// Contributions are governed by the "Contributions" section of the General   //
+// License Agreement.                                                         //
 //                                                                            //
-// The Agreement does not limit rights of the third party software developers //
-// as long as the third party software uses public API of this Work only,     //
-// and the third party software does not incorporate or distribute            //
-// this Work directly.                                                        //
-//                                                                            //
-// AS FAR AS THE LAW ALLOWS, THIS SOFTWARE COMES AS IS, WITHOUT ANY WARRANTY  //
-// OR CONDITION, AND I WILL NOT BE LIABLE TO ANYONE FOR ANY DAMAGES           //
-// RELATED TO THIS SOFTWARE, UNDER ANY KIND OF LEGAL CLAIM.                   //
+// Copying the work in parts is strictly forbidden, except as permitted       //
+// under the General License Agreement.                                       //
 //                                                                            //
 // If you do not or cannot agree to the terms of this Agreement,              //
-// do not use this Work.                                                      //
+// do not use this work.                                                      //
 //                                                                            //
-// Copyright (c) 2022 Ilya Lakhin (Илья Александрович Лахин).                 //
+// This work is provided "as is", without any warranties, express or implied, //
+// except where such disclaimers are legally invalid.                         //
+//                                                                            //
+// Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).                 //
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 

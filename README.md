@@ -1,32 +1,32 @@
 <!------------------------------------------------------------------------------
-  This file is a part of the "Lady Deirdre" work,
-  a compiler front-end foundation technology.
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
 
   This work is proprietary software with source-available code.
 
-  To copy, use, distribute, and contribute to this work, you must agree to
+  To copy, use, distribute, or contribute to this work, you must agree to
   the terms of the General License Agreement:
 
-  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md.
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
 
-  The agreement grants you a Commercial-Limited License that gives you
-  the right to use my work in non-commercial and limited commercial products
-  with a total gross revenue cap. To remove this commercial limit for one of
-  your products, you must acquire an Unrestricted Commercial License.
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
 
-  If you contribute to the source code, documentation, or related materials
-  of this work, you must assign these changes to me. Contributions are
-  governed by the "Derivative Work" section of the General License
-  Agreement.
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
 
-  Copying the work in parts is strictly forbidden, except as permitted under
-  the terms of the General License Agreement.
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
 
   If you do not or cannot agree to the terms of this Agreement,
   do not use this work.
 
-  This work is provided "as is" without any warranties, express or implied,
-  except to the extent that such disclaimers are held to be legally invalid.
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
 
   Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
   All rights reserved.
@@ -36,8 +36,8 @@
 
 [![Crate](https://img.shields.io/crates/v/lady-deirdre?label=Crate)](https://crates.io/crates/lady-deirdre)
 [![API Docs](https://img.shields.io/docsrs/lady-deirdre?label=API%20Docs)](https://docs.rs/lady-deirdre)
-[![User Guide](https://img.shields.io/badge/User_Guide-passing-default)](https://lady-deirdre.lakhin.com/)
-[![Examples](https://img.shields.io/badge/Examples-passing-default)](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
+[![User Guide](https://img.shields.io/badge/User_Guide-616161)](https://lady-deirdre.lakhin.com/)
+[![Examples](https://img.shields.io/badge/Examples-616161)](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
 
 <img align="right" height="220" style="float: right; margin-left: 10px; width: 220px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.jpg" />
 
@@ -137,53 +137,10 @@ For detailed information, refer to the [Benchmarks page](https://github.com/Elia
 
 This work is proprietary software with source-available code.
 
-To copy, use, distribute, and contribute to this work, you must agree to the
+To copy, use, distribute, or contribute to this work, you must agree to the
 terms and conditions of the [General License Agreement](https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md).
 
+For an explanation of the licensing terms, see the
+[F.A.Q.](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/FAQ.md)
+
 Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин). All rights reserved.
-
-### Can I use your work in my open-source project?
-
-Yes, you can use Lady Deirdre in your open-source projects. I would be happy to
-assist and hear your feedback to improve Lady Deirdre.
-
-The agreement automatically grants you a license to develop non-commercial
-software based on Lady Deirdre.
-
-### May I contribute to your project?
-
-If you find a bug or have a new feature suggestion, you can open a pull request
-in my GitHub repository.
-
-Please be aware that my work is proprietary software, intended for solo
-development. For this reason, the agreement requires you to automatically assign
-me the changes you make to my project's source code.
-
-However, if you want to create an extension for my crate, you can develop a
-separate crate that uses my crate's public APIs through Cargo. In this case, you
-don't have to assign me your work, and you can distribute your project under any
-permissive license, such as the MIT license.
-
-I deliberately keep my crate's APIs extendable for third-party authors who want
-to create dedicated Lady Deirdre extensions.
-
-### Can I develop commercial software products?
-
-Yes, you can develop commercial software based on Lady Deirdre.
-
-The agreement grants you a Commercial-Limited License, allowing you to use my
-work in commercial products, both open-source and closed-source.
-
-This license restricts the total gross revenue you can earn using software
-products based on Lady Deirdre. Once your product exceeds this limitation, you
-can purchase the annual
-[Unrestricted Commercial License on my Patreon page](https://www.patreon.com/lakhin/shop/lady-deirdre-annual-unrestricted-license-240505?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=productshare_fan&utm_content=join_link),
-which removes these restrictions.
-
-### What happens when the Unrestricted Commercial License expires?
-
-You should renew the license to continue using new versions and upgrades of
-Lady Deirdre.
-
-If you do not renew the license, you can keep using the version you have at the
-time of expiration in your software product perpetually.
