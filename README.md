@@ -39,7 +39,7 @@
 [![User Guide](https://img.shields.io/badge/User_Guide-616161)](https://lady-deirdre.lakhin.com/)
 [![Examples](https://img.shields.io/badge/Examples-616161)](https://github.com/Eliah-Lakhin/lady-deirdre/tree/master/work/crates/examples)
 
-<img align="right" height="220" style="float: right; margin-left: 10px; width: 220px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.jpg" />
+<img align="right" height="220" style="float: right; margin-left: 10px; width: 220px" alt="Lady Deirdre Logo" src="https://raw.githubusercontent.com/Eliah-Lakhin/lady-deirdre/master/work/logo.png" />
 
 Lady Deirdre is a framework for incremental programming language compilers,
 interpreters, and source code analyzers.

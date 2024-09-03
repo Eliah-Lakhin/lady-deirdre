@@ -99,7 +99,7 @@ trait. It denotes classes of nodes, essentially serving as indices, and the
 function that partitions requested nodes between these classes.
 
 In
-the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis/semantics.rs#L411)
+the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/semantics.rs#L411)
 example, we define just one class for all `ChainNode::Key` nodes within the
 syntax tree.
 

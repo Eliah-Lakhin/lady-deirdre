@@ -55,7 +55,7 @@ that represents the current state of the parsing environment.
 Usually, inside this expression, you would call your parsing function passing
 the `session` variable as an argument.
 
-From the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/expr_parser/syntax.rs#L57) example:
+From the [Expr Parser](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/expr_parser/syntax.rs#L57) example:
 
 ```rust,noplayground
 

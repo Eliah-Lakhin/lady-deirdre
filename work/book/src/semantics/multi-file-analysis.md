@@ -43,7 +43,7 @@ classes declared in other files within the same Java package.
 To establish semantic relationships between these compilation units, you can
 define a special analyzer-wide feature object.
 
-From the [Shared Semantics](todo) example:
+From the [Shared Semantics](https://github.com/Eliah-Lakhin/lady-deirdre/tree/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/shared_semantics) example:
 
 ```rust,noplayground
 #[derive(Node)]

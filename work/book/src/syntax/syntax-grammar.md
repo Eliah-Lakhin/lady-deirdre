@@ -62,7 +62,7 @@ The opposite ascending node-to-parent relationships are established
 automatically if you declare a variant field with the `#[parent]` macro
 attribute.
 
-From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/syntax.rs):
+From the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs):
 
 ```rust,noplayground
 
@@ -141,7 +141,7 @@ this guide.
 In this chapter, I will intentionally omit some details, referring you to
 the [macro documentation](https://docs.rs/lady-deirdre/2.0.1/lady_deirdre/syntax/derive.Node.html)
 for a more verbose description of the available features, and to
-the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/syntax.rs)
+the [JSON example](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs)
 as an example of a node implementation that utilizes most of the macro's
 capabilities.
 
@@ -260,7 +260,7 @@ Examples:
    function.
 
    In particular, for this reason, in
-   the [JSON object and array rules](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/syntax.rs#L96),
+   the [JSON object and array rules](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs#L96),
    we capture start and end tokens even though they are meaningless in terms of
    syntax tree traversing.
 
@@ -304,7 +304,7 @@ Examples:
    with node captures, so you should prefer wrapping.
 
    For example, in
-   the [JSON object entry rule](https://github.com/Eliah-Lakhin/lady-deirdre/blob/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/json_grammar/syntax.rs#L83),
+   the [JSON object entry rule](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs#L83),
    we capture the entry's key as a node-wrapper (String node) rather than as a
    token for this reason.
 

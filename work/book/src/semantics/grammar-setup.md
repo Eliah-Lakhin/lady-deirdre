@@ -54,7 +54,7 @@ to extend this enum type with additional metadata:
    the `#[classifier]` macro attribute.
 
 From
-the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/tree/1f4ecdac2a1d8c73e6d94909fb0c7fcd04d31fc0/work/crates/examples/src/chain_analysis)
+the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/tree/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis)
 example:
 
 ```rust,noplayground
