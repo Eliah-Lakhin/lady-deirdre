@@ -165,6 +165,11 @@ impl ToTokens for FeatureInput {
                     &#core::analysis::NIL_ATTR_REF
                 }
 
+                #[inline(always)]
+                fn slot_ref(&self) -> &#core::analysis::SlotRef {
+                    &#core::analysis::NIL_SLOT_REF
+                }
+
                 fn feature(&self, key: #core::syntax::Key)
                     -> #core::analysis::AnalysisResult<&dyn #core::analysis::AbstractFeature>
                 {

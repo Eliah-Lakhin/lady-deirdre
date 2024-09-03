@@ -46,15 +46,24 @@ pub use lady_deirdre_derive::Feature;
 
 use crate::{
     analysis::{
-        database::{AbstractDatabase, Record},
+        database::{
+            AbstractDatabase,
+            AttrRecord,
+            AttrRecordData,
+            DocRecords,
+            SlotRecord,
+            SlotRecordData,
+        },
         AnalysisError,
         AnalysisResult,
         AttrRef,
         Computable,
         ScopeAttr,
+        SlotRef,
         TaskHandle,
         TriggerHandle,
         NIL_ATTR_REF,
+        NIL_SLOT_REF,
     },
     arena::{Entry, Id, Identifiable, Repo},
     sync::SyncBuildHasher,
@@ -89,6 +98,31 @@ pub trait Grammar: Node + AbstractFeature {
     /// }
     /// ```
     type Classifier: Classifier<Node = Self>;
+
+    /// A special semantic feature that describes the semantics of the entire
+    /// Analyzer and is instantiated during the Analyzer's creation.
+    /// This feature does not belong to any specific document and is shared
+    /// across the entire Analyzer.
+    ///
+    /// The common semantics can be accessed **outside** of the computation
+    /// context using the
+    /// [AbstractTask::common](crate::analysis::AbstractTask::common) method of
+    /// any task type, and **inside** of the
+    /// [computation context](Computable::compute) using the
+    /// [AttrContext::common](crate::analysis::AttrContext::common) method.
+    ///
+    /// When using the [Node](lady_deirdre_derive::Node) macro, this value is
+    /// set to [VoidFeature] by default, or could be overridden using
+    /// the `#[semantics(...)]` attribute:
+    ///
+    /// ```ignore
+    /// #[derive(Node)]
+    /// #[semantics(MyCommonSemantics)]
+    /// enum MyNode {
+    ///     // ...
+    /// }
+    /// ```
+    type CommonSemantics: Feature<Node = Self>;
 
     /// Initializes a new node semantics.
     ///
@@ -282,16 +316,16 @@ impl<N: Node> Classifier for VoidClassifier<N> {
 /// The root of the composition is a [Semantics] object owned by the syntax tree
 /// node. This object is an entry point to the syntax tree node's semantics.
 ///
-/// The [Attr](crate::analysis::Attr) object (attribute) is a final building
-/// block of the semantics composition that infers a particular fact about
-/// the compilation project semantics model related to the specified syntax
-/// tree node.
+/// The [Attr](crate::analysis::Attr) objects (attributes) and
+/// [Slots](crate::analysis::Slot) are final building blocks of the semantics
+/// composition that infers a particular fact about the compilation project
+/// semantics model related to the specified syntax tree node.
 ///
 /// Any other composition part is any arbitrary user-defined type that owns
 /// attributes and other composition objects. Usually, these are struct
 /// types with attributes and other similar struct types.
 ///
-/// These three kinds of composition objects implement the Feature trait, which
+/// These four kinds of composition objects implement the Feature trait, which
 /// provides abstract access to their content and functions to control
 /// their lifetime.
 ///
@@ -329,14 +363,17 @@ impl<N: Node> Classifier for VoidClassifier<N> {
 ///    the [Grammar::invalidate] function) to indicate that the scoped content
 ///    has been changed. In this case, it is up to the feature tree
 ///    implementation to decide which feature inner [Attr](crate::analysis::Attr)
-///    objects require invalidation. In particular,
-///    the [Feature](lady_deirdre_derive::Feature) derive macro propagates
-///    the invalidation event to the struct fields annotated with the `#[scoped]`
-///    macro attribute.
+///    or [Slot](crate::analysis::Slot) objects require invalidation.
+///    In particular, the [Feature](lady_deirdre_derive::Feature) derive macro
+///    propagates the invalidation event to the struct fields annotated with the
+///    `#[scoped]` macro attribute.
 ///
-/// Note that the feature creation, initialization, invalidation, and
-/// destruction are controlled by the Analyzer. The end-user code usually
-/// doesn’t need to call related functions manually.
+/// The feature creation, initialization, invalidation, and destruction are
+/// controlled by the Analyzer. The end-user code usually doesn't need to call
+/// related functions manually.
+///
+/// **NOTE**: This trait API is not stabilized yet. New trait members may be
+/// added in future minor versions of Lady Deirdre.
 pub trait Feature: AbstractFeature {
     /// A type of the [Grammar] to which this semantic feature belongs.
     type Node: Grammar;
@@ -380,15 +417,21 @@ pub trait Feature: AbstractFeature {
 }
 
 /// An object-safe part of the [Feature] API.
+///
+/// **NOTE**: This trait API is not stabilized yet. New trait members may be
+/// added in future minor versions of Lady Deirdre.
 pub trait AbstractFeature {
     /// Returns an [AttrRef] reference object of the attribute if this feature
     /// represents an [attribute](crate::analysis::Attr).
     ///
     /// Otherwise, the function returns [nil](AttrRef::nil).
-    ///
-    /// This function is particularly useful to determine if the Feature is
-    /// an attribute or a composite object.
     fn attr_ref(&self) -> &AttrRef;
+
+    /// Returns a [SlotRef] reference object of the slot if this feature
+    /// represents a [slot](crate::analysis::Slot).
+    ///
+    /// Otherwise, the function returns [nil](SlotRef::nil).
+    fn slot_ref(&self) -> &SlotRef;
 
     /// Returns a sub-feature of this feature by `key`.
     ///
@@ -463,7 +506,8 @@ pub struct Initializer<
 > {
     pub(super) id: Id,
     pub(super) database: Weak<dyn AbstractDatabase>,
-    pub(super) records: &'a mut Repo<Record<N, H, S>>,
+    pub(super) records: &'a mut DocRecords<N, H, S>,
+    pub(super) inserts: bool,
 }
 
 /// A marker-[feature](Feature) of the syntax tree nodes with empty
@@ -495,6 +539,11 @@ impl<N: Grammar> AbstractFeature for VoidFeature<N> {
     #[inline(always)]
     fn attr_ref(&self) -> &AttrRef {
         &NIL_ATTR_REF
+    }
+
+    #[inline(always)]
+    fn slot_ref(&self) -> &SlotRef {
+        &NIL_SLOT_REF
     }
 
     #[inline(always)]
@@ -544,9 +593,27 @@ impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Initializer<'a, N, H, S>
         &mut self,
         node_ref: NodeRef,
     ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        self.inserts = true;
+
         (
             self.database.clone(),
-            self.records.insert(Record::new::<C>(node_ref)),
+            self.records
+                .attrs
+                .insert(AttrRecord::new(AttrRecordData::new::<C>(node_ref))),
+        )
+    }
+
+    #[inline(always)]
+    pub(super) fn register_slot<T: Default + Send + Sync + 'static>(
+        &mut self,
+    ) -> (Weak<dyn AbstractDatabase>, Entry) {
+        self.inserts = true;
+
+        (
+            self.database.clone(),
+            self.records
+                .slots
+                .insert(SlotRecord::new(SlotRecordData::new::<T>())),
         )
     }
 }
@@ -576,7 +643,7 @@ pub struct Invalidator<
     S: SyncBuildHasher = RandomState,
 > {
     pub(super) id: Id,
-    pub(super) records: &'a mut Repo<Record<N, H, S>>,
+    pub(super) records: &'a mut Repo<AttrRecord<N, H, S>>,
 }
 
 impl<'a, N: Grammar, H: TaskHandle, S: SyncBuildHasher> Identifiable for Invalidator<'a, N, H, S> {
@@ -672,6 +739,15 @@ impl<F: Feature> AbstractFeature for Semantics<F> {
         };
 
         inner.attr_ref()
+    }
+
+    #[inline(always)]
+    fn slot_ref(&self) -> &SlotRef {
+        let Ok(inner) = self.get() else {
+            return &NIL_SLOT_REF;
+        };
+
+        inner.slot_ref()
     }
 
     #[inline(always)]

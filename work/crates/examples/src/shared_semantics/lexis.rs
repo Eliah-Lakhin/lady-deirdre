@@ -32,54 +32,35 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod analyzer;
-mod attribute;
-mod compute;
-mod database;
-mod entry;
-mod error;
-mod grammar;
-mod lock;
-mod manager;
-mod scope;
-mod slot;
-mod tasks;
+use lady_deirdre::lexis::Token;
 
-pub use crate::analysis::{
-    analyzer::{Analyzer, AnalyzerConfig},
-    attribute::{Attr, AttrRef, NIL_ATTR_REF},
-    compute::{AttrContext, AttrReadGuard, Computable, SharedComputable, SlotReadGuard},
-    database::Revision,
-    entry::{
-        DocumentReadGuard,
-        Event,
-        CUSTOM_EVENT_START_RANGE,
-        DOC_ADDED_EVENT,
-        DOC_ERRORS_EVENT,
-        DOC_REMOVED_EVENT,
-        DOC_UPDATED_EVENT,
-    },
-    error::{AnalysisError, AnalysisResult, AnalysisResultEx},
-    grammar::{
-        AbstractFeature,
-        Classifier,
-        Feature,
-        Grammar,
-        Initializer,
-        Invalidator,
-        Semantics,
-        VoidClassifier,
-        VoidFeature,
-    },
-    manager::{TaskHandle, TaskPriority, TriggerHandle},
-    scope::{Scope, ScopeAttr},
-    slot::{Slot, SlotRef, NIL_SLOT_REF},
-    tasks::{
-        AbstractTask,
-        AnalysisTask,
-        ExclusiveTask,
-        MutationAccess,
-        MutationTask,
-        SemanticAccess,
-    },
-};
+#[derive(Token, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SharedSemanticsToken {
+    EOI = 0,
+
+    Mismatch = 1,
+
+    #[rule(['a'..'z'] ['a'..'z', '0'..'9', '_']*)]
+    #[describe("ident")]
+    Ident,
+
+    #[rule(['0'..'9']+)]
+    #[describe("number")]
+    Num,
+
+    #[rule("=")]
+    #[describe("=")]
+    Assign,
+
+    #[rule("::")]
+    #[describe("::")]
+    DoubleColon,
+
+    #[rule(";")]
+    #[describe(";")]
+    Semicolon,
+
+    #[rule([' ', '\t', '\n', '\x0c', '\r']+)]
+    Whitespace,
+}

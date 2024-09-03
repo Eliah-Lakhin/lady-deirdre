@@ -510,6 +510,20 @@ pub trait AbstractTask<N: Grammar, H: TaskHandle, S: SyncBuildHasher>: TaskSeale
 
         Ok(class_to_nodes.nodes.clone())
     }
+
+    /// Provides access to the Analyzer's
+    /// [common semantics](Grammar::CommonSemantics), a special semantic
+    /// feature that is instantiated during the Analyzer's creation. It does
+    /// not belong to any specific document and is common across the entire
+    /// Analyzer.
+    ///
+    /// If the Analyzer's grammar does not specify common semantics, this
+    /// function returns a reference to the
+    /// [VoidFeature](crate::analysis::VoidFeature).
+    #[inline(always)]
+    fn common(&self) -> &N::CommonSemantics {
+        &self.analyzer().common
+    }
 }
 
 pub trait TaskSealed<N: Grammar, H: TaskHandle, S: SyncBuildHasher> {

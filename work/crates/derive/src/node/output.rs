@@ -166,6 +166,7 @@ impl NodeInput {
         let capacity = self.variants.len();
 
         let mut attr_ref = Vec::with_capacity(capacity);
+        let mut slot_ref = Vec::with_capacity(capacity);
         let mut feature_getter = Vec::with_capacity(capacity);
         let mut feature_keys = Vec::with_capacity(capacity);
 
@@ -175,6 +176,7 @@ impl NodeInput {
             }
 
             attr_ref.push(variant.inheritance.compile_attr_ref());
+            slot_ref.push(variant.inheritance.compile_slot_ref());
             feature_getter.push(variant.inheritance.compile_feature_getter());
             feature_keys.push(variant.inheritance.compile_feature_keys());
         }
@@ -189,6 +191,15 @@ impl NodeInput {
 
                         #[allow(unreachable_patterns)]
                         _ => &#core::analysis::NIL_ATTR_REF,
+                    }
+                }
+
+                fn slot_ref(&self) -> &#core::analysis::SlotRef {
+                    match self {
+                        #( #slot_ref )*
+
+                        #[allow(unreachable_patterns)]
+                        _ => &#core::analysis::NIL_SLOT_REF,
                     }
                 }
 
@@ -228,6 +239,11 @@ impl NodeInput {
             None => quote_spanned!(span=> #core::analysis::VoidClassifier::<Self>),
         };
 
+        let common = match &self.common {
+            Some(ty) => ty.to_token_stream(),
+            None => quote_spanned!(span=> #core::analysis::VoidFeature::<Self>),
+        };
+
         let (impl_generics, type_generics, where_clause) = self.generics.ty.split_for_impl();
 
         let capacity = self.variants.len();
@@ -263,6 +279,8 @@ impl NodeInput {
             #where_clause
             {
                 type Classifier = #classifier;
+
+                type CommonSemantics = #common;
 
                 #[allow(unused_variables)]
                 fn init<

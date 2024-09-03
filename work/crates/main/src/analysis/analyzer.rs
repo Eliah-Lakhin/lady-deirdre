@@ -32,18 +32,25 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{collections::HashMap, hash::RandomState, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    hash::RandomState,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use crate::{
     analysis::{
-        database::Database,
+        database::{Database, DocRecords},
         entry::DocEntry,
         manager::{TaskKind, TaskManager},
         AnalysisResult,
         AnalysisTask,
         Event,
         ExclusiveTask,
+        Feature,
         Grammar,
+        Initializer,
         MutationTask,
         Revision,
         TaskHandle,
@@ -52,6 +59,7 @@ use crate::{
     },
     arena::Id,
     sync::{SyncBuildHasher, Table},
+    syntax::NodeRef,
 };
 
 /// An initial configuration of the [Analyzer].
@@ -639,6 +647,7 @@ impl AnalyzerConfig {
 /// if the specified access cannot be granted instantly.
 pub struct Analyzer<N: Grammar, H: TaskHandle = TriggerHandle, S: SyncBuildHasher = RandomState> {
     pub(super) docs: Table<Id, DocEntry<N, S>, S>,
+    pub(super) common: N::CommonSemantics,
     pub(super) events: Table<Id, HashMap<Event, Revision>, S>,
     pub(super) db: Arc<Database<N, H, S>>,
     pub(super) tasks: TaskManager<H, S>,
@@ -656,17 +665,46 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
     ///
     /// Initially, the Analyzer does not hold any document.
     pub fn new(config: AnalyzerConfig) -> Self {
+        let docs = match config.single_document {
+            true => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+            false => Table::new(),
+        };
+
+        let events = match config.single_document {
+            true => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+            false => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
+        };
+
+        let db = Arc::new(Database::new(&config));
+
+        let mut common = <N::CommonSemantics as Feature>::new(NodeRef::nil());
+
+        {
+            let mut records = DocRecords::new();
+
+            let mut initializer: Initializer<'_, N, H, S> = Initializer {
+                id: Id::nil(),
+                database: Arc::downgrade(&db) as Weak<_>,
+                records: &mut records,
+                inserts: false,
+            };
+
+            common.init(&mut initializer);
+
+            if initializer.inserts {
+                let _ = db.commit_revision();
+                db.records.insert(Id::nil(), records);
+            }
+        }
+
+        let tasks = TaskManager::new();
+
         Self {
-            docs: match config.single_document {
-                true => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
-                false => Table::new(),
-            },
-            events: match config.single_document {
-                true => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
-                false => Table::with_capacity_and_hasher_and_shards(1, S::default(), 1),
-            },
-            db: Arc::new(Database::new(&config)),
-            tasks: TaskManager::new(),
+            docs,
+            common,
+            events,
+            db,
+            tasks,
         }
     }
 

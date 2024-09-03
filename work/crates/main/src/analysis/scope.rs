@@ -41,7 +41,7 @@ use std::{
 
 use crate::{
     analysis::{
-        database::{CacheDeps, Memo, Record, RecordCache},
+        database::{AttrMemo, AttrRecord, AttrRecordCache, CacheDeps},
         AnalysisError,
         AnalysisResult,
         Attr,
@@ -168,7 +168,7 @@ impl<N: Grammar> ScopeAttr<N> {
         attr_ref: &AttrRef,
         handle: &H,
         doc: &Document<N>,
-        records: &Repo<Record<N, H, S>>,
+        records: &Repo<AttrRecord<N, H, S>>,
         revision: Revision,
     ) -> AnalysisResult<NodeRef> {
         let Some(record) = records.get(&attr_ref.entry) else {
@@ -206,13 +206,13 @@ impl<N: Grammar> ScopeAttr<N> {
                     let _ = deps.attrs.insert(dep);
                 }
 
-                record_data.cache = Some(RecordCache {
+                record_data.cache = Some(AttrRecordCache {
                     dirty: false,
                     updated_at: revision,
                     memo: Box::new(Scope {
                         scope_ref,
                         _grammar: PhantomData::<N>,
-                    }) as Box<dyn Memo>,
+                    }) as Box<dyn AttrMemo>,
                     deps: Shared::new(deps),
                 });
 
@@ -324,7 +324,7 @@ impl<N: Grammar> ScopeAttr<N> {
         node_ref: &NodeRef,
         handle: &H,
         doc: &Document<N>,
-        records: &Repo<Record<N, H, S>>,
+        records: &Repo<AttrRecord<N, H, S>>,
         revision: Revision,
     ) -> AnalysisResult<(Option<AttrRef>, NodeRef)> {
         let Some(node) = node_ref.deref(doc) else {

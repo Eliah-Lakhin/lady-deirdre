@@ -32,54 +32,84 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-mod analyzer;
-mod attribute;
-mod compute;
-mod database;
-mod entry;
-mod error;
-mod grammar;
-mod lock;
-mod manager;
-mod scope;
-mod slot;
-mod tasks;
-
-pub use crate::analysis::{
-    analyzer::{Analyzer, AnalyzerConfig},
-    attribute::{Attr, AttrRef, NIL_ATTR_REF},
-    compute::{AttrContext, AttrReadGuard, Computable, SharedComputable, SlotReadGuard},
-    database::Revision,
-    entry::{
-        DocumentReadGuard,
-        Event,
-        CUSTOM_EVENT_START_RANGE,
-        DOC_ADDED_EVENT,
-        DOC_ERRORS_EVENT,
-        DOC_REMOVED_EVENT,
-        DOC_UPDATED_EVENT,
-    },
-    error::{AnalysisError, AnalysisResult, AnalysisResultEx},
-    grammar::{
-        AbstractFeature,
-        Classifier,
-        Feature,
-        Grammar,
-        Initializer,
-        Invalidator,
-        Semantics,
-        VoidClassifier,
-        VoidFeature,
-    },
-    manager::{TaskHandle, TaskPriority, TriggerHandle},
-    scope::{Scope, ScopeAttr},
-    slot::{Slot, SlotRef, NIL_SLOT_REF},
-    tasks::{
-        AbstractTask,
-        AnalysisTask,
-        ExclusiveTask,
-        MutationAccess,
-        MutationTask,
-        SemanticAccess,
-    },
+use lady_deirdre::{
+    analysis::{Semantics, VoidFeature},
+    lexis::TokenRef,
+    syntax::{Node, NodeRef},
 };
+
+use crate::shared_semantics::{
+    lexis::SharedSemanticsToken,
+    semantics::{CommonSemantics, KeySemantics, ModuleSemantics},
+};
+
+#[derive(Node)]
+#[token(SharedSemanticsToken)]
+#[trivia($Whitespace)]
+#[semantics(CommonSemantics)]
+pub enum SharedSemanticsNode {
+    #[root]
+    #[rule(defs: Def*)]
+    Root {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        defs: Vec<NodeRef>,
+        #[semantics]
+        semantics: Semantics<ModuleSemantics>,
+    },
+
+    #[rule(key: Key $Assign value: (Ref | Num) $Semicolon)]
+    Def {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        key: NodeRef,
+        #[child]
+        value: NodeRef,
+        #[semantics]
+        semantics: Semantics<VoidFeature<SharedSemanticsNode>>,
+    },
+
+    #[rule(token: $Ident)]
+    Key {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        token: TokenRef,
+        #[semantics]
+        semantics: Semantics<KeySemantics>,
+    },
+
+    #[rule(module: $Ident $DoubleColon ident: $Ident)]
+    Ref {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        module: TokenRef,
+        #[child]
+        ident: TokenRef,
+        #[semantics]
+        semantics: Semantics<VoidFeature<SharedSemanticsNode>>,
+    },
+
+    #[rule(token: $Num)]
+    Num {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        token: TokenRef,
+        #[semantics]
+        semantics: Semantics<VoidFeature<SharedSemanticsNode>>,
+    },
+}

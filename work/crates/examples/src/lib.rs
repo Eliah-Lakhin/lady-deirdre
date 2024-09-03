@@ -40,3 +40,4 @@ pub mod expr_parser;
 pub mod json_formatter;
 pub mod json_grammar;
 pub mod json_highlight;
+pub mod shared_semantics;

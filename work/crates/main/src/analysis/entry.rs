@@ -41,6 +41,7 @@ use std::{
 
 use crate::{
     analysis::{
+        database::DocRecords,
         AnalysisError,
         AnalysisResult,
         Analyzer,
@@ -53,7 +54,7 @@ use crate::{
         ScopeAttr,
         TaskHandle,
     },
-    arena::{Entry, Id, Identifiable, Repo},
+    arena::{Entry, Id, Identifiable},
     lexis::ToSpan,
     report::ld_unreachable,
     sync::{Shared, SyncBuildHasher, TableReadGuard},
@@ -145,7 +146,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
         let id = doc.id();
 
         let node_refs = doc.node_refs().collect::<Vec<_>>();
-        let mut records = Repo::with_capacity(node_refs.len());
+        let mut records = DocRecords::with_capacity(node_refs.len());
         let mut classes_to_nodes =
             HashMap::<<N::Classifier as Classifier>::Class, ClassToNodes<S>, S>::default();
         let mut nodes_to_classes = HashMap::<Entry, NodeToClasses<N, S>, S>::default();
@@ -157,6 +158,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
                 id,
                 database: Arc::downgrade(&self.db) as Weak<_>,
                 records: &mut records,
+                inserts: false,
             };
 
             for node_ref in &node_refs {
@@ -289,6 +291,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
             id,
             database: Arc::downgrade(&self.db) as Weak<_>,
             records: records.deref_mut(),
+            inserts: false,
         };
 
         for node_ref in &report.node_refs {
@@ -329,7 +332,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
 
         let mut invalidator = Invalidator {
             id,
-            records: records.deref_mut(),
+            records: &mut records.attrs,
         };
 
         for node_ref in &report.node_refs {
@@ -413,13 +416,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
 
             // Safety: `scope_attr_ref` belongs to `scope_attr`.
             let scope_ref = unsafe {
-                ScopeAttr::snapshot_manually(
-                    scope_attr_ref,
-                    handle,
-                    doc,
-                    records.deref(),
-                    revision,
-                )?
+                ScopeAttr::snapshot_manually(scope_attr_ref, handle, doc, &records.attrs, revision)?
             };
 
             if !scope_ref.is_nil() {
@@ -430,7 +427,7 @@ impl<N: Grammar, H: TaskHandle, S: SyncBuildHasher> Analyzer<N, H, S> {
         if !scope_accumulator.is_empty() {
             let mut invalidator = Invalidator {
                 id,
-                records: records.deref_mut(),
+                records: &mut records.attrs,
             };
 
             for scope_ref in scope_accumulator {

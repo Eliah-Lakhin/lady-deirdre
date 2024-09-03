@@ -58,7 +58,9 @@ use crate::{
         MutationAccess,
         Revision,
         SemanticAccess,
+        SlotRef,
         TaskHandle,
+        NIL_SLOT_REF,
     },
     arena::{Entry, Id, Identifiable},
     sync::SyncBuildHasher,
@@ -102,6 +104,9 @@ pub static NIL_ATTR_REF: AttrRef = AttrRef::nil();
 ///
 /// The [AttrRef] can be obtained using the [AsRef] and the [Feature]
 /// implementations of the Attr.
+///
+/// See also [Slot](crate::analysis::Slot), a specialized version of an
+/// attribute that enables manual control over the attribute's value.
 #[repr(transparent)]
 pub struct Attr<C: Computable> {
     inner: AttrInner,
@@ -193,6 +198,11 @@ impl<C: Computable> AbstractFeature for Attr<C> {
     }
 
     #[inline(always)]
+    fn slot_ref(&self) -> &SlotRef {
+        &NIL_SLOT_REF
+    }
+
+    #[inline(always)]
     fn feature(&self, _key: Key) -> AnalysisResult<&dyn AbstractFeature> {
         Err(AnalysisError::MissingFeature)
     }
@@ -261,7 +271,7 @@ impl<C: Computable> Attr<C> {
     ///
     /// Returns a pair of two elements:
     ///  1. The [revision](Revision) under which the attribute's value has been
-    ///    computed.
+    ///     computed.
     ///  2. A copy of the attribute's value.
     ///
     /// This function is supposed to be called **outside** of
@@ -379,6 +389,9 @@ impl<C: Computable> Attr<C> {
 pub struct AttrRef {
     /// An identifier of the document managed by the Analyzer to which
     /// the attribute belongs.
+    ///
+    /// If the attribute belongs to the
+    /// [common semantics](Grammar::CommonSemantics), this value is [Id::nil].
     pub id: Id,
 
     /// A versioned index of the attribute instance within the Analyzer's inner
@@ -389,12 +402,15 @@ pub struct AttrRef {
 impl Debug for AttrRef {
     #[inline]
     fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        match self.is_nil() {
-            false => formatter.write_fmt(format_args!(
-                "AttrRef(id: {:?}, entry: {:?})",
+        match (self.id.is_nil(), self.entry.is_nil()) {
+            (false, _) => formatter.write_fmt(format_args!(
+                "Attr(id: {:?}, entry: {:?})",
                 self.id, self.entry,
             )),
-            true => formatter.write_str("AttrRef(Nil)"),
+
+            (true, false) => formatter.write_fmt(format_args!("Attr(entry: {:?})", self.entry)),
+
+            (true, true) => formatter.write_str("Attr(Nil)"),
         }
     }
 }
@@ -431,7 +447,7 @@ impl AttrRef {
     /// attribute within any Analyzer.
     #[inline(always)]
     pub const fn is_nil(&self) -> bool {
-        self.id.is_nil() || self.entry.is_nil()
+        self.id.is_nil() && self.entry.is_nil()
     }
 
     /// Requests a copy of the attribute's value.
@@ -524,7 +540,7 @@ impl AttrRef {
             }
         };
 
-        let Some(record) = records.get(&self.entry) else {
+        let Some(record) = records.attrs.get(&self.entry) else {
             return;
         };
 
@@ -549,7 +565,7 @@ impl AttrRef {
             return false;
         };
 
-        records.contains(&self.entry)
+        records.attrs.contains(&self.entry)
     }
 }
 
