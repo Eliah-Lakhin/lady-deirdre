@@ -40,5 +40,15 @@ pub(crate) use crate::arena::id::SubId;
 pub use crate::arena::{
     entry::{Entry, EntryIndex, EntryVersion, NIL_ENTRY},
     id::{Id, Identifiable},
-    repo::{Repo, RepoEntriesIntoIter, RepoEntriesIter, RepoIntoIter, RepoIter, RepoIterMut},
+    repo::{
+        Repo,
+        RepoEntriesIntoIter,
+        RepoEntriesIter,
+        RepoEnumIntoIter,
+        RepoEnumIter,
+        RepoEnumIterMut,
+        RepoIntoIter,
+        RepoIter,
+        RepoIterMut,
+    },
 };
