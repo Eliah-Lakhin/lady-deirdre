@@ -129,6 +129,31 @@ pub type RepoEntriesIntoIter<T> =
 /// Crated by the [into_iter](IntoIter::into_iter) function of the Repo.
 pub type RepoIntoIter<T> = FilterMap<IntoIter<RepoEntry<T>>, fn(RepoEntry<T>) -> Option<T>>;
 
+/// A type of the iterator over the indexed keys and immutable references to
+/// the values of occupied entries in the [Repo].
+///
+/// Created by the [Repo::enumerate] function.
+pub type RepoEnumIter<'a, T> = FilterMap<
+    Enumerate<Iter<'a, RepoEntry<T>>>,
+    fn((usize, &'a RepoEntry<T>)) -> Option<(Entry, &'a T)>,
+>;
+
+/// A type of the iterator over the indexed keys and mutable references to
+/// the values of occupied entries in the [Repo].
+///
+/// Created by the [Repo::enumerate_mut] function.
+pub type RepoEnumIterMut<'a, T> = FilterMap<
+    Enumerate<IterMut<'a, RepoEntry<T>>>,
+    fn((usize, &'a mut RepoEntry<T>)) -> Option<(Entry, &'a mut T)>,
+>;
+
+/// A type of the owning iterator over the indexed keys and values of occupied
+/// entries in the [Repo].
+///
+/// Created by the [Repo::into_enumeration] function.
+pub type RepoEnumIntoIter<T> =
+    FilterMap<Enumerate<IntoIter<RepoEntry<T>>>, fn((usize, RepoEntry<T>)) -> Option<(Entry, T)>>;
+
 impl<'a, T> IntoIterator for &'a Repo<T> {
     type Item = &'a T;
     type IntoIter = RepoIter<'a, T>;
@@ -418,6 +443,8 @@ impl<T> Repo<T> {
 
     /// Returns an iterator over immutable references of the values of
     /// all Occupied entries within the repository.
+    ///
+    /// This function does not consume the repository instance.
     #[inline(always)]
     pub fn iter(&self) -> RepoIter<T> {
         self.entries.iter().filter_map(|entry| match entry {
@@ -428,6 +455,8 @@ impl<T> Repo<T> {
 
     /// Returns an iterator over mutable references of the values of
     /// all Occupied entries within the repository.
+    ///
+    /// This function does not consume the repository instance.
     #[inline(always)]
     pub fn iter_mut(&mut self) -> RepoIterMut<T> {
         self.entries.iter_mut().filter_map(|entry| match entry {
@@ -457,7 +486,7 @@ impl<T> Repo<T> {
     /// Returns an iterator that yields the [versioned indices](Entry) of all
     /// Occupied entries within the repository.
     ///
-    /// This function consume the repository instance.
+    /// This function consumes the repository instance.
     #[inline(always)]
     pub fn into_entries(self) -> RepoEntriesIntoIter<T> {
         self.entries
@@ -465,6 +494,72 @@ impl<T> Repo<T> {
             .enumerate()
             .filter_map(|(index, entry)| match entry {
                 RepoEntry::Occupied { version, .. } => Some(Entry { index, version }),
+                _ => None,
+            })
+    }
+
+    /// Returns an iterator over all occupied entries in the repository,
+    /// yielding pairs of:
+    ///
+    /// 1. The [versioned index](Entry) of the entry.
+    /// 2. An immutable reference to the value of the entry.
+    ///
+    /// This function does not consume the repository instance.
+    #[inline(always)]
+    pub fn enumerate(&self) -> RepoEnumIter<T> {
+        self.entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| match entry {
+                RepoEntry::Occupied { data, version } => Some((
+                    Entry {
+                        index,
+                        version: *version,
+                    },
+                    data,
+                )),
+                _ => None,
+            })
+    }
+
+    /// Returns an iterator over all occupied entries in the repository,
+    /// yielding pairs of:
+    ///
+    /// 1. The [versioned index](Entry) of the entry.
+    /// 2. A mutable reference to the value of the entry.
+    ///
+    /// This function does not consume the repository instance.
+    #[inline(always)]
+    pub fn enumerate_mut(&mut self) -> RepoEnumIterMut<T> {
+        self.entries
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(index, entry)| match entry {
+                RepoEntry::Occupied { data, version } => Some((
+                    Entry {
+                        index,
+                        version: *version,
+                    },
+                    data,
+                )),
+                _ => None,
+            })
+    }
+
+    /// Returns an iterator over all occupied entries in the repository,
+    /// yielding pairs of:
+    ///
+    /// 1. The [versioned index](Entry) of the entry.
+    /// 2. An owned value of the entry.
+    ///
+    /// This function consumes the repository instance.
+    #[inline(always)]
+    pub fn into_enumeration(self) -> RepoEnumIntoIter<T> {
+        self.entries
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, entry)| match entry {
+                RepoEntry::Occupied { data, version } => Some((Entry { index, version }, data)),
                 _ => None,
             })
     }
