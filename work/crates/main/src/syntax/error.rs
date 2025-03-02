@@ -451,7 +451,7 @@ impl SyntaxError {
     /// The `unit` parameter provides access to the compilation unit of where
     /// the error occurred.
     #[inline(always)]
-    pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Debug + Display + '_ {
+    pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Debug + Display + 'a {
         struct DisplaySyntaxError<'a, U: CompilationUnit> {
             error: &'a SyntaxError,
             unit: &'a U,
