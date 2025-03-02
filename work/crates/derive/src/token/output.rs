@@ -60,6 +60,8 @@ use crate::{
 pub(super) struct Output<'a> {
     ident: &'a Ident,
     input: &'a TokenInput,
+    alphabet_ascii: Set<u8>,
+    alphabet_unicode: Set<char>,
     buffering: bool,
     pending: BTreeSet<State>,
     handled: Set<State>,
@@ -72,11 +74,23 @@ pub(super) struct Output<'a> {
 }
 
 impl<'a> Output<'a> {
-    pub(super) fn compile(input: &'a TokenInput, buffer: bool) -> Vec<TokenStream> {
+    pub(super) fn compile(input: &'a TokenInput, buffering: bool) -> Vec<TokenStream> {
+        let mut alphabet_ascii = Set::empty();
+        let mut alphabet_unicode = Set::empty();
+
+        for ch in input.alphabet.iter().copied() {
+            match ch.is_ascii() {
+                true => alphabet_ascii.insert(ch as u8),
+                false => alphabet_unicode.insert(ch),
+            };
+        }
+
         let mut output = Output {
             ident: &input.ident,
             input,
-            buffering: buffer,
+            alphabet_ascii,
+            alphabet_unicode,
+            buffering,
             pending: BTreeSet::new(),
             handled: Set::empty(),
             transitions: Vec::with_capacity(input.automata.transitions().len()),
@@ -123,24 +137,14 @@ impl<'a> Output<'a> {
             };
         }
 
-        let base = take(&mut self.ascii)
-            .into_iter()
-            .map(|(to, set)| {
-                let pattern = match self.input.dump {
-                    Dump::Output(..) => {
-                        Self::pattern(set.into_iter().map(|byte| byte as char).collect())
-                    }
+        if self.other.is_some() && self.properties.is_some() {
+            system_panic!("Properties and placeholder conflict.");
+        }
 
-                    _ => Self::pattern(set),
-                };
-
-                let handle = self.handle(to, false, false);
-
-                quote!(#pattern => #handle)
-            })
-            .collect::<Vec<_>>();
-
-        let fallback = self.fallback();
+        let (base, fallback) = match self.other {
+            None => self.gen_non_exhaustive(),
+            Some(other) => self.gen_exhaustive(other),
+        };
 
         let from = self.from;
 
@@ -173,71 +177,167 @@ impl<'a> Output<'a> {
         true
     }
 
-    fn fallback(&mut self) -> Statements {
+    fn gen_non_exhaustive(&mut self) -> (Vec<TokenStream>, Statements) {
         let core = self.input.ident.span().face_core();
 
-        let mut statements = Statements::default();
+        let mut base = Vec::new();
 
-        if !self.requires_char() {
-            match self.other {
-                None => statements.push(quote!(break)),
+        for (to, set) in take(&mut self.ascii) {
+            let pattern = match self.input.dump {
+                Dump::Output(..) => Self::pattern(set.iter().map(|byte| *byte as char)),
 
-                Some(to) => {
-                    statements.push(quote!(unsafe {
-                        #core::lexis::LexisSession::consume(session)
-                    }));
-                    statements.append(self.handle(to, true, false));
+                _ => Self::pattern(set.iter().copied()),
+            };
+
+            let handle = self.handle(to, false, false);
+
+            base.push(quote!(#pattern => #handle));
+        }
+
+        let mut fallback = Statements::default();
+
+        match self.requires_char(false) {
+            false => fallback.push(quote!(break)),
+
+            true => {
+                fallback.push(quote!(let ch = unsafe {
+                    #core::lexis::LexisSession::read(session)
+                }));
+
+                if !self.unicode.is_empty() {
+                    let unicode_cases = take(&mut self.unicode)
+                        .into_iter()
+                        .map(|(to, set)| {
+                            let pattern = Self::pattern(set.into_iter());
+                            let handle = self.handle(to, true, true);
+
+                            quote!(#pattern => #handle)
+                        })
+                        .collect::<Vec<_>>();
+
+                    fallback.push_branching(quote!(
+                        match ch {
+                            #(#unicode_cases)*
+                            _ => (),
+                        }
+                    ))
                 }
-            }
 
-            return statements;
-        }
+                if let Some((properties, to)) = take(&mut self.properties) {
+                    let matcher = Self::properties_matcher(Span::call_site(), &properties);
+                    let mut handle = self.handle(to, true, true);
+                    handle.surround = true;
 
-        statements.push(quote!(let ch = unsafe {
-            #core::lexis::LexisSession::read(session)
-        }));
-
-        let unicode_cases = take(&mut self.unicode)
-            .into_iter()
-            .map(|(to, set)| {
-                let pattern = Self::pattern(set);
-                let handle = self.handle(to, true, true);
-
-                quote!(#pattern => #handle)
-            })
-            .collect::<Vec<_>>();
-
-        if !unicode_cases.is_empty() {
-            statements.push_branching(quote!(
-                match ch {
-                    #(
-                        #unicode_cases
-                    )*
-                    _ => (),
+                    fallback.push_branching(quote!(if #matcher #handle));
                 }
-            ))
-        }
 
-        if let Some((properties, to)) = self.properties {
-            let matcher = Self::properties_matcher(Span::call_site(), properties);
-            let mut handle = self.handle(to, true, true);
-            handle.surround = true;
-
-            statements.push_branching(quote!(if #matcher #handle));
-        }
-
-        match self.other {
-            None => statements.push(quote!(break)),
-            Some(to) => {
-                let handle = self.handle(to, true, false);
-                statements.append(handle);
+                fallback.push(quote!(break));
             }
         }
 
-        statements
+        (base, fallback)
     }
 
-    fn requires_char(&self) -> bool {
+    fn gen_exhaustive(&mut self, other: State) -> (Vec<TokenStream>, Statements) {
+        let core = self.input.ident.span().face_core();
+
+        let mut base = Vec::new();
+        let mut remaining = self.alphabet_ascii.clone();
+
+        for (to, set) in take(&mut self.ascii) {
+            let pattern = match self.input.dump {
+                Dump::Output(..) => Self::pattern(set.iter().map(|byte| *byte as char)),
+
+                _ => Self::pattern(set.iter().copied()),
+            };
+
+            let handle = self.handle(to, false, false);
+
+            base.push(quote!(#pattern => #handle));
+
+            for byte in set {
+                if !remaining.remove(&byte) {
+                    system_panic!("Malformed alphabet.")
+                }
+            }
+        }
+
+        if !remaining.is_empty() {
+            let pattern = match self.input.dump {
+                Dump::Output(..) => Self::pattern(remaining.into_iter().map(|byte| byte as char)),
+
+                _ => Self::pattern(remaining.into_iter()),
+            };
+
+            base.push(quote!(#pattern => break,));
+        }
+
+        let mut fallback = Statements::default();
+
+        match self.requires_char(true) {
+            false => {
+                fallback.push(quote!(unsafe {
+                    #core::lexis::LexisSession::consume(session)
+                }));
+                fallback.append(self.handle(other, false, false));
+            }
+
+            true => {
+                fallback.push(quote!(let ch = unsafe {
+                    #core::lexis::LexisSession::read(session)
+                }));
+
+                let mut remaining = self.alphabet_unicode.clone();
+
+                let unicode_cases = take(&mut self.unicode)
+                    .into_iter()
+                    .map(|(to, set)| {
+                        let pattern = Self::pattern(set.iter().copied());
+                        let handle = self.handle(to, true, true);
+
+                        for ch in set {
+                            if !remaining.remove(&ch) {
+                                system_panic!("Malformed alphabet.")
+                            }
+                        }
+
+                        quote!(#pattern => #handle)
+                    })
+                    .collect::<Vec<_>>();
+
+                match remaining.is_empty() {
+                    true => {
+                        if !unicode_cases.is_empty() {
+                            fallback.push_branching(quote!(
+                                match ch {
+                                    #(#unicode_cases)*
+                                    _ => (),
+                                }
+                            ));
+                        }
+                    }
+
+                    false => {
+                        let pattern = Self::pattern(remaining.into_iter());
+
+                        fallback.push_branching(quote!(
+                            match ch {
+                                #(#unicode_cases)*
+                                #pattern => break,
+                                _ => (),
+                            }
+                        ));
+                    }
+                }
+
+                fallback.append(self.handle(other, true, false));
+            }
+        }
+
+        (base, fallback)
+    }
+
+    fn requires_char(&self, exhaustive: bool) -> bool {
         if self.buffering {
             return true;
         }
@@ -247,6 +347,10 @@ impl<'a> Output<'a> {
         }
 
         if self.properties.is_some() {
+            return true;
+        }
+
+        if exhaustive && !self.alphabet_unicode.is_empty() {
             return true;
         }
 
@@ -394,7 +498,7 @@ impl<'a> Output<'a> {
         self.other = None;
     }
 
-    fn pattern<T: Copy + Ord + Continuous>(set: Set<T>) -> TokenStream {
+    fn pattern<T: Copy + Ord + Continuous>(set: impl Iterator<Item = T>) -> TokenStream {
         enum Group<T: Continuous> {
             Single(T),
             Range(RangeInclusive<T>),
@@ -415,7 +519,7 @@ impl<'a> Output<'a> {
             }
         }
 
-        let mut vector = set.into_iter().collect::<Vec<_>>();
+        let mut vector = set.collect::<Vec<_>>();
         vector.sort();
 
         let groups = vector.iter().fold(None, |acc, next| match acc {
@@ -453,7 +557,7 @@ impl<'a> Output<'a> {
         quote!(#( #groups )|*)
     }
 
-    fn properties_matcher(span: Span, properties: CharProperties) -> TokenStream {
+    fn properties_matcher(span: Span, properties: &CharProperties) -> TokenStream {
         let core = span.face_core();
 
         let mut setters = Vec::new();
@@ -608,7 +712,7 @@ impl TokenInput {
         let mismatch = &self.mismatch;
         let start = self.automata.start();
 
-        let buffer = match self
+        let buffering = match self
             .variants
             .iter()
             .any(|variant| variant.constructor.is_some())
@@ -624,7 +728,7 @@ impl TokenInput {
             }
         };
 
-        let transitions = Output::compile(self, buffer.is_some());
+        let transitions = Output::compile(self, buffering.is_some());
 
         quote_spanned!(span=>
             fn scan(session: &mut impl #core::lexis::LexisSession) -> Self {
@@ -634,7 +738,7 @@ impl TokenInput {
                 #[allow(unused_mut)]
                 let mut token = Self::#mismatch;
 
-                #buffer
+                #buffering
 
                 loop {
                     let byte = #core::lexis::LexisSession::advance(session);
