@@ -508,6 +508,12 @@ impl TryFrom<DeriveInput> for NodeInput {
             rule.leftmost = Some(leftmost);
         }
 
+        if let Some(rule) = &trivia {
+            let automata = expect_some!(rule.automata.as_ref(), "Missing automata",);
+
+            automata.check_conflicts(None, &variants)?;
+        }
+
         for (_, variant) in &variants {
             let rule = match &variant.rule {
                 None => continue,
@@ -519,7 +525,13 @@ impl TryFrom<DeriveInput> for NodeInput {
             let trivia = match &variant.trivia {
                 VariantTrivia::Inherited => trivia.as_ref(),
                 VariantTrivia::Empty(..) => None,
-                VariantTrivia::Rule(rule) => Some(rule),
+                VariantTrivia::Rule(rule) => {
+                    let automata = expect_some!(rule.automata.as_ref(), "Missing automata",);
+
+                    automata.check_conflicts(None, &variants)?;
+
+                    Some(rule)
+                }
             };
 
             automata.check_conflicts(trivia, &variants)?;
