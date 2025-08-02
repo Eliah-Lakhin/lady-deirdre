@@ -35,80 +35,80 @@
 # Scanning Process
 
 The [Token](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.Token.html)
-trait discussed in the previous chapter defines the scan algorithm of individual
-tokens, and specific for the language grammar.
+trait discussed in the previous chapter defines the scanning algorithm for
+individual tokens, specific to the language grammar.
 
-Actual scanning of the source code, and splitting it into tokens happening via
-another trait [LexisSession](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.LexisSession.html).
-This trait is independent from particular Token implementations, and it's purpose is
-running particular scanning algorithm by feeding it with the source code text
-characters as an input, and getting back the bounds of the tokens from the algorithm
-implementation.
+Actual scanning of source code and splitting it into tokens happens via another
+trait, [LexisSession](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.LexisSession.html).
+This trait is independent of particular Token implementations; its purpose is
+to run a scanning algorithm by feeding it the source code text characters as
+input and registering the bounds of the tokens produced by that algorithm.
 
-How these bounds will be managed depends on the LexisSession implementation.
-Some implementations may store them in buffers or more complex internal collections,
-other yield scanning results directly to the API user.
+How these bounds are managed depends on the LexisSession implementation. Some
+implementations store them in buffers or more complex internal collections;
+others yield scanning results directly to the API user.
 
-Unless you want to implement your own extension to the Lady Deirdre API, you
-don't need to implement this low-level interface manually, and you encouraged to
+Unless you are implementing your own extension to the Lady Deirdre API, you do
+not need to implement this low-level interface manually, and are encouraged to
 use one of the provided solutions.
 
 Specifically, Lady Deirdre offers three kinds of implementations:
 
-1. **Stateless Scanners**. This type of scanners run the Token scan algorithm
-   on provided source code string and yields individual tokens and their
-   metadata to the API user via the Iterator interface. This is the simplest
-   way to scan source code text or a part of it, leaving the scanning results
-   solely at the API user discretion. Also, these scanners are useful for quick and dirty
-   debugging of the Token implementation.
-2. **Token Buffer**. Scans the entire source code, and stores results in the internal
-   growable buffer. Token Buffer provides random-access capabilities such that
-   you can access and inspect tokens at any given span of the source code.
-   It also allows adding more text parts at the end of the buffer, hence opening
-   up a possibility for continuous scanning. But it does not provide more
-   incremental editing operations (i.e., changing or deleting random source
-   spans).
-3. **Documents**. Full-featured stateful lexical scanner and syntax parser.
-   Provides random-access to the source code tokens, and operations to edit the
-   source code text at any give point. We will discuss this object in more details in
-   the next chapters.
+1. **Stateless Scanners**. These scanners run the Token scanning algorithm on a
+   provided source code string and yield individual tokens with their metadata
+   to the API user via the Iterator interface. This is the simplest way to scan
+   source code (or a portion of it), leaving the scanning results entirely to the
+   API user. These scanners are also useful for quick-and-dirty debugging of a
+   Token implementation.
+2. **Token Buffer**. Scans the entire source code and stores the results in an
+   internal growable buffer. TokenBuffer provides random-access capabilities,
+   allowing inspection of tokens at any span of the source code. It also allows
+   appending additional text at the end of the buffer, enabling continuous
+   scanning, but it does not support finer-grained incremental edits (e.g.,
+   modifying or deleting arbitrary spans).
+3. **Document**. A full-featured stateful lexical scanner and syntax parser.
+   Provides random access to source code tokens and allows editing the source
+   text at any given point. We will discuss this object in more detail in the
+   next chapters.
 
-Each implementation have different performance characteristics and the feature
-sets. In most cases, when you work with the lexical layer only of unchangeable
-text, [TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html)
-is recommended choice. It has good balance between performance and feature richness.
-But if you need to edit the text, consider using
+Each implementation has different performance characteristics and feature sets.
+In most cases, when working only with the lexical layer of immutable text,
+[TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html)
+is the recommended choice: it balances performance and features well. If you
+need to edit the text, consider using
 [Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html)
-instead. Stateless Scanners are most useful if you want to use generated lexical
-scanner only, and you don't need the rest of the Lady Deirdre infrastructure.
+instead. Stateless scanners are most useful when you only need the generated
+lexical stream and do not require the rest of the Lady Deirdre infrastructure.
 
 ## Source Code Manager
 
-Token Buffers and Documents both are stateful objects - they store the state of
-the scanned tokens internally.
+TokenBuffer and Document are both stateful objects: they store the state of
+scanned tokens internally.
 
-To provide a way to inspect this state, for example, to iterate through the
-tokens in the specified source code span, these objects implement
+To allow inspection of this state — for example, iterating through tokens within
+a specified source code span — these objects implement the
 [SourceCode](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.SourceCode.html)
-trait. We will discuss this trait API in more details in the next chapter too.
+trait. We will discuss this trait's API in more detail in the next chapter as
+well.
 
-Usually, we will refer to these objects as the *source code managers*.
-To sum up, source code managers typically implement two traits:
+We usually refer to these objects as *source code managers*. In summary, source
+code managers typically implement two traits:
 
-1. The LexisSession trait to provide communication channel between the source
-   code text and the Token's scanning algorithm.
-2. The SourceCode trait that provides access to the manager's scanned tokens for
-   the end user.
+1. The LexisSession trait, which provides a communication channel between the
+   source code text and the Token scanning algorithm.
+2. The SourceCode trait, which gives end users access to the manager's scanned
+   tokens.
 
-To reiterate, both traits are low-level, and usually you don't need to implement
-them manually, unless you want to create a new type of the source code manager.
+To reiterate, both traits are low-level, and you typically do not need to
+implement them manually unless you are creating a new type of source code
+manager.
 
 ## Stateless Scanners
 
-With the [stateless scanners](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.Scannable.html)
-you can run the scanning algorithm on arbitrary strings without extra overhead.
-
-This is useful to examine Token implementation in action.
+With the
+[stateless scanners](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.Scannable.html),
+you can run the scanning algorithm on arbitrary strings with minimal overhead.
+This is useful for examining a Token implementation in action.
 
 ```rust,noplayground
 use lady_deirdre::lexis::Scannable;
@@ -125,7 +125,6 @@ for token in text.tokens::<JsonToken>() {
 
 println!("{:?}", token_vector);
 
-
 // Or using just one line when debugging:
 
 println!("{:?}", text.tokens::<JsonToken>());
@@ -134,9 +133,9 @@ println!("{:?}", text.tokens::<JsonToken>());
 ## Token Buffer
 
 [TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html)
-persists scanned tokens, provides a way to inspect their metadata and the text
-at random points, and allows appending text continuation at the end of the
-source code.
+persists scanned tokens, allows inspection of their metadata and the underlying
+text at arbitrary points, and supports appending additional text to the end of
+the source code.
 
 ```rust,noplayground
 use lady_deirdre::lexis::{TokenBuffer, SourceCode};
@@ -155,16 +154,16 @@ for chunk in buffer.chunks(..) {
 }
 ```
 
-This type of the source code managers specifically designed for one-time and
-continuation lexical scanning, and it has necessary internal optimizations for
-these use case scenarios.
+This type of source code manager is specifically designed for one-time and
+continued lexical scanning and includes internal optimizations for these use
+cases.
 
 ## Documents Without Syntax
 
 The [Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html)
-object provides full incremental reparsing capabilities and requires specifying
-the syntax grammar too, but you can use its incremental scanning features only
-using [VoidSyntax](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.VoidSyntax.html).
+object provides full incremental reparsing capabilities and normally requires
+specifying the syntax grammar, but you can use only its incremental scanning
+features by using [VoidSyntax](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.VoidSyntax.html).
 
 ```rust,noplayground
 use lady_deirdre::{lexis::SourceCode, syntax::VoidSyntax, units::Document};
