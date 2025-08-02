@@ -54,12 +54,41 @@ use crate::{
         TokenCursor,
         TokenRef,
     },
-    report::{ld_assert, ld_assert_ne, ld_unreachable, system_panic},
+    report::{ld_assert, ld_unreachable, system_panic},
 };
 
-///todo
+/// A stateless scanner over a string with token lookahead capabilities.
+///
+/// The object is created by calling the [stream](Scannable::stream)
+/// function on any input string (`String` or `&str`).
+///
+/// TokenStream is an Iterator that yields scanned [Chunks](Chunk) until
+/// the end of the scanned input string.
+///
+/// Additionally, TokenStream implements the [TokenCursor] trait, effectively
+/// making it suitable as input for the syntax parser (e.g.,
+/// [ImmutableSyntaxTree::parse](crate::syntax::ImmutableSyntaxTree::parse)).
+/// To provide the lookahead capabilities required by TokenCursor, TokenStream
+/// maintains a temporary internal buffer. The size of the allocation depends on
+/// the maximum lookahead length.
+///
+/// If the lookahead feature or the TokenCursor implementation is not required,
+/// consider using [ChunkScanner] instead, a less expensive alternative to
+/// the TokenStream.
+///
+/// Note that, since TokenStream is a temporary object, it does not semantically
+/// represent compilation unit storage, and its [Id] is nil.
+///
+/// If you need long-term storage of the source code lexis with random-access
+/// capabilities, consider using [TokenBuffer](crate::lexis::TokenBuffer)
+/// instead.
+///
+/// The Debug implementation of TokenStream prints the remaining token chunks:
+/// in non-alternate mode it displays up to a few chunks; in alternate mode it
+/// displays all of them.
 #[derive(Clone)]
 pub struct TokenStream<'input, T: Token> {
+    begin: ByteIndex,
     iter: ChunkScanner<'input, T>,
     buffer: VecDeque<Chunk<'input, T>>,
 }
@@ -82,29 +111,37 @@ impl<'input, T: Token> TokenCursor<'input> for TokenStream<'input, T> {
 
     #[inline(always)]
     fn advance(&mut self) -> bool {
-        if self.buffer.pop_front().is_none() {
-            if self.iter.next().is_none() {
-                return false;
-            }
+        if let Some(chunk) = self.buffer.pop_front() {
+            self.begin += chunk.string.len();
+            return true;
         }
 
-        true
+        if let Some(chunk) = self.iter.next() {
+            self.begin += chunk.string.len();
+            return true;
+        };
+
+        false
     }
 
     #[inline(always)]
     fn skip(&mut self, mut distance: TokenCount) {
         while distance > 0 {
-            if self.buffer.pop_front().is_none() {
+            let Some(chunk) = self.buffer.pop_front() else {
                 break;
-            }
+            };
+
+            self.begin += chunk.string.len();
 
             distance -= 1;
         }
 
         while distance > 0 {
-            if self.iter.next().is_none() {
+            let Some(chunk) = self.iter.next() else {
                 break;
-            }
+            };
+
+            self.begin += chunk.string.len();
 
             distance -= 1;
         }
@@ -167,15 +204,21 @@ impl<'input, T: Token> TokenStream<'input, T> {
     #[inline(always)]
     fn new(text: &'input str) -> Self {
         Self {
+            begin: 0,
             iter: ChunkScanner::new(text),
             buffer: VecDeque::new(),
         }
     }
 
-    ///todo
+    /// Returns the remaining tail of the original input string.
     #[inline(always)]
     pub fn as_str(&self) -> &'input str {
-        self.iter.text
+        ld_assert!(
+            self.begin <= self.iter.text.len(),
+            "Malformed TokenStream byte index.",
+        );
+
+        unsafe { self.iter.text.get_unchecked(self.begin..) }
     }
 
     fn chunk(&mut self, distance: TokenCount) -> Option<&Chunk<'input, T>> {
@@ -191,7 +234,20 @@ impl<'input, T: Token> TokenStream<'input, T> {
     }
 }
 
-/// todo
+/// A stateless lexical scanner over a string that yields [Chunks](Chunk).
+///
+/// The object is created by calling the [chunks](Scannable::chunks) function on
+/// any input string (`String` or `&str`).
+///
+/// ChunkScanner implements the Iterator trait, scanning the input string
+/// token by token until the end of the scanned input string, and returning
+/// token metadata in the form of a [Chunk]. In contrast to
+/// [TokenBuffer](crate::lexis::TokenBuffer), this implementation is stateless
+/// and does not persist the lexical metadata of the underlying source code.
+///
+/// The Debug implementation for ChunkScanner prints the remaining token
+/// chunks: in non-alternate mode it displays up to a few chunks; in alternate
+/// mode it displays all of them.
 #[derive(Clone)]
 pub struct ChunkScanner<'input, T: Token> {
     text: &'input str,
@@ -311,10 +367,15 @@ impl<'input, T: Token> ChunkScanner<'input, T> {
         }
     }
 
-    ///todo
+    /// Returns the remaining tail of the original input string.
     #[inline(always)]
     pub fn as_str(&self) -> &'input str {
-        self.text
+        ld_assert!(
+            self.begin.byte <= self.text.len(),
+            "Malformed TokenStream byte index.",
+        );
+
+        unsafe { self.text.get_unchecked(self.begin.byte..) }
     }
 
     #[inline(always)]
@@ -337,7 +398,23 @@ impl<'input, T: Token> ChunkScanner<'input, T> {
     }
 }
 
-/// todo
+/// A stateless lexical scanner over a string that yields [Chunks](Chunk) and
+/// their byte positions.
+///
+/// The object is created by calling
+/// the [chunk_indices](Scannable::chunk_indices) function on any input string
+/// (`String` or `&str`).
+///
+/// ChunkIndicesScanner implements the Iterator trait, scanning the input
+/// string token by token until the end of the scanned input string, and
+/// returning token metadata in the form of a `(ByteIndex, Chunk)`. In contrast
+/// to [TokenBuffer](crate::lexis::TokenBuffer), this implementation is
+/// stateless and does not persist the lexical metadata of the underlying
+/// source code.
+///
+/// The Debug implementation for ChunkIndicesScanner prints the remaining token
+/// chunks and their byte positions: in non-alternate mode it displays up to
+/// a few chunks; in alternate mode it displays all of them.
 #[derive(Clone)]
 pub struct ChunkIndicesScanner<'input, T: Token> {
     text: &'input str,
@@ -457,13 +534,19 @@ impl<'input, T: Token> ChunkIndicesScanner<'input, T> {
         }
     }
 
-    ///todo
+    /// Returns the remaining tail of the original input string.
     #[inline(always)]
     pub fn as_str(&self) -> &'input str {
-        self.text
+        ld_assert!(
+            self.begin.byte <= self.text.len(),
+            "Malformed TokenStream byte index.",
+        );
+
+        unsafe { self.text.get_unchecked(self.begin.byte..) }
     }
 
-    ///todo
+    /// Returns the byte position of the next token, or the length of
+    /// the original input string if there are no more tokens.
     #[inline(always)]
     pub fn offset(&self) -> ByteIndex {
         match &self.pending {
@@ -501,7 +584,20 @@ impl<'input, T: Token> ChunkIndicesScanner<'input, T> {
     }
 }
 
-///todo
+/// A stateless lexical scanner over a string that yields tokens.
+///
+/// The object is created by calling the [tokens](Scannable::tokens) function on
+/// any input string (`String` or `&str`).
+///
+/// TokenScanner implements the Iterator trait, scanning the input string
+/// token by token until the end of the scanned input string, and returning
+/// these tokens. In contrast to [TokenBuffer](crate::lexis::TokenBuffer), this
+/// implementation is stateless and does not persist the lexical metadata of
+/// the underlying source code.
+///
+/// The Debug implementation for TokenScanner prints the remaining tokens:
+/// in non-alternate mode it displays up to a few tokens; in alternate mode
+/// it displays all of them.
 #[derive(Clone)]
 pub struct TokenScanner<'input, T: Token> {
     text: &'input str,
@@ -614,14 +710,34 @@ impl<'input, T: Token> TokenScanner<'input, T> {
         }
     }
 
-    ///todo
+    /// Returns the remaining tail of the original input string.
     #[inline(always)]
     pub fn as_str(&self) -> &'input str {
-        self.text
+        ld_assert!(
+            self.begin.byte <= self.text.len(),
+            "Malformed TokenStream byte index.",
+        );
+
+        unsafe { self.text.get_unchecked(self.begin.byte..) }
     }
 }
 
-///todo
+/// A stateless lexical scanner over a string that yields tokens and
+/// their byte positions.
+///
+/// The object is created by calling
+/// the [token_indices](Scannable::token_indices) function on any input
+/// string (`String` or `&str`).
+///
+/// TokenIndicesScanner implements the Iterator trait, scanning the input string
+/// token by token until the end of the scanned input string, and returning
+/// these tokens in form of `(ByteIndex, Token)`. In contrast to
+/// [TokenBuffer](crate::lexis::TokenBuffer), this implementation is stateless
+/// and does not persist the lexical metadata of the underlying source code.
+///
+/// The Debug implementation for TokenScanner prints the remaining tokens and
+/// their byte positions: in non-alternate mode it displays up to a few tokens;
+/// in alternate mode it displays all of them.
 #[derive(Clone)]
 pub struct TokenIndicesScanner<'input, T: Token> {
     text: &'input str,
@@ -738,13 +854,19 @@ impl<'input, T: Token> TokenIndicesScanner<'input, T> {
         }
     }
 
-    ///todo
+    /// Returns the remaining tail of the original input string.
     #[inline(always)]
     pub fn as_str(&self) -> &'input str {
-        self.text
+        ld_assert!(
+            self.begin.byte <= self.text.len(),
+            "Malformed TokenStream byte index.",
+        );
+
+        unsafe { self.text.get_unchecked(self.begin.byte..) }
     }
 
-    ///todo
+    /// Returns the byte position of the next token, or the length of
+    /// the original input string if there are no more tokens.
     #[inline(always)]
     pub fn offset(&self) -> ByteIndex {
         match &self.pending {
@@ -754,21 +876,61 @@ impl<'input, T: Token> TokenIndicesScanner<'input, T> {
     }
 }
 
-///todo
+/// An extension of a string that provides functions for creating stateless
+/// lexical scanners.
+///
+/// In contrast to [TokenBuffer](crate::lexis::TokenBuffer), these scanners are
+/// implemented as lazy iterators and do not persist the lexical metadata of the
+/// underlying source code.
+///
+/// This trait is auto-implemented for any object that implements `AsRef<str>`.
 pub trait Scannable {
-    ///todo
+    /// Creates an iterator that scans source code tokens one by one, yielding
+    /// their [Chunks](Chunk).
+    ///
+    /// In contrast to the [chunks](Self::chunks) iterator, this iterator also
+    /// implements [TokenCursor], and is therefore suitable as input for the
+    /// syntax parser.
+    ///
+    /// The returned iterator's Debug implementation prints a list of the
+    /// scanned token chunks.
+    ///
+    /// See [TokenStream] for details.
     fn stream<T: Token>(&self) -> TokenStream<T>;
 
-    ///todo
+    /// Creates an iterator that scans source code tokens one by one, yielding
+    /// their [Chunks](Chunk).
+    ///
+    /// The returned iterator's Debug implementation prints a list of the
+    /// scanned token chunks.
+    ///
+    /// See [ChunkScanner] for details.
     fn chunks<T: Token>(&self) -> ChunkScanner<T>;
 
-    ///todo
+    /// Creates an iterator that scans source code tokens one by one, yielding
+    /// their [Chunks](Chunk) and [byte positions](ByteIndex).
+    ///
+    /// The returned iterator's Debug implementation prints a list of the
+    /// scanned token chunks, and their byte positions.
+    ///
+    /// See [ChunkIndicesScanner] for details.
     fn chunk_indices<T: Token>(&self) -> ChunkIndicesScanner<T>;
 
-    ///todo
+    /// Creates an iterator that scans source code tokens one by one.
+    ///
+    /// The returned iterator's Debug implementation prints a list of the
+    /// scanned tokens.
+    ///
+    /// See [TokenScanner] for details.
     fn tokens<T: Token>(&self) -> TokenScanner<T>;
 
-    ///todo
+    /// Creates an iterator that scans source code tokens one by one, and
+    /// their [byte positions](ByteIndex).
+    ///
+    /// The returned iterator's Debug implementation prints a list of the
+    /// scanned tokens, and their byte positions.
+    ///
+    /// See [TokenIndicesScanner] for details.
     fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T>;
 }
 

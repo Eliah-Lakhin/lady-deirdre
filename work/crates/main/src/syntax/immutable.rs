@@ -187,8 +187,9 @@ impl<N: Node> ImmutableSyntaxTree<N> {
     /// The `token_cursor` parameter of type [TokenCursor] provides access
     /// to the token stream that needs to be parsed.
     ///
-    /// You can get this cursor from a [TokenBuffer](crate::lexis::TokenBuffer)
-    /// or any compilation unit type (e.g., [Document](crate::units::Document))
+    /// You can get this cursor from a [TokenBuffer](crate::lexis::TokenBuffer),
+    /// [TokenStream](crate::lexis::TokenStream), or any compilation unit type
+    /// (e.g., [Document](crate::units::Document)).
     ///
     /// See [SourceCode::cursor](crate::lexis::SourceCode::cursor) function for
     /// details.

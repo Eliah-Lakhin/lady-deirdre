@@ -148,7 +148,10 @@ pub mod format;
 ///   structure of the compilation unit.
 /// - The [TokenBuffer](lexis::TokenBuffer) object is the default implementation
 ///   of the SourceCode. It is capable to scan an ongoing text stream using
-///   specified Token scanner.
+///   specified Token scanner and of storing the produced tokens.
+/// - The [TokenStream](lexis::TokenStream) object is a stateless lexical
+///   scanner with lookahead capabilities. It is recommended for use when the
+///   scanned token stream does not need to be retained.
 ///
 /// A detailed specification of the lexical scanning process can be found
 /// under the [LexisSession](lexis::LexisSession) trait.
