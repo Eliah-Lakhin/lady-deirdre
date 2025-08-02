@@ -32,7 +32,11 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{iter::FusedIterator, mem::take};
+use std::{
+    fmt::{Debug, Formatter},
+    iter::FusedIterator,
+    mem::take,
+};
 
 use crate::{
     lexis::{session::Cursor, ByteIndex, Chunk, LexisSession, Site, Token},
@@ -40,12 +44,25 @@ use crate::{
 };
 
 /// todo
+#[derive(Clone)]
 pub struct ChunkScanner<'input, T: Token> {
     text: &'input str,
     begin: Cursor<Site>,
     end: Cursor<Site>,
     current: Cursor<Site>,
     pending: Option<Chunk<'input, T>>,
+}
+
+impl<'input, T: Token + Debug> Debug for ChunkScanner<'input, T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug_list = formatter.debug_list();
+
+        for item in self.clone() {
+            debug_list.entry(&item);
+        }
+
+        debug_list.finish()
+    }
 }
 
 unsafe impl<'input, T: Token> LexisSession for ChunkScanner<'input, T> {
@@ -180,12 +197,25 @@ impl<'input, T: Token> ChunkScanner<'input, T> {
 }
 
 /// todo
+#[derive(Clone)]
 pub struct ChunkIndicesScanner<'input, T: Token> {
     text: &'input str,
     begin: Cursor<Site>,
     end: Cursor<Site>,
     current: Cursor<Site>,
     pending: Option<(ByteIndex, Chunk<'input, T>)>,
+}
+
+impl<'input, T: Token + Debug> Debug for ChunkIndicesScanner<'input, T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug_list = formatter.debug_list();
+
+        for item in self.clone() {
+            debug_list.entry(&item);
+        }
+
+        debug_list.finish()
+    }
 }
 
 unsafe impl<'input, T: Token> LexisSession for ChunkIndicesScanner<'input, T> {
@@ -338,12 +368,25 @@ impl<'input, T: Token> ChunkIndicesScanner<'input, T> {
 }
 
 ///todo
+#[derive(Clone)]
 pub struct TokenScanner<'input, T: Token> {
     text: &'input str,
     begin: Cursor<()>,
     end: Cursor<()>,
     current: Cursor<()>,
     pending: Option<T>,
+}
+
+impl<'input, T: Token + Debug> Debug for TokenScanner<'input, T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug_list = formatter.debug_list();
+
+        for item in self.clone() {
+            debug_list.entry(&item);
+        }
+
+        debug_list.finish()
+    }
 }
 
 unsafe impl<'input, T: Token> LexisSession for TokenScanner<'input, T> {
@@ -452,12 +495,25 @@ impl<'input, T: Token> TokenScanner<'input, T> {
 }
 
 ///todo
+#[derive(Clone)]
 pub struct TokenIndicesScanner<'input, T: Token> {
     text: &'input str,
     begin: Cursor<()>,
     end: Cursor<()>,
     current: Cursor<()>,
     pending: Option<(ByteIndex, T)>,
+}
+
+impl<'input, T: Token + Debug> Debug for TokenIndicesScanner<'input, T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut debug_list = formatter.debug_list();
+
+        for item in self.clone() {
+            debug_list.entry(&item);
+        }
+
+        debug_list.finish()
+    }
 }
 
 unsafe impl<'input, T: Token> LexisSession for TokenIndicesScanner<'input, T> {
@@ -575,5 +631,42 @@ impl<'input, T: Token> TokenIndicesScanner<'input, T> {
             Some((byte, _)) => *byte,
             None => self.begin.byte,
         }
+    }
+}
+
+///todo
+pub trait Scannable {
+    ///todo
+    fn tokens<T: Token>(&self) -> TokenScanner<T>;
+
+    ///todo
+    fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T>;
+
+    ///todo
+    fn chunks<T: Token>(&self) -> ChunkScanner<T>;
+
+    ///todo
+    fn chunk_indices<T: Token>(&self) -> ChunkIndicesScanner<T>;
+}
+
+impl<S: AsRef<str>> Scannable for S {
+    #[inline(always)]
+    fn tokens<T: Token>(&self) -> TokenScanner<T> {
+        TokenScanner::new(self.as_ref())
+    }
+
+    #[inline(always)]
+    fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T> {
+        TokenIndicesScanner::new(self.as_ref())
+    }
+
+    #[inline(always)]
+    fn chunks<T: Token>(&self) -> ChunkScanner<T> {
+        ChunkScanner::new(self.as_ref())
+    }
+
+    #[inline(always)]
+    fn chunk_indices<T: Token>(&self) -> ChunkIndicesScanner<T> {
+        ChunkIndicesScanner::new(self.as_ref())
     }
 }
