@@ -38,9 +38,9 @@ use std::{
 };
 
 use lady_deirdre::{
-    lexis::{Position, PositionSpan, SiteSpan, SourceCode, ToSite},
-    syntax::{Node, NodeRef, SyntaxTree},
-    units::{Document, MutableUnit},
+    lexis::{Position, PositionSpan, SiteSpan, SourceCode},
+    syntax::{NodeRef, SyntaxTree},
+    units::Document,
 };
 use lady_deirdre_examples::json_grammar::syntax::JsonNode;
 use ropey::Rope;

@@ -44,8 +44,7 @@ that cannot be directly compared and that may impact the performance timings.
 
 For example, Nom and Lady Deirdre are recursive-descent parsers, whereas
 Tree-Sitter is a recursive-ascent GLR parser. Nom and Tree-Sitter do not
-maintain the source code text, whereas Lady Deirdre has inseparable text
-storage.
+maintain the source code text, whereas Lady Deirdre has inseparable text storage.
 
 These and other functional differences between frameworks must be taken into
 account when comparing the benchmark results.
@@ -65,8 +64,7 @@ Mutable Documents are designed to be fast enough to handle every keystroke event
 from the text editor when the end user writes source code in real time.
 The Document achieves these features by maintaining an internal cache of
 the lexical and syntax structures and by patching these structures during
-the reparsing of small code fragments relative to the changes (incremental
-reparsing).
+the reparsing of small code fragments relative to the changes (incremental reparsing).
 
 Patching instead of recreating the full syntax tree is especially important
 for further incremental semantic analysis stages, as the semantic metadata
@@ -101,20 +99,20 @@ an upper bound for files typically edited in code editors.
 case that mimics a situation where the user accidentally opens a large file
 in the code editor.
 
+
 ## Reference Setups
 
 For reference, I compare Lady Deirdre's benchmark results with benchmarks run on
 the same data using well-known frameworks that fully or partially cover
 similar features:
 
-- [Nom](https://crates.io/crates/nom) as a reference for
-  the non-incremental parser.
-- [Tree-Sitter](https://crates.io/crates/tree-sitter) as a reference for
-  the incremental parser.
-- [Ropey](https://crates.io/crates/ropey) as a reference for the text storage
-  with random read/write access.
-- [Logos](https://crates.io/crates/logos) as a reference for the lexical
-  scanner.
+  - [Nom](https://crates.io/crates/nom) as a reference for
+    the non-incremental parser.
+  - [Tree-Sitter](https://crates.io/crates/tree-sitter) as a reference for
+    the incremental parser.
+  - [Ropey](https://crates.io/crates/ropey) as a reference for the text storage
+    with random read/write access.
+  - [Logos](https://crates.io/crates/logos) as a reference for the lexical scanner.
 
 ## Unit Tests
 
@@ -135,8 +133,7 @@ For details, see [discussion thread](https://github.com/Eliah-Lakhin/lady-deirdr
 
 ### Entire Text Parsing
 
-Measures non-incremental initial lexical scanning and syntax parsing
-performance.
+Measures non-incremental initial lexical scanning and syntax parsing performance.
 Informally, this covers the case when the end user opens the file in the text
 editor or when the compiler loads the file from disk.
 
@@ -150,13 +147,12 @@ the Lady Deirdre tests include text storage timings.
 
 `Tree-Sitter` shows the worst results among the setups in these tests.
 
-All four setups are generally acceptable for use in language server
-applications.
+All four setups are generally acceptable for use in language server applications.
 
-|                  | `Lady Deirdre (mutable)`  | `Lady Deirdre (immutable)`       | `Nom`                            | `Tree-Sitter`                 |
-|:-----------------|:--------------------------|:---------------------------------|:---------------------------------|:------------------------------|
-| **`Small File`** | `738.09 us` (✅ **1.00x**) | `537.77 us` (✅ **1.37x faster**) | `450.19 us` (✅ **1.64x faster**) | `2.33 ms` (❌ *3.16x slower*)  |
-| **`Large File`** | `20.24 ms` (✅ **1.00x**)  | `14.74 ms` (✅ **1.37x faster**)  | `10.74 ms` (🚀 **1.88x faster**) | `55.70 ms` (❌ *2.75x slower*) |
+|                  | `Lady Deirdre (mutable)`          | `Lady Deirdre (immutable)`          | `Nom`                            | `Tree-Sitter`                    |
+|:-----------------|:----------------------------------|:------------------------------------|:---------------------------------|:-------------------------------- |
+| **`Small File`** | `751.99 us` (✅ **1.00x**)         | `550.96 us` (✅ **1.36x faster**)    | `448.80 us` (✅ **1.68x faster**) | `2.20 ms` (❌ *2.93x slower*)     |
+| **`Large File`** | `19.84 ms` (✅ **1.00x**)          | `14.33 ms` (✅ **1.38x faster**)     | `10.67 ms` (🚀 **1.86x faster**)  | `52.25 ms` (❌ *2.63x slower*)    |
 
 ### Keystrokes Reparsing
 
@@ -164,16 +160,14 @@ Measures incremental lexical and syntax reparsing performance when the end user
 enters text into the file.
 
 These tests measure the entire set of edits at once, **excluding the initial
-parse time** (measured independently in
-the [Entire Text Parsing](#entire-text-parsing)
+parse time** (measured independently in the [Entire Text Parsing](#entire-text-parsing)
 tests).
 
 To estimate the individual amortized keystroke parse time, you can divide these
 timings by ~2000 (the size of the edit set), which results in microseconds
 per keystroke and is significantly faster than reparsing the entire file.
 
-This outcome proves that both frameworks are error-resistant incremental
-parsers.
+This outcome proves that both frameworks are error-resistant incremental parsers.
 
 `Lady Deirdre` performs better than `Tree-Sitter` on typically small files
 (up to 2000 lines of code) when parsing JSON files. However, the performance
@@ -183,15 +177,14 @@ of the Lady Deirdre architecture.
 Additionally, Tree-Sitter does not have built-in source code text storage,
 in contrast to Lady Deirdre's Document. Tree-Sitter requires dedicated text
 management (e.g., via Ropey). However, the impact of text maintenance
-is probably insignificant in these tests due to
-the [Keystroke Writes](#keystroke-writes)
+is probably insignificant in these tests due to the [Keystroke Writes](#keystroke-writes)
 benchmark results. Therefore, the text management timings were excluded from
 the `Tree-Sitter` benchmark results.
 
 |                  | `Lady Deirdre`            | `Tree-Sitter`                    |
-|:-----------------|:--------------------------|:---------------------------------|
-| **`Small File`** | `20.59 ms` (✅ **1.00x**)  | `53.08 ms` (❌ *2.58x slower*)    |
-| **`Large File`** | `364.22 ms` (✅ **1.00x**) | `59.73 ms` (🚀 **6.10x faster**) |
+|:-----------------|:--------------------------|:-------------------------------- |
+| **`Small File`** | `20.99 ms` (✅ **1.00x**)  | `46.19 ms` (❌ *2.20x slower*)    |
+| **`Large File`** | `377.86 ms` (✅ **1.00x**) | `51.06 ms` (🚀 **7.40x faster**)  |
 
 ### Entire Text Input
 
@@ -207,10 +200,10 @@ than Lady Deirdre in all tests. The immutable setup of Lady Deirdre performs
 slightly better than the mutable setup because the immutable Document
 was designed for one-time loading.
 
-|                  | `Lady Deirdre (immutable)` | `Lady Deirdre (mutable)`       | `Ropey`                           |
-|:-----------------|:---------------------------|:-------------------------------|:----------------------------------|
-| **`Small File`** | `201.63 us` (✅ **1.00x**)  | `233.79 us` (❌ *1.16x slower*) | `28.09 us` (🚀 **7.18x faster**)  |
-| **`Large File`** | `6.10 ms` (✅ **1.00x**)    | `7.03 ms` (❌ *1.15x slower*)   | `937.65 us` (🚀 **6.50x faster**) |
+|                  | `Lady Deirdre (immutable)`          | `Lady Deirdre (mutable)`          | `Ropey`                           |
+|:-----------------|:------------------------------------|:----------------------------------|:--------------------------------- |
+| **`Small File`** | `179.69 us` (✅ **1.00x**)           | `212.44 us` (❌ *1.18x slower*)    | `26.76 us` (🚀 **6.72x faster**)   |
+| **`Large File`** | `5.04 ms` (✅ **1.00x**)             | `6.01 ms` (❌ *1.19x slower*)      | `900.86 us` (🚀 **5.59x faster**)  |
 
 ### Keystroke Writes
 
@@ -227,9 +220,9 @@ The initial text loading timings are excluded from these tests (they are
 separately measured in the [Entire Text Input](#entire-text-input) tests).
 
 |                  | `Lady Deirdre`           | `Ropey`                            |
-|:-----------------|:-------------------------|:-----------------------------------|
-| **`Small File`** | `1.53 ms` (✅ **1.00x**)  | `408.27 us` (🚀 **3.75x faster**)  |
-| **`Large File`** | `11.62 ms` (✅ **1.00x**) | `545.53 us` (🚀 **21.30x faster**) |
+|:-----------------|:-------------------------|:---------------------------------- |
+| **`Small File`** | `1.51 ms` (✅ **1.00x**)  | `400.51 us` (🚀 **3.78x faster**)   |
+| **`Large File`** | `11.75 ms` (✅ **1.00x**) | `535.70 us` (🚀 **21.94x faster**)  |
 
 ### Scanner
 
@@ -244,9 +237,9 @@ Logos performs better in all tests; however, both frameworks demonstrate
 generally acceptable results.
 
 |                  | `Lady Deirdre`            | `Logos`                          |
-|:-----------------|:--------------------------|:---------------------------------|
-| **`Small File`** | `191.41 us` (✅ **1.00x**) | `86.25 us` (🚀 **2.22x faster**) |
-| **`Large File`** | `5.64 ms` (✅ **1.00x**)   | `2.28 ms` (🚀 **2.47x faster**)  |
+|:-----------------|:--------------------------|:-------------------------------- |
+| **`Small File`** | `245.61 us` (✅ **1.00x**) | `86.70 us` (🚀 **2.83x faster**)  |
+| **`Large File`** | `6.87 ms` (✅ **1.00x**)   | `2.26 ms` (🚀 **3.04x faster**)   |
 
 ---
 Made with [criterion-table](https://github.com/nu11ptr/criterion-table)
