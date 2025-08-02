@@ -218,25 +218,25 @@ pub unsafe trait LexisSession {
 
 pub(super) struct BufferLexisSession<'code, T: Token> {
     pub(super) buffer: &'code mut TokenBuffer<T>,
-    pub(super) begin: Cursor,
-    pub(super) end: Cursor,
-    pub(super) current: Cursor,
+    pub(super) begin: Cursor<Site>,
+    pub(super) end: Cursor<Site>,
+    pub(super) current: Cursor<Site>,
 }
 
 unsafe impl<'code, T: Token> LexisSession for BufferLexisSession<'code, T> {
     #[inline(always)]
     fn advance(&mut self) -> u8 {
-        self.current.advance(self.buffer)
+        self.current.advance(&self.buffer.text)
     }
 
     #[inline(always)]
     unsafe fn consume(&mut self) {
-        self.current.consume(self.buffer)
+        self.current.consume(&self.buffer.text)
     }
 
     #[inline(always)]
     unsafe fn read(&mut self) -> char {
-        self.current.read(self.buffer)
+        self.current.read(&self.buffer.text)
     }
 
     #[inline(always)]
@@ -304,12 +304,12 @@ impl<'code, T: Token> BufferLexisSession<'code, T> {
         let mismatch = self.begin;
 
         loop {
-            if self.begin.advance(self.buffer) == 0xFF {
+            if self.begin.advance(&self.buffer.text) == 0xFF {
                 self.buffer.push(T::mismatch(), &mismatch, &self.begin);
                 return true;
             }
 
-            self.begin.consume(self.buffer);
+            self.begin.consume(&self.buffer.text);
 
             self.end = self.begin;
             self.current = self.begin;
@@ -335,24 +335,22 @@ impl<'code, T: Token> BufferLexisSession<'code, T> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) struct Cursor {
+#[derive(Default, Clone, Copy)]
+pub(super) struct Cursor<S> {
     pub(super) byte: ByteIndex,
-    pub(super) site: Site,
+    pub(super) site: S,
 }
 
-impl Cursor {
+impl<S: CursorSite> Cursor<S> {
     #[inline(always)]
-    fn advance<T: Token>(&mut self, buffer: &TokenBuffer<T>) -> u8 {
-        if self.byte == buffer.text.len() {
+    pub(super) fn advance(&mut self, text: &str) -> u8 {
+        if self.byte == text.len() {
             return 0xFF;
         }
 
-        let point = *unsafe { buffer.text.as_bytes().get_unchecked(self.byte) };
+        let point = *unsafe { text.as_bytes().get_unchecked(self.byte) };
 
-        if point & 0xC0 != 0x80 {
-            self.site += 1;
-        }
+        self.site.inc(point);
 
         self.byte += 1;
 
@@ -360,14 +358,14 @@ impl Cursor {
     }
 
     #[inline(always)]
-    fn consume<T: Token>(&mut self, buffer: &TokenBuffer<T>) {
+    pub(super) fn consume(&mut self, text: &str) {
         ld_assert!(
             self.byte > 0,
             "Incorrect use of the LexisSession::consume function.\nCurrent \
             cursor is in the beginning of the input stream.",
         );
 
-        let point = buffer.text.as_bytes()[self.byte - 1];
+        let point = unsafe { *text.as_bytes().get_unchecked(self.byte - 1) };
 
         ld_assert_ne!(
             point & 0xC0,
@@ -397,7 +395,7 @@ impl Cursor {
     }
 
     #[inline(always)]
-    fn read<T: Token>(&mut self, buffer: &TokenBuffer<T>) -> char {
+    pub(super) fn read(&mut self, text: &str) -> char {
         ld_assert!(
             self.byte > 0,
             "Incorrect use of the LexisSession::read function.\nCurrent cursor \
@@ -408,7 +406,7 @@ impl Cursor {
 
         #[cfg(debug_assertions)]
         {
-            let point = buffer.text.as_bytes()[byte];
+            let point = text.as_bytes()[byte];
 
             if point & 0xC0 == 0x80 {
                 system_panic!(
@@ -419,12 +417,30 @@ impl Cursor {
             }
         }
 
-        let rest = unsafe { buffer.text.get_unchecked(byte..) };
+        let rest = unsafe { text.get_unchecked(byte..) };
         let ch = unsafe { rest.chars().next().unwrap_unchecked() };
         let len = ch.len_utf8();
 
         self.byte += len - 1;
 
         ch
+    }
+}
+
+pub(super) trait CursorSite {
+    fn inc(&mut self, point: u8);
+}
+
+impl CursorSite for () {
+    #[inline(always)]
+    fn inc(&mut self, _point: u8) {}
+}
+
+impl CursorSite for Site {
+    #[inline(always)]
+    fn inc(&mut self, point: u8) {
+        if point & 0xC0 != 0x80 {
+            *self += 1;
+        }
     }
 }

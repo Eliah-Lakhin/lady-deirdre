@@ -405,7 +405,6 @@ impl<T: Token> TokenBuffer<T> {
 
             site = match self.sites.pop() {
                 Some(site) => site,
-
                 // Safety: Underlying TokenBuffer collections represent
                 //         a sequence of Chunks.
                 None => unsafe { ld_unreachable!("TokenBuffer inconsistency.") },
@@ -461,7 +460,7 @@ impl<T: Token> TokenBuffer<T> {
     }
 
     #[inline]
-    pub(super) fn push(&mut self, token: T, from: &Cursor, to: &Cursor) {
+    pub(super) fn push(&mut self, token: T, from: &Cursor<Site>, to: &Cursor<Site>) {
         let span = to.site - from.site;
 
         ld_assert!(span > 0, "Empty span.");
