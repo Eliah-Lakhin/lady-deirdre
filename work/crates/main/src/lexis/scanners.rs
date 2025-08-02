@@ -33,15 +33,163 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 use std::{
+    collections::VecDeque,
     fmt::{Debug, Formatter},
     iter::FusedIterator,
     mem::take,
 };
 
 use crate::{
-    lexis::{session::Cursor, ByteIndex, Chunk, LexisSession, Site, Token},
-    report::{ld_assert, ld_assert_ne, system_panic},
+    arena::{Id, Identifiable},
+    lexis::{
+        session::Cursor,
+        ByteIndex,
+        Chunk,
+        Length,
+        LexisSession,
+        Site,
+        SiteRef,
+        Token,
+        TokenCount,
+        TokenCursor,
+        TokenRef,
+    },
+    report::{ld_assert, ld_assert_ne, ld_unreachable, system_panic},
 };
+
+///todo
+#[derive(Clone)]
+pub struct TokenStream<'input, T: Token> {
+    iter: ChunkScanner<'input, T>,
+    buffer: VecDeque<Chunk<'input, T>>,
+}
+
+impl<'input, T: Token + Debug> Debug for TokenStream<'input, T> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        debug_list(self.clone(), formatter)
+    }
+}
+
+impl<'input, T: Token> Identifiable for TokenStream<'input, T> {
+    #[inline(always)]
+    fn id(&self) -> Id {
+        Id::nil()
+    }
+}
+
+impl<'input, T: Token> TokenCursor<'input> for TokenStream<'input, T> {
+    type Token = T;
+
+    #[inline(always)]
+    fn advance(&mut self) -> bool {
+        if self.buffer.pop_front().is_none() {
+            if self.iter.next().is_none() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    #[inline(always)]
+    fn skip(&mut self, mut distance: TokenCount) {
+        while distance > 0 {
+            if self.buffer.pop_front().is_none() {
+                break;
+            }
+
+            distance -= 1;
+        }
+
+        while distance > 0 {
+            if self.iter.next().is_none() {
+                break;
+            }
+
+            distance -= 1;
+        }
+    }
+
+    #[inline(always)]
+    fn token(&mut self, distance: TokenCount) -> Self::Token {
+        let Some(chunk) = self.chunk(distance) else {
+            return <Self::Token as Token>::eoi();
+        };
+
+        chunk.token
+    }
+
+    #[inline(always)]
+    fn site(&mut self, distance: TokenCount) -> Option<Site> {
+        Some(self.chunk(distance)?.site)
+    }
+
+    #[inline(always)]
+    fn length(&mut self, distance: TokenCount) -> Option<Length> {
+        Some(self.chunk(distance)?.length)
+    }
+
+    #[inline(always)]
+    fn string(&mut self, distance: TokenCount) -> Option<&'input str> {
+        Some(self.chunk(distance)?.string)
+    }
+
+    #[inline(always)]
+    fn token_ref(&mut self, _distance: TokenCount) -> TokenRef {
+        TokenRef::nil()
+    }
+
+    #[inline(always)]
+    fn site_ref(&mut self, _distance: TokenCount) -> SiteRef {
+        SiteRef::nil()
+    }
+
+    #[inline(always)]
+    fn end_site_ref(&mut self) -> SiteRef {
+        SiteRef::nil()
+    }
+}
+
+impl<'input, T: Token> Iterator for TokenStream<'input, T> {
+    type Item = Chunk<'input, T>;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        let chunk = *self.chunk(0)?;
+
+        let _ = self.advance();
+
+        Some(chunk)
+    }
+}
+
+impl<'input, T: Token> TokenStream<'input, T> {
+    #[inline(always)]
+    fn new(text: &'input str) -> Self {
+        Self {
+            iter: ChunkScanner::new(text),
+            buffer: VecDeque::new(),
+        }
+    }
+
+    ///todo
+    #[inline(always)]
+    pub fn as_str(&self) -> &'input str {
+        self.iter.text
+    }
+
+    fn chunk(&mut self, distance: TokenCount) -> Option<&Chunk<'input, T>> {
+        while distance >= self.buffer.len() {
+            self.buffer.push_front(self.iter.next()?);
+        }
+
+        let Some(chunk) = self.buffer.get(distance) else {
+            unsafe { ld_unreachable!("Malformed token stream buffer.") }
+        };
+
+        Some(chunk)
+    }
+}
 
 /// todo
 #[derive(Clone)]
@@ -55,13 +203,7 @@ pub struct ChunkScanner<'input, T: Token> {
 
 impl<'input, T: Token + Debug> Debug for ChunkScanner<'input, T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut debug_list = formatter.debug_list();
-
-        for item in self.clone() {
-            debug_list.entry(&item);
-        }
-
-        debug_list.finish()
+        debug_list(self.clone(), formatter)
     }
 }
 
@@ -158,9 +300,8 @@ impl<'input, T: Token> Iterator for ChunkScanner<'input, T> {
 impl<'input, T: Token> FusedIterator for ChunkScanner<'input, T> {}
 
 impl<'input, T: Token> ChunkScanner<'input, T> {
-    ///todo
     #[inline(always)]
-    pub fn new(input: &'input str) -> Self {
+    fn new(input: &'input str) -> Self {
         Self {
             text: input,
             begin: Cursor::default(),
@@ -208,13 +349,7 @@ pub struct ChunkIndicesScanner<'input, T: Token> {
 
 impl<'input, T: Token + Debug> Debug for ChunkIndicesScanner<'input, T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut debug_list = formatter.debug_list();
-
-        for item in self.clone() {
-            debug_list.entry(&item);
-        }
-
-        debug_list.finish()
+        debug_list(self.clone(), formatter)
     }
 }
 
@@ -311,9 +446,8 @@ impl<'input, T: Token> Iterator for ChunkIndicesScanner<'input, T> {
 impl<'input, T: Token> FusedIterator for ChunkIndicesScanner<'input, T> {}
 
 impl<'input, T: Token> ChunkIndicesScanner<'input, T> {
-    ///todo
     #[inline(always)]
-    pub fn new(input: &'input str) -> Self {
+    fn new(input: &'input str) -> Self {
         Self {
             text: input,
             begin: Cursor::default(),
@@ -379,13 +513,7 @@ pub struct TokenScanner<'input, T: Token> {
 
 impl<'input, T: Token + Debug> Debug for TokenScanner<'input, T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut debug_list = formatter.debug_list();
-
-        for item in self.clone() {
-            debug_list.entry(&item);
-        }
-
-        debug_list.finish()
+        debug_list(self.clone(), formatter)
     }
 }
 
@@ -475,9 +603,8 @@ impl<'input, T: Token> Iterator for TokenScanner<'input, T> {
 impl<'input, T: Token> FusedIterator for TokenScanner<'input, T> {}
 
 impl<'input, T: Token> TokenScanner<'input, T> {
-    ///todo
     #[inline(always)]
-    pub fn new(input: &'input str) -> Self {
+    fn new(input: &'input str) -> Self {
         Self {
             text: input,
             begin: Cursor::default(),
@@ -506,13 +633,7 @@ pub struct TokenIndicesScanner<'input, T: Token> {
 
 impl<'input, T: Token + Debug> Debug for TokenIndicesScanner<'input, T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut debug_list = formatter.debug_list();
-
-        for item in self.clone() {
-            debug_list.entry(&item);
-        }
-
-        debug_list.finish()
+        debug_list(self.clone(), formatter)
     }
 }
 
@@ -606,9 +727,8 @@ impl<'input, T: Token> Iterator for TokenIndicesScanner<'input, T> {
 impl<'input, T: Token> FusedIterator for TokenIndicesScanner<'input, T> {}
 
 impl<'input, T: Token> TokenIndicesScanner<'input, T> {
-    ///todo
     #[inline(always)]
-    pub fn new(input: &'input str) -> Self {
+    fn new(input: &'input str) -> Self {
         Self {
             text: input,
             begin: Cursor::default(),
@@ -637,27 +757,25 @@ impl<'input, T: Token> TokenIndicesScanner<'input, T> {
 ///todo
 pub trait Scannable {
     ///todo
-    fn tokens<T: Token>(&self) -> TokenScanner<T>;
-
-    ///todo
-    fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T>;
+    fn stream<T: Token>(&self) -> TokenStream<T>;
 
     ///todo
     fn chunks<T: Token>(&self) -> ChunkScanner<T>;
 
     ///todo
     fn chunk_indices<T: Token>(&self) -> ChunkIndicesScanner<T>;
+
+    ///todo
+    fn tokens<T: Token>(&self) -> TokenScanner<T>;
+
+    ///todo
+    fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T>;
 }
 
 impl<S: AsRef<str>> Scannable for S {
     #[inline(always)]
-    fn tokens<T: Token>(&self) -> TokenScanner<T> {
-        TokenScanner::new(self.as_ref())
-    }
-
-    #[inline(always)]
-    fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T> {
-        TokenIndicesScanner::new(self.as_ref())
+    fn stream<T: Token>(&self) -> TokenStream<T> {
+        TokenStream::new(self.as_ref())
     }
 
     #[inline(always)]
@@ -669,4 +787,34 @@ impl<S: AsRef<str>> Scannable for S {
     fn chunk_indices<T: Token>(&self) -> ChunkIndicesScanner<T> {
         ChunkIndicesScanner::new(self.as_ref())
     }
+
+    #[inline(always)]
+    fn tokens<T: Token>(&self) -> TokenScanner<T> {
+        TokenScanner::new(self.as_ref())
+    }
+
+    #[inline(always)]
+    fn token_indices<T: Token>(&self) -> TokenIndicesScanner<T> {
+        TokenIndicesScanner::new(self.as_ref())
+    }
+}
+
+#[inline(always)]
+fn debug_list<T: Debug>(
+    iter: impl Iterator<Item = T>,
+    formatter: &mut Formatter<'_>,
+) -> std::fmt::Result {
+    let alt = formatter.alternate();
+
+    let mut debug_list = formatter.debug_list();
+
+    for (index, item) in iter.enumerate() {
+        if alt && index >= 20 {
+            return debug_list.finish_non_exhaustive();
+        }
+
+        debug_list.entry(&item);
+    }
+
+    debug_list.finish()
 }
