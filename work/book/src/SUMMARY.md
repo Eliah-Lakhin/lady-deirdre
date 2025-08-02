@@ -38,8 +38,7 @@
 
 - [Lexis](lexis/lexis.md)
     - [Lexical Grammar](lexis/lexical-grammar.md)
-    - [Token Buffer](lexis/token-buffer.md)
-    - [Source Code](lexis/source-code.md)
+    - [Scanning Process](lexis/scanning-process.md)
     - [Code Inspection](lexis/code-inspection.md)
     - [Token References](lexis/token-references.md)
     - [Site References](lexis/site-references.md)

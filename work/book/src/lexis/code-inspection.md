@@ -70,9 +70,9 @@ invalid because its lower bound is greater than its upper bound.
 
 Certain API functions in the crate (e.g.,
 [Document::write](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.write))
-require that the specified span must be valid; otherwise, the function would
-panic. This behavior aligns with Rust's behavior when indexing arrays with
-invalid ranges.
+require that the specified span must be valid; otherwise, the function panics.
+This behavior aligns with Rust's behavior when indexing arrays with invalid
+ranges.
 
 You can check the validity of a range upfront using
 the [ToSpan::is_valid_span](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.ToSpan.html#tymethod.is_valid_span)
