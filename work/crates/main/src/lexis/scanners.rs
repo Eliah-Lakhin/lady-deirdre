@@ -35,40 +35,40 @@
 use std::{iter::FusedIterator, mem::take};
 
 use crate::{
-    lexis::{session::Cursor, ByteIndex, LexisSession, Site, Token},
+    lexis::{session::Cursor, ByteIndex, Chunk, LexisSession, Site, Token},
     report::{ld_assert, ld_assert_ne, system_panic},
 };
 
-///todo
-pub struct TokenScanner<'a, T: Token> {
-    input: &'a str,
-    begin: Cursor<()>,
-    end: Cursor<()>,
-    current: Cursor<()>,
-    pending: Option<T>,
+/// todo
+pub struct ChunkScanner<'input, T: Token> {
+    text: &'input str,
+    begin: Cursor<Site>,
+    end: Cursor<Site>,
+    current: Cursor<Site>,
+    pending: Option<Chunk<'input, T>>,
 }
 
-unsafe impl<'a, T: Token> LexisSession for TokenScanner<'a, T> {
+unsafe impl<'input, T: Token> LexisSession for ChunkScanner<'input, T> {
     #[inline(always)]
     fn advance(&mut self) -> u8 {
-        self.current.advance(self.input)
+        self.current.advance(self.text)
     }
 
     #[inline(always)]
     unsafe fn consume(&mut self) {
-        self.current.consume(self.input)
+        self.current.consume(self.text)
     }
 
     #[inline(always)]
     unsafe fn read(&mut self) -> char {
-        self.current.read(self.input)
+        self.current.read(self.text)
     }
 
     #[inline(always)]
     unsafe fn submit(&mut self) {
         #[cfg(debug_assertions)]
-        if self.current.byte < self.input.len() {
-            let byte = self.input.as_bytes()[self.current.byte];
+        if self.current.byte < self.text.len() {
+            let byte = self.text.as_bytes()[self.current.byte];
 
             if byte & 0xC0 == 0x80 {
                 system_panic!(
@@ -83,7 +83,147 @@ unsafe impl<'a, T: Token> LexisSession for TokenScanner<'a, T> {
     }
 }
 
-impl<'a, T: Token> Iterator for TokenScanner<'a, T> {
+impl<'input, T: Token> Iterator for ChunkScanner<'input, T> {
+    type Item = Chunk<'input, T>;
+
+    #[inline(always)]
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(pending) = take(&mut self.pending) {
+            return Some(pending);
+        }
+
+        if self.begin.byte == self.text.len() {
+            return None;
+        }
+
+        let token = T::scan(self);
+
+        if self.begin.byte != self.end.byte {
+            let chunk = self.chunk(token, &self.begin, &self.end);
+
+            self.begin = self.end;
+            self.current = self.end;
+
+            return Some(chunk);
+        }
+
+        let mismatch = self.begin;
+
+        loop {
+            if self.begin.advance(&self.text) == 0xFF {
+                return Some(self.chunk(T::mismatch(), &mismatch, &self.begin));
+            }
+
+            self.begin.consume(&self.text);
+
+            self.end = self.begin;
+            self.current = self.begin;
+
+            let token = T::scan(self);
+
+            if self.begin.byte == self.end.byte {
+                continue;
+            }
+
+            let result = self.chunk(T::mismatch(), &mismatch, &self.begin);
+            let pending = self.chunk(token, &self.begin, &self.end);
+
+            self.pending = Some(pending);
+
+            self.begin = self.end;
+            self.current = self.end;
+
+            return Some(result);
+        }
+    }
+}
+
+impl<'input, T: Token> FusedIterator for ChunkScanner<'input, T> {}
+
+impl<'input, T: Token> ChunkScanner<'input, T> {
+    ///todo
+    #[inline(always)]
+    pub fn new(input: &'input str) -> Self {
+        Self {
+            text: input,
+            begin: Cursor::default(),
+            end: Cursor::default(),
+            current: Cursor::default(),
+            pending: None,
+        }
+    }
+
+    ///todo
+    #[inline(always)]
+    pub fn as_str(&self) -> &'input str {
+        self.text
+    }
+
+    #[inline(always)]
+    fn chunk(&self, token: T, from: &Cursor<Site>, to: &Cursor<Site>) -> Chunk<'input, T> {
+        let length = to.site - from.site;
+
+        ld_assert!(length > 0, "Empty length.");
+        ld_assert!(from.byte < to.byte, "Invalid range.");
+        ld_assert!(to.byte <= self.text.len(), "Invalid range.");
+
+        let site = from.site;
+        let string = unsafe { self.text.get_unchecked(from.byte..to.byte) };
+
+        Chunk {
+            token,
+            site,
+            length,
+            string,
+        }
+    }
+}
+
+///todo
+pub struct TokenScanner<'input, T: Token> {
+    text: &'input str,
+    begin: Cursor<()>,
+    end: Cursor<()>,
+    current: Cursor<()>,
+    pending: Option<T>,
+}
+
+unsafe impl<'input, T: Token> LexisSession for TokenScanner<'input, T> {
+    #[inline(always)]
+    fn advance(&mut self) -> u8 {
+        self.current.advance(self.text)
+    }
+
+    #[inline(always)]
+    unsafe fn consume(&mut self) {
+        self.current.consume(self.text)
+    }
+
+    #[inline(always)]
+    unsafe fn read(&mut self) -> char {
+        self.current.read(self.text)
+    }
+
+    #[inline(always)]
+    unsafe fn submit(&mut self) {
+        #[cfg(debug_assertions)]
+        if self.current.byte < self.text.len() {
+            let byte = self.text.as_bytes()[self.current.byte];
+
+            if byte & 0xC0 == 0x80 {
+                system_panic!(
+                    "Incorrect use of the LexisSession::submit function.\nA \
+                    byte in front of the current cursor is UTF-8 continuation \
+                    byte."
+                );
+            }
+        }
+
+        self.end = self.current;
+    }
+}
+
+impl<'input, T: Token> Iterator for TokenScanner<'input, T> {
     type Item = T;
 
     #[inline(always)]
@@ -92,7 +232,7 @@ impl<'a, T: Token> Iterator for TokenScanner<'a, T> {
             return Some(pending);
         }
 
-        if self.begin.byte == self.input.len() {
+        if self.begin.byte == self.text.len() {
             return None;
         }
 
@@ -106,11 +246,11 @@ impl<'a, T: Token> Iterator for TokenScanner<'a, T> {
         }
 
         loop {
-            if self.begin.advance(self.input) == 0xFF {
+            if self.begin.advance(self.text) == 0xFF {
                 return Some(T::mismatch());
             }
 
-            self.begin.consume(self.input);
+            self.begin.consume(self.text);
 
             self.end = self.begin;
             self.current = self.begin;
@@ -131,18 +271,24 @@ impl<'a, T: Token> Iterator for TokenScanner<'a, T> {
     }
 }
 
-impl<'a, T: Token> FusedIterator for TokenScanner<'a, T> {}
+impl<'input, T: Token> FusedIterator for TokenScanner<'input, T> {}
 
-impl<'a, T: Token> TokenScanner<'a, T> {
+impl<'input, T: Token> TokenScanner<'input, T> {
     ///todo
     #[inline(always)]
-    pub fn new(input: &'a str) -> Self {
+    pub fn new(input: &'input str) -> Self {
         Self {
-            input,
+            text: input,
             begin: Cursor::default(),
             end: Cursor::default(),
             current: Cursor::default(),
             pending: None,
         }
+    }
+
+    ///todo
+    #[inline(always)]
+    pub fn as_str(&self) -> &'input str {
+        self.text
     }
 }
