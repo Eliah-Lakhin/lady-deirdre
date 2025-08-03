@@ -38,7 +38,7 @@ When designing a syntax parser, it can be useful to perform quick and
 straightforward observations of the parser's step-by-step actions.
 
 The built-in
-[Node::debug](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.Node.html#method.debug)
+[Node::debug](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.Node.html#method.debug)
 function accepts a string of the source code text and prints to the terminal the
 hierarchical structure that shows how the parser descends into the node variant
 parsing procedures and what tokens these procedures consumed. Additionally, it
@@ -105,7 +105,7 @@ Note that in the above example, the parser encountered a syntax error when
 parsing the JSON array (missing a comma between `123` and `"baz"`).
 
 You can generically iterate and print syntax errors using
-the [SyntaxError::display](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.SyntaxError.html#method.display)
+the [SyntaxError::display](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.SyntaxError.html#method.display)
 function.
 
 ```rust,noplayground
@@ -141,7 +141,7 @@ messages.
 ## Syntax Tree Printing
 
 Finally, using
-the [CompilationUnit::display](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/trait.CompilationUnit.html#method.display)[^treedisplay]
+the [CompilationUnit::display](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/trait.CompilationUnit.html#method.display)[^treedisplay]
 method, you can print the output syntax tree to the terminal.
 
 ```rust,noplayground

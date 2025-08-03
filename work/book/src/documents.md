@@ -39,8 +39,8 @@ compilation unit, along with its lexical and syntax structures. It ensures all
 three components remain synchronized.
 
 This object has two
-constructors: [Document::new_mutable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.new_mutable)
-and [Document::new_immutable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.new_immutable).
+constructors: [Document::new_mutable](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html#method.new_mutable)
+and [Document::new_immutable](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html#method.new_immutable).
 
 Both constructors take the source code text as the initial input for the
 Document. The first constructor creates a Document that supports write
@@ -49,7 +49,7 @@ document's text. The second constructor creates a Document that does not support
 write operations but is slightly faster during the document's creation.
 
 To edit a mutable Document, you use
-the [Document::write](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.write)
+the [Document::write](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html#method.write)
 function. Thisfunction takes an arbitrary span of the source code text that you
 wish to rewrite and the text you want to insert in place of the specified span.
 It rescans the tokens of the affected source code fragment (localized to the
@@ -79,7 +79,7 @@ documents depending on the current mode of the program.
 
 When the content of a file is being transferred in parts, for example, through a
 network or by loading the file from disk in chunks, you can create
-a [TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html)
+a [TokenBuffer](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.TokenBuffer.html)
 and continuously append these chunks into the buffer.
 
 Once the file loading is complete, you can use this token buffer as input for
@@ -116,7 +116,7 @@ example, a mutable Document can be used as a simple storage of strings with
 random read/write access.
 
 In this case, you can use
-the [VoidSyntax](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.VoidSyntax.html)
+the [VoidSyntax](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.VoidSyntax.html)
 helper object to enforce the Document to bypass syntax analysis.
 
 ```rust,noplayground
@@ -130,9 +130,9 @@ assert_eq!(doc.substring(..), r#"{ "foo": 456 }"#);
 ```
 
 The above document has full capabilities of
-the [SourceCode](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.SourceCode.html)
+the [SourceCode](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.SourceCode.html)
 trait, but
-the [SyntaxTree](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxTree.html)
+the [SyntaxTree](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxTree.html)
 implementation represents a dummy syntax tree with just a single root node that
 covers empty text.
 
@@ -141,15 +141,15 @@ covers empty text.
 Each instance of the Document (and similar source code storage objects such as
 the TokenBuffer) has a globally unique identifier within the current process.
 
-The [Document::id](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html#method.id)
+The [Document::id](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html#method.id)
 function returns an object of
-type [Id](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/arena/struct.Id.html).
+type [Id](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/arena/struct.Id.html).
 This object is Copy, Eq, and Hash, ensuring that two distinct instances of
 documents have distinct identifiers.
 
 Related objects of a Document, such
-as [NodeRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.NodeRef.html),
-[TokenRef](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenRef.html),
+as [NodeRef](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.NodeRef.html),
+[TokenRef](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.TokenRef.html),
 and others, store the identifier of the document to which they belong.
 
 For example, from a NodeRef referential object, you can determine the identifier
@@ -176,8 +176,8 @@ You can assign a possibly non-unique string name to the document to simplify
 document identification during debugging. For instance, you can use a file name
 as a document's name.
 
-The [Id::set_name](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/arena/struct.Id.html#method.set_name)
-and [Id::name](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/arena/struct.Id.html#method.name)
+The [Id::set_name](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/arena/struct.Id.html#method.set_name)
+and [Id::name](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/arena/struct.Id.html#method.name)
 functions set and retrieve the current document name, respectively.
 Additionally, the crate API uses the document's name in various debugging
 functions. For example, the Display implementation of the Document object prints

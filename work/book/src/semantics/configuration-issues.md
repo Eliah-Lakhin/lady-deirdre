@@ -35,16 +35,16 @@
 # Configuration Issues
 
 Many functions in the semantic analysis framework API can return
-an [AnalysisError](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/enum.AnalysisError.html),
+an [AnalysisError](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/enum.AnalysisError.html),
 representing either a normal result (e.g.,
-an [Interrupted](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/enum.AnalysisError.html#variant.Interrupted)
+an [Interrupted](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/enum.AnalysisError.html#variant.Interrupted)
 error) or an abnormal error indicating a configuration or usage issue with the
 framework.
 
 For example,
-the [write_to_doc](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.MutationAccess.html#method.write_to_doc)
+the [write_to_doc](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/trait.MutationAccess.html#method.write_to_doc)
 function of the mutation task can return
-a [MissingDocument](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/enum.AnalysisError.html#variant.MissingDocument)
+a [MissingDocument](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/enum.AnalysisError.html#variant.MissingDocument)
 error if you specify a document ID that does not exist in the Analyzer (e.g., if
 the document was previously removed from the Analyzer).
 
@@ -52,7 +52,7 @@ The API documentation for framework functions typically describes the types of
 errors that a function can return. Depending on the situation, you may handle
 certain errors manually. However, as a fallback, it is recommended to return
 normal errors from functions that
-return [AnalysisResult](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/type.AnalysisResult.html)
+return [AnalysisResult](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/type.AnalysisResult.html)
 and to panic immediately if an abnormal error occurs. This convention helps
 identify configuration or usage issues more quickly.
 
@@ -63,7 +63,7 @@ likely indicates a bug in your program's code that needs to be fixed.
 In particular, the computable functions of
 the [Chain Analysis](https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/semantics.rs#L337)
 example use
-the [unwrap_abnormal](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/type.AnalysisResult.html#method.unwrap_abnormal)
+the [unwrap_abnormal](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/type.AnalysisResult.html#method.unwrap_abnormal)
 helper function to filter out normal errors from abnormal ones, panicking if an
 abnormal error is encountered.
 
@@ -140,9 +140,9 @@ execution within a few milliseconds, even on low-end CPUs. By default, the
 Analyzer sets the timeout limit to a few seconds[^timeoutlimit]. If a computable
 function exceeds this limit, it indicates a potential issue in the semantics
 design, and the corresponding analysis function (
-e.g., [Attr::snapshot](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html#method.snapshot))
+e.g., [Attr::snapshot](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Attr.html#method.snapshot))
 yields
-a [Timeout](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/enum.AnalysisError.html#variant.Timeout)
+a [Timeout](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/enum.AnalysisError.html#variant.Timeout)
 error.
 
 This mechanism is also useful for detecting cycles. When the semantic graph
@@ -158,7 +158,7 @@ treated as normal errors, assumed to be caused by edge cases in the project's
 source code compilation, and thus handled without panic[^timoutpanic].
 
 [^timeoutlimit]: You can configure this limit via
-the [AnalyzerConfig](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.AnalyzerConfig.html)
+the [AnalyzerConfig](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.AnalyzerConfig.html)
 object, which you pass to the Analyzer's constructor.
 
 [^timoutpanic]: The user of the code editor's extension would prefer the

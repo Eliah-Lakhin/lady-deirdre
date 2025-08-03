@@ -34,12 +34,12 @@
 
 # Scanning Process
 
-The [Token](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.Token.html)
+The [Token](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.Token.html)
 trait discussed in the previous chapter defines the scanning algorithm for
 individual tokens, specific to the language grammar.
 
 Actual scanning of source code and splitting it into tokens happens via another
-trait, [LexisSession](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.LexisSession.html).
+trait, [LexisSession](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.LexisSession.html).
 This trait is independent of particular Token implementations; its purpose is
 to run a scanning algorithm by feeding it the source code text characters as
 input and registering the bounds of the tokens produced by that algorithm.
@@ -73,10 +73,10 @@ Specifically, Lady Deirdre offers three kinds of implementations:
 
 Each implementation has different performance characteristics and feature sets.
 In most cases, when working only with the lexical layer of immutable text,
-[TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html)
+[TokenBuffer](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.TokenBuffer.html)
 is the recommended choice: it balances performance and features well. If you
 need to edit the text, consider using
-[Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html)
+[Document](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html)
 instead. Stateless scanners are most useful when you only need the generated
 lexical stream and do not require the rest of the Lady Deirdre infrastructure.
 
@@ -87,7 +87,7 @@ scanned tokens internally.
 
 To allow inspection of this state — for example, iterating through tokens within
 a specified source code span — these objects implement the
-[SourceCode](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.SourceCode.html)
+[SourceCode](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.SourceCode.html)
 trait. We will discuss this trait's API in more detail in the next chapter as
 well.
 
@@ -132,7 +132,7 @@ println!("{:?}", text.tokens::<JsonToken>());
 
 ## Token Buffer
 
-[TokenBuffer](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/struct.TokenBuffer.html)
+[TokenBuffer](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.TokenBuffer.html)
 persists scanned tokens, allows inspection of their metadata and the underlying
 text at arbitrary points, and supports appending additional text to the end of
 the source code.
@@ -160,10 +160,10 @@ cases.
 
 ## Documents Without Syntax
 
-The [Document](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/units/enum.Document.html)
+The [Document](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html)
 object provides full incremental reparsing capabilities and normally requires
 specifying the syntax grammar, but you can use only its incremental scanning
-features by using [VoidSyntax](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/struct.VoidSyntax.html).
+features by using [VoidSyntax](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.VoidSyntax.html).
 
 ```rust,noplayground
 use lady_deirdre::{lexis::SourceCode, syntax::VoidSyntax, units::Document};

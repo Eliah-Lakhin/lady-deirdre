@@ -88,7 +88,7 @@ comprise many more potentially independent fields.
 
 ## Shared Object
 
-The [Shared](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Shared.html)
+The [Shared](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/sync/struct.Shared.html)
 helper object is Lady Deirdre's reference-counting thread-safe container, akin
 to Rust's standard Arc, with two notable distinctions:
 
@@ -96,7 +96,7 @@ to Rust's standard Arc, with two notable distinctions:
    required, Shared's computation and memory performance are slightly better
    than Arc's.
 2. The
-   [Shared::get_mut](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Shared.html#method.get_mut)
+   [Shared::get_mut](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/sync/struct.Shared.html#method.get_mut)
    function accepts `&mut self`. This makes it more convenient to use when
    constructing Shared in place.
 
@@ -124,7 +124,7 @@ assert_eq!(*shared_b.as_ref(), 120);
 
 ## Shared Computable
 
-The [SharedComputable](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.SharedComputable.html)
+The [SharedComputable](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/trait.SharedComputable.html)
 is a specialized helper trait that automatically implements the Computable trait
 on the type `Shared<T>` if *SharedComputable* is implemented on `T`.
 

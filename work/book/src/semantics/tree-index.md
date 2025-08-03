@@ -74,7 +74,7 @@ code that relate to a single variable:
    one discovered in step 2.
 
 [^traverse]: You can utilize depth-first traversal using
-the [Document::traverse_tree](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree)
+the [Document::traverse_tree](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree)
 function. By skipping the descent into child nodes with spans that don't cover
 the targeted site, the traversal complexity averages to `O(ln(N))`, where N is
 the number of nodes in the tree. In other words, traversing will typically be
@@ -94,7 +94,7 @@ pub enum ChainNode {
 ```
 
 The parameter of this macro attribute is an arbitrary type that implements
-the [Classifier](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.Classifier.html)
+the [Classifier](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/trait.Classifier.html)
 trait. It denotes classes of nodes, essentially serving as indices, and the
 function that partitions requested nodes between these classes.
 
@@ -164,7 +164,7 @@ above function on each syntax tree node, associating each class with the set of
 nodes of this class.
 
 When you edit the document (using
-the [write_to_doc](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.MutationAccess.html#method.write_to_doc)
+the [write_to_doc](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/trait.MutationAccess.html#method.write_to_doc)
 function), the Analyzer incrementally updates this partition based on the
 changes in the structure of the syntax tree.
 
@@ -172,13 +172,13 @@ changes in the structure of the syntax tree.
 
 You can query a set of nodes of the document that belong to a specified class
 both inside the computable functions of the attributes using
-the [read_class](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.AttrContext.html#method.read_class)
+the [read_class](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.AttrContext.html#method.read_class)
 function of the `context` variable, and outside using the
-[snapshot_class](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/trait.AbstractTask.html#method.snapshot_class)
+[snapshot_class](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/trait.AbstractTask.html#method.snapshot_class)
 function of the task object.
 
 Both functions return
-a [Shared](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Shared.html)
+a [Shared](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/sync/struct.Shared.html)
 set of the NodeRefs that point to the nodes in the document's syntax tree
 belonging to the class.
 

@@ -35,7 +35,7 @@
 # Lexical Grammar
 
 The lexical grammar is defined using
-the [Token derive macro](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/derive.Token.html)
+the [Token derive macro](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/derive.Token.html)
 on an arbitrary enum type, which represents the type of the token.
 
 Each enum variant represents a token variant. To specify the scanning rule for
@@ -90,7 +90,7 @@ The type must be Copy, Eq, and `#[repr(u8)]` enum type with variants without a
 body.
 
 The macro will implement
-the [Token](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/lexis/trait.Token.html)
+the [Token](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.Token.html)
 trait on the applicable object, providing not only the scan function itself but
 also additional metadata about the lexical grammar.
 

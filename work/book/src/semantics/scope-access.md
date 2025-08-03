@@ -37,7 +37,7 @@
 For any syntax tree node with semantics, you can obtain a NodeRef reference to
 the top node of the scope in which this node is nested.
 
-The [Semantics::scope_attr](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Semantics.html#method.scope_attr)
+The [Semantics::scope_attr](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Semantics.html#method.scope_attr)
 function returns a special built-in attribute that contains a NodeRef of the top
 node within the node's scope. The Analyzer is responsible for maintaining the
 accuracy of this attribute's value, and you can utilize it within any computable

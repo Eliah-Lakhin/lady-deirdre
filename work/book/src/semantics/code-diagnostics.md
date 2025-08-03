@@ -47,7 +47,7 @@ attribute.
 Subsequently, in the root node's global diagnostics attribute, you can iterate
 through all local diagnostic attributes of scopes and aggregate their values
 into a single set, wrapping it into
-a [Shared](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/sync/struct.Shared.html)
+a [Shared](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/sync/struct.Shared.html)
 structure for efficient cloning. Furthermore, you can enhance the final
 diagnostics set with syntax errors from the normal compilation unit by directly
 reading them from the document[^syntaxerror].
@@ -59,11 +59,11 @@ intensive in edge cases. To mitigate this, the language server could
 periodically examine this attribute with a low-priority analysis task.
 
 Moreover, when utilizing
-the [Attr::snapshot](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/analysis/struct.Attr.html#method.snapshot)
+the [Attr::snapshot](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Attr.html#method.snapshot)
 function to retrieve a copy of the current diagnostics sets, you can leverage
 the version number of the attribute value to determine whether this set needs to
 be republished to the client.
 
-[^syntaxerror]: The [Document::errors](https://docs.rs/lady-deirdre/2.1.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.errors)
+[^syntaxerror]: The [Document::errors](https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.errors)
 function would provide you with an iterator over all syntax errors within the
 compilation unit.
