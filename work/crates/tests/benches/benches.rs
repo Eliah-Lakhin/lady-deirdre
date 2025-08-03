@@ -38,14 +38,13 @@
 use std::time::{Duration, Instant};
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use lady_deirdre::{syntax::VoidSyntax, units::Document};
+use lady_deirdre::{lexis::Scannable, syntax::VoidSyntax, units::Document};
 use lady_deirdre_examples::json_grammar::{lexis::JsonToken, syntax::JsonNode};
 use lady_deirdre_tests::{
     data::{BenchCommand, BenchData},
     lines::LineToken,
     logos::LogosJsonToken,
     nom::nom_parse,
-    scan::LDStatelessScanner,
     ts::TSParser,
 };
 use logos::Logos;
@@ -201,7 +200,9 @@ pub fn bench_parsing(criterion: &mut Criterion) {
 
                 for _ in 0..iters {
                     let mut parser = tree_sitter::Parser::new();
-                    parser.set_language(&tree_sitter_json::language()).unwrap();
+                    parser
+                        .set_language(&tree_sitter_json::LANGUAGE.into())
+                        .unwrap();
 
                     let start = Instant::now();
                     let result = parser.parse(small_text, None).unwrap();
@@ -223,7 +224,9 @@ pub fn bench_parsing(criterion: &mut Criterion) {
 
                 for _ in 0..iters {
                     let mut parser = tree_sitter::Parser::new();
-                    parser.set_language(&tree_sitter_json::language()).unwrap();
+                    parser
+                        .set_language(&tree_sitter_json::LANGUAGE.into())
+                        .unwrap();
 
                     let start = Instant::now();
                     let result = parser.parse(large_text, None).unwrap();
@@ -710,10 +713,10 @@ pub fn bench_scanning(criterion: &mut Criterion) {
                 let mut time = Duration::ZERO;
 
                 for _ in 0..iters {
-                    let scanner = LDStatelessScanner::<JsonToken>::new(small_text);
+                    let scanner = small_text.tokens::<JsonToken>();
 
                     let start = Instant::now();
-                    let mut last = scanner.last();
+                    let last = scanner.last();
                     time += start.elapsed();
 
                     assert!(last.is_some());
@@ -732,10 +735,10 @@ pub fn bench_scanning(criterion: &mut Criterion) {
                 let mut time = Duration::ZERO;
 
                 for _ in 0..iters {
-                    let scanner = LDStatelessScanner::<JsonToken>::new(large_text);
+                    let scanner = large_text.tokens::<JsonToken>();
 
                     let start = Instant::now();
-                    let mut last = scanner.last();
+                    let last = scanner.last();
                     time += start.elapsed();
 
                     assert!(last.is_some());
@@ -757,7 +760,7 @@ pub fn bench_scanning(criterion: &mut Criterion) {
                     let scanner = LogosJsonToken::lexer(small_text);
 
                     let start = Instant::now();
-                    let mut last = scanner.last();
+                    let last = scanner.last();
                     time += start.elapsed();
 
                     assert!(last.is_some());
@@ -779,7 +782,7 @@ pub fn bench_scanning(criterion: &mut Criterion) {
                     let scanner = LogosJsonToken::lexer(large_text);
 
                     let start = Instant::now();
-                    let mut last = scanner.last();
+                    let last = scanner.last();
                     time += start.elapsed();
 
                     assert!(last.is_some());

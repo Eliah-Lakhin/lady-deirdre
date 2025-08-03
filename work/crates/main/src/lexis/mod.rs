@@ -39,6 +39,7 @@ mod cursor;
 mod lines;
 mod position;
 mod rule;
+mod scanners;
 mod session;
 mod site;
 mod span;
@@ -56,6 +57,14 @@ pub use crate::lexis::{
     lines::LineIndex,
     position::{Column, Line, Position},
     rule::{TokenRule, TokenSet, EMPTY_TOKEN_SET, EOI, FULL_TOKEN_SET, MISMATCH},
+    scanners::{
+        ChunkIndicesScanner,
+        ChunkScanner,
+        Scannable,
+        TokenIndicesScanner,
+        TokenScanner,
+        TokenStream,
+    },
     session::LexisSession,
     site::{ByteIndex, Length, Site, SiteRef, ToSite, NIL_SITE_REF},
     span::{PositionSpan, SiteRefSpan, SiteSpan, ToSpan},

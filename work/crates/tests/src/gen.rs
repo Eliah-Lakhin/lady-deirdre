@@ -32,17 +32,17 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use std::{mem::take, ops::Range};
+use std::mem::take;
 
 use lady_deirdre::{
-    lexis::{Length, Site, SiteSpan, SourceCode, ToSpan},
+    lexis::{Length, Site, SiteSpan, SourceCode},
     syntax::{NodeRef, PolyRef, SyntaxTree},
-    units::{CompilationUnit, Document},
+    units::Document,
 };
 use lady_deirdre_examples::json_grammar::syntax::JsonNode;
 use petname::{Generator, Petnames};
 use rand::{
-    distributions::{uniform::SampleRange, Distribution, WeightedIndex},
+    distributions::{Distribution, WeightedIndex},
     Rng,
 };
 use serde::{Deserialize, Serialize};
@@ -291,7 +291,7 @@ impl JsonEditsGen {
 
                     self.commit();
 
-                    let mut more_edits = rng.gen_range(0..self.config.local_edits);
+                    let more_edits = rng.gen_range(0..self.config.local_edits);
 
                     for _ in 0..more_edits {
                         if !self.modify_struct(rng, node_ref, depth, true, &action) {
@@ -320,7 +320,7 @@ impl JsonEditsGen {
 
                     self.commit();
 
-                    let mut more_edits = rng.gen_range(0..self.config.local_edits);
+                    let more_edits = rng.gen_range(0..self.config.local_edits);
 
                     for _ in 0..more_edits {
                         if !self.modify_struct(rng, node_ref, depth, false, &action) {
@@ -363,19 +363,12 @@ impl JsonEditsGen {
         as_object: bool,
         action: &Action,
     ) -> bool {
-        let max_branching;
         let components;
 
         match node_ref.deref(&self.doc) {
-            Some(JsonNode::Object { entries, .. }) => {
-                max_branching = self.config.object_max_branching;
-                components = entries
-            }
+            Some(JsonNode::Object { entries, .. }) => components = entries,
 
-            Some(JsonNode::Array { items, .. }) => {
-                max_branching = self.config.array_max_branching;
-                components = items
-            }
+            Some(JsonNode::Array { items, .. }) => components = items,
             _ => return false,
         };
 
@@ -442,7 +435,7 @@ impl JsonEditsGen {
                 0 => return false,
 
                 1 => {
-                    let Some(mut span) = node_ref.span(&self.doc) else {
+                    let Some(span) = node_ref.span(&self.doc) else {
                         panic!("Malformed node.");
                     };
 
@@ -460,7 +453,7 @@ impl JsonEditsGen {
                     let mut chosen_index = components.len() - 1;
 
                     for (probe, component_ref) in components.iter().rev().enumerate() {
-                        let Some(mut span) = component_ref.span(&self.doc) else {
+                        let Some(span) = component_ref.span(&self.doc) else {
                             panic!("Malformed node.");
                         };
 

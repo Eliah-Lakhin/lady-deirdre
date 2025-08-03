@@ -75,7 +75,7 @@ version = "2.0"
 version = "0.5"
 
 [dependencies.dirs]
-version = "5.0"
+version = "6.0"
 
 [dependencies.serde]
 version = "1.0"
@@ -84,16 +84,17 @@ version = "1.0"
 version = "1.0"
 
 [dependencies.nom]
-version = "8.0.0-alpha2"
+version = "8.0.0"
 
 [dependencies.tree-sitter]
-version = "0.22"
+version = "0.25"
 
 [dependencies.tree-sitter-json]
-version = "0.21"
+version = "0.24"
 
 [dependencies.ropey]
-version = "1.6"
+version = "2.0.0-beta.1"
+features = ["metric_chars"]
 
 [dependencies.logos]
-version = "0.14"
+version = "0.15"

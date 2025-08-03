@@ -34,8 +34,7 @@
 
 use std::{
     fmt::{Debug, Formatter},
-    fs::{read_to_string, remove_file, write, File},
-    io::Write,
+    fs::{read_to_string, write},
     thread::sleep,
     time::Duration,
 };

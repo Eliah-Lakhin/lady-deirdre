@@ -62,19 +62,22 @@ use crate::{
 
 /// A growable buffer of tokens.
 ///
-/// This object provides canonical implementation of the [SourceCode] trait
-/// specifically optimized for the one-time scanning of the source code text.
+/// This object provides canonical implementation of the [SourceCode] trait,
+/// specifically optimized for one-time scanning of source code text.
 ///
-/// The TokenBuffer parses the lexical structure of the source code text and
-/// provides a way to append text to the buffer, but it does not offer
-/// incremental reparsing capabilities when the user edits random ranges
-/// of the source code text.
+/// TokenBuffer parses the lexical structure of the source code and allows
+/// appending text to the buffer, but it does not support incremental reparsing
+/// when arbitrary ranges of the source code are edited.
 ///
-/// If you need a compilation unit with the incremental reparsing capabilities
-/// but without the syntax tree parser, consider using the mutable
-/// [Document](crate::units::Document) or
-/// [MutableUnit](crate::units::MutableUnit) specifying the type of the Node
-/// to `VoidSyntax<T>` (see [VoidSyntax](crate::syntax::VoidSyntax)).
+/// If a compilation unit with incremental reparsing capabilities is required
+/// but a syntax tree parser is not, consider using the mutable
+/// [Document](crate::units::Document) or [MutableUnit](crate::units::MutableUnit)
+/// with the node type set to `VoidSyntax<T>` (see
+/// [VoidSyntax](crate::syntax::VoidSyntax)).
+///
+/// If a stateful buffer with random-access capabilities is not needed, consider
+/// using one of the [stateless lexical scanners](crate::lexis::Scannable)
+/// instead.
 pub struct TokenBuffer<T: Token> {
     id: Id,
     pub(crate) tokens: Vec<T>,
@@ -405,7 +408,6 @@ impl<T: Token> TokenBuffer<T> {
 
             site = match self.sites.pop() {
                 Some(site) => site,
-
                 // Safety: Underlying TokenBuffer collections represent
                 //         a sequence of Chunks.
                 None => unsafe { ld_unreachable!("TokenBuffer inconsistency.") },
@@ -461,7 +463,7 @@ impl<T: Token> TokenBuffer<T> {
     }
 
     #[inline]
-    pub(super) fn push(&mut self, token: T, from: &Cursor, to: &Cursor) {
+    pub(super) fn push(&mut self, token: T, from: &Cursor<Site>, to: &Cursor<Site>) {
         let span = to.site - from.site;
 
         ld_assert!(span > 0, "Empty span.");

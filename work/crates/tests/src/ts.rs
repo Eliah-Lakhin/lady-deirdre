@@ -38,9 +38,9 @@ use std::{
 };
 
 use lady_deirdre::{
-    lexis::{Position, PositionSpan, SiteSpan, SourceCode, ToSite},
-    syntax::{Node, NodeRef, SyntaxTree},
-    units::{Document, MutableUnit},
+    lexis::{Position, PositionSpan, SiteSpan, SourceCode},
+    syntax::{NodeRef, SyntaxTree},
+    units::Document,
 };
 use lady_deirdre_examples::json_grammar::syntax::JsonNode;
 use ropey::Rope;
@@ -57,7 +57,9 @@ impl TSParser {
         let source = Rope::new();
 
         let mut parser = Parser::new();
-        parser.set_language(&tree_sitter_json::language()).unwrap();
+        parser
+            .set_language(&tree_sitter_json::LANGUAGE.into())
+            .unwrap();
 
         Self {
             source,
@@ -102,13 +104,14 @@ impl TSParser {
         tree.edit(&edit);
         tree = self
             .parser
-            .parse_with(
+            .parse_with_options(
                 &mut |byte, _pos| {
-                    let (chunk, begin, _, _) = self.source.chunk_at_byte(byte);
+                    let (chunk, begin) = self.source.chunk(byte);
 
                     &chunk[(byte - begin)..]
                 },
                 Some(&tree),
+                None,
             )
             .unwrap();
 

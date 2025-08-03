@@ -40,17 +40,16 @@ pub mod gen;
 pub mod lines;
 pub mod logos;
 pub mod nom;
-pub mod scan;
 pub mod ts;
 
 #[cfg(test)]
 mod tests {
     use lady_deirdre::{
-        lexis::{SourceCode, TokenBuffer},
+        lexis::{Scannable, SourceCode, TokenBuffer},
         syntax::VoidSyntax,
         units::Document,
     };
-    use lady_deirdre_examples::json_grammar::{lexis::JsonToken, syntax::JsonNode};
+    use lady_deirdre_examples::json_grammar::lexis::JsonToken;
     use logos::Logos;
     use rand::prelude::*;
 
@@ -59,7 +58,6 @@ mod tests {
         gen::{JsonBootstrapGen, JsonEditsGen, JsonGenConfig},
         lines::LineToken,
         logos::LogosJsonToken,
-        scan::LDStatelessScanner,
         ts::TSParser,
     };
 
@@ -188,7 +186,7 @@ mod tests {
             panic!("Missing Small File init command.");
         };
 
-        let tokens = LDStatelessScanner::<JsonToken>::new(text).collect::<Vec<_>>();
+        let tokens = text.tokens::<JsonToken>().collect::<Vec<_>>();
         let buffer = TokenBuffer::<JsonToken>::parse(text);
 
         assert_eq!(tokens.len(), buffer.tokens());
@@ -201,7 +199,7 @@ mod tests {
             panic!("Missing Small File init command.");
         };
 
-        let tokens = LDStatelessScanner::<JsonToken>::new(text).collect::<Vec<_>>();
+        let tokens = text.tokens::<JsonToken>().collect::<Vec<_>>();
         let buffer = TokenBuffer::<JsonToken>::parse(text);
 
         assert_eq!(tokens.len(), buffer.tokens());
