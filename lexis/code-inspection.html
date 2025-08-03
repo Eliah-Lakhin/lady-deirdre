@@ -1,0 +1,419 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Code Inspection - The Lady Deirdre Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../overview.html"><strong aria-hidden="true">2.</strong> Overview</a></li><li class="chapter-item expanded "><a href="../lexis/lexis.html"><strong aria-hidden="true">3.</strong> Lexis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../lexis/lexical-grammar.html"><strong aria-hidden="true">3.1.</strong> Lexical Grammar</a></li><li class="chapter-item expanded "><a href="../lexis/scanning-process.html"><strong aria-hidden="true">3.2.</strong> Scanning Process</a></li><li class="chapter-item expanded "><a href="../lexis/code-inspection.html" class="active"><strong aria-hidden="true">3.3.</strong> Code Inspection</a></li><li class="chapter-item expanded "><a href="../lexis/token-references.html"><strong aria-hidden="true">3.4.</strong> Token References</a></li><li class="chapter-item expanded "><a href="../lexis/site-references.html"><strong aria-hidden="true">3.5.</strong> Site References</a></li></ol></li><li class="chapter-item expanded "><a href="../syntax/syntax.html"><strong aria-hidden="true">4.</strong> Syntax</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../syntax/syntax-grammar.html"><strong aria-hidden="true">4.1.</strong> Syntax Grammar</a></li><li class="chapter-item expanded "><a href="../syntax/error-recovering.html"><strong aria-hidden="true">4.2.</strong> Error Recovering</a></li><li class="chapter-item expanded "><a href="../syntax/debugging.html"><strong aria-hidden="true">4.3.</strong> Debugging</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-tree.html"><strong aria-hidden="true">4.4.</strong> Syntax Tree</a></li><li class="chapter-item expanded "><a href="../syntax/node-references.html"><strong aria-hidden="true">4.5.</strong> Node References</a></li><li class="chapter-item expanded "><a href="../syntax/tree-inspection.html"><strong aria-hidden="true">4.6.</strong> Tree Inspection</a></li><li class="chapter-item expanded "><a href="../syntax/hand-written-parsers.html"><strong aria-hidden="true">4.7.</strong> Hand-Written Parsers</a></li><li class="chapter-item expanded "><a href="../syntax/overriding-a-parser.html"><strong aria-hidden="true">4.8.</strong> Overriding a Parser</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-session.html"><strong aria-hidden="true">4.9.</strong> Syntax Session</a></li><li class="chapter-item expanded "><a href="../syntax/pratts-algorithm.html"><strong aria-hidden="true">4.10.</strong> Pratt's Algorithm</a></li></ol></li><li class="chapter-item expanded "><a href="../documents.html"><strong aria-hidden="true">5.</strong> Documents</a></li><li class="chapter-item expanded "><a href="../semantics/semantics.html"><strong aria-hidden="true">6.</strong> Semantics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../semantics/partition-into-scopes.html"><strong aria-hidden="true">6.1.</strong> Partition Into Scopes</a></li><li class="chapter-item expanded "><a href="../semantics/grammar-setup.html"><strong aria-hidden="true">6.2.</strong> Grammar Setup</a></li><li class="chapter-item expanded "><a href="../semantics/semantic-graph.html"><strong aria-hidden="true">6.3.</strong> Semantic Graph</a></li><li class="chapter-item expanded "><a href="../semantics/incremental-computations.html"><strong aria-hidden="true">6.4.</strong> Incremental Computations</a></li><li class="chapter-item expanded "><a href="../semantics/side-effects.html"><strong aria-hidden="true">6.5.</strong> Side Effects</a></li><li class="chapter-item expanded "><a href="../semantics/scope-access.html"><strong aria-hidden="true">6.6.</strong> Scope Access</a></li><li class="chapter-item expanded "><a href="../semantics/granularity.html"><strong aria-hidden="true">6.7.</strong> Granularity</a></li><li class="chapter-item expanded "><a href="../semantics/the-analyzer.html"><strong aria-hidden="true">6.8.</strong> The Analyzer</a></li><li class="chapter-item expanded "><a href="../semantics/tasks-management.html"><strong aria-hidden="true">6.9.</strong> Tasks Management</a></li><li class="chapter-item expanded "><a href="../semantics/multi-file-analysis.html"><strong aria-hidden="true">6.10.</strong> Multi-File Analysis</a></li><li class="chapter-item expanded "><a href="../semantics/language-server-design.html"><strong aria-hidden="true">6.11.</strong> Language Server Design</a></li><li class="chapter-item expanded "><a href="../semantics/configuration-issues.html"><strong aria-hidden="true">6.12.</strong> Configuration Issues</a></li><li class="chapter-item expanded "><a href="../semantics/code-diagnostics.html"><strong aria-hidden="true">6.13.</strong> Code Diagnostics</a></li><li class="chapter-item expanded "><a href="../semantics/tree-index.html"><strong aria-hidden="true">6.14.</strong> Tree Index</a></li></ol></li><li class="chapter-item expanded "><a href="../code-formatters/code-formatters.html"><strong aria-hidden="true">7.</strong> Code Formatters</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../code-formatters/pretty-printer.html"><strong aria-hidden="true">7.1.</strong> Pretty Printer</a></li></ol></li><li class="chapter-item expanded "><a href="../snippets.html"><strong aria-hidden="true">8.</strong> Snippets</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Lady Deirdre Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!------------------------------------------------------------------------------
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
+
+  This work is proprietary software with source-available code.
+
+  To copy, use, distribute, or contribute to this work, you must agree to
+  the terms of the General License Agreement:
+
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
+
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
+
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
+
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
+
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
+
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
+
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
+<h1 id="code-inspection"><a class="header" href="#code-inspection">Code Inspection</a></h1>
+<h2 id="text-addressing"><a class="header" href="#text-addressing">Text Addressing</a></h2>
+<p>In Lady Deirdre, the minimal unit for indexing the source code text is the
+Unicode character.</p>
+<p>A <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/type.Site.html">Site</a>
+is a numeric type (an alias of <code>usize</code>) representing the absolute Unicode
+character index in a string.</p>
+<p><a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/type.SiteSpan.html">SiteSpan</a>
+is an alias type of <code>Range&lt;Site&gt;</code> that denotes a fragment (or <em>span</em>) of the
+source code.</p>
+<p>Most API functions within the crate conveniently
+accept <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.ToSite.html">impl ToSite</a>
+or <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.ToSpan.html">impl ToSpan</a>
+objects when users need to address specific source code
+characters or spans of characters. These traits facilitate automatic conversion
+between different representations of source code indices.</p>
+<p>One example of a source code index type is
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.Position.html">Position</a>
+object, which references code in terms of the line and column within the
+line<sup class="footnote-reference"><a href="#position">1</a></sup>. It implements the <em>ToSite</em> trait.</p>
+<p>For any type implementing the <em>ToSite</em> trait, <em>ToSpan</em> is automatically
+implemented for all standard Rust range types with bound of this type.
+For instance, both <em>Site</em> and <em>Position</em> types implement the <em>ToSite</em> trait,
+making <code>10..20</code>, <code>10..=20</code>, and <code>10..</code>,
+and <code>Position::new(10, 40)..Position::new(14, 2)</code> valid span types.</p>
+<p>However, a particular span instance could be invalid; for instance, <code>20..10</code> is
+invalid because its lower bound is greater than its upper bound.</p>
+<p>Certain API functions in the crate (e.g.,
+<a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html#method.write">Document::write</a>)
+require that the specified span must be valid; otherwise, the function panics.
+This behavior aligns with Rust's behavior when indexing arrays with invalid
+ranges.</p>
+<p>You can check the validity of a range upfront using
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.ToSpan.html#tymethod.is_valid_span">ToSpan::is_valid_span</a>
+function.</p>
+<p>The RangeFull <code>..</code> object always represents the entire content and is always
+valid.</p>
+<pre><code class="language-rust noplayground">use lady_deirdre::lexis::{Position, ToSpan, TokenBuffer};
+
+let mut buf = TokenBuffer::&lt;JsonToken&gt;::from("foo\nbar\nbaz");
+
+assert!((2..7).is_valid_span(&amp;buf));
+assert!((2..).is_valid_span(&amp;buf));
+assert!((..).is_valid_span(&amp;buf));
+assert!(!(7..2).is_valid_span(&amp;buf));
+assert!((Position::new(1, 2)..Position::new(3, 1)).is_valid_span(&amp;buf));</code></pre>
+<div class="footnote-definition" id="position"><sup class="footnote-definition-label">1</sup>
+<p>Please note that the line and column numbers in
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.Position.html">Position</a>
+object are one-based: 1 denotes the first line, 2 denotes the second line, and
+so forth.</p>
+</div>
+<h2 id="text-inspection"><a class="header" href="#text-inspection">Text Inspection</a></h2>
+<p>The
+following <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.SourceCode.html">SourceCode</a>'
+s functions enable you to query various metadata of the compilation unit's text.</p>
+<pre><code class="language-rust noplayground">use lady_deirdre::lexis::{SourceCode, TokenBuffer};
+
+let mut buf = TokenBuffer::&lt;JsonToken&gt;::from("foo, bar, baz");
+
+// The `substring` function returns a `Cow&lt;str&gt;` representing the substring
+// within the specified span.
+// The underlying implementation attempts to return a borrowed string whenever
+// possible.
+assert_eq!(buf.substring(2..7), "o, ba");
+
+// Iterates through the Unicode characters in the span.
+for ch in buf.chars(2..7) {
+    println!("{ch}");
+}
+
+// A total number of Unicode characters.
+assert_eq!(buf.length(), 13);
+
+// Returns true if the code is empty (contains no text or tokens).
+assert!(!buf.is_empty());
+
+// A total number of lines (delimited by `\n`).
+assert_eq!(buf.lines().lines_count(), 1);</code></pre>
+<p>From <code>buf.lines()</code>, you receive
+a <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.LineIndex.html">LineIndex</a>
+object that provides additional functions for querying metadata about the source
+code lines. For example, you can fetch the length of a particular line using
+this object.</p>
+<h2 id="tokens-iteration"><a class="header" href="#tokens-iteration">Tokens Iteration</a></h2>
+<p>The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.SourceCode.html#tymethod.cursor">SourceCode::cursor</a>
+and its simplified
+version <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.SourceCode.html#method.chunks">chunks</a>
+allow you to iterate through the tokens of the source code.</p>
+<p>Both functions accept a span of the source code text and yield tokens that
+"touch" the specified span. Touching means that the token's string is fully
+covered by, intersects with, or at least contacts the span within its bounds.</p>
+<p>For example, if the text "FooBarBazWaz" consists of the tokens "Foo", "Bar",
+"Baz", and "Waz", the span <code>3..7</code> would contact the "Foo" token (3 is the end of
+the token's span), fully cover the "Bar" token, and intersect with the "Baz"
+token (by the "B" character). However, the "Waz" token is outside of this span
+and will not be yielded.</p>
+<p>In other words, these functions attempt to yield the widest set of tokens that
+are in any way related to the specified span.</p>
+<p>The <em>chunks</em> function simply returns a standard iterator over the token
+metadata. Each
+<a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.Chunk.html">Chunk</a>
+object contains the token instance, a reference to its string, the absolute Site
+of the beginning of the token, and the substring length in Unicode
+characters<sup class="footnote-reference"><a href="#chunk">2</a></sup>.</p>
+<pre><code class="language-rust noplayground">use lady_deirdre::lexis::{Chunk, SourceCode, TokenBuffer};
+
+let buf = TokenBuffer::&lt;JsonToken&gt;::from("123 true null");
+
+for Chunk {
+    token,
+    string,
+    site,
+    length,
+} in buf.chunks(..)
+{
+    println!("---");
+    println!("Token: {token:?}");
+    println!("String: {string:?}");
+    println!("Site: {site}");
+    println!("Length: {length}");
+}</code></pre>
+<p>The <em>cursor</em> function returns a more
+complex <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.TokenCursor.html">TokenCursor</a>
+object that implements a cursor-like API with built-in lookahead capabilities
+and manual control over the iteration process. This object is particularly
+useful for syntax parsing and will be discussed in more detail in the subsequent
+chapters of this guide.</p>
+<p>To give you a brief overview of the token cursor, the above code could be
+rewritten with the token cursor as follows:</p>
+<pre><code class="language-rust noplayground">use lady_deirdre::lexis::{SourceCode, TokenBuffer, TokenCursor};
+
+let buf = TokenBuffer::&lt;JsonToken&gt;::from("123 true null");
+
+let mut cursor = buf.cursor(..);
+
+loop {
+    // 0 means zero lookahead -- we are looking at the point of where the cursor
+    // is currently pointing.
+    let token = cursor.token(0);
+
+    // If the cursor reached the end of input, we are breaking the loop.
+    if token == JsonToken::EOI {
+        break;
+    }
+
+    println!("---");
+    println!("Token: {:?}", cursor.token(0));
+    println!("String: {:?}", cursor.string(0));
+    println!("Site: {:?}", cursor.site(0));
+    println!("Length: {:?}", cursor.length(0));
+
+    // Manually moves token cursor to the next token.
+    cursor.advance();
+}</code></pre>
+<div class="footnote-definition" id="chunk"><sup class="footnote-definition-label">2</sup>
+<p>Note that the <em>Chunk</em> object represents a valid span and implements
+the <em>ToSpan</em> trait.</p>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../lexis/scanning-process.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../lexis/token-references.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../lexis/scanning-process.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../lexis/token-references.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

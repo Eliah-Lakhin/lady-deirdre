@@ -1,0 +1,272 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Hand-Written Parsers - The Lady Deirdre Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../overview.html"><strong aria-hidden="true">2.</strong> Overview</a></li><li class="chapter-item expanded "><a href="../lexis/lexis.html"><strong aria-hidden="true">3.</strong> Lexis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../lexis/lexical-grammar.html"><strong aria-hidden="true">3.1.</strong> Lexical Grammar</a></li><li class="chapter-item expanded "><a href="../lexis/scanning-process.html"><strong aria-hidden="true">3.2.</strong> Scanning Process</a></li><li class="chapter-item expanded "><a href="../lexis/code-inspection.html"><strong aria-hidden="true">3.3.</strong> Code Inspection</a></li><li class="chapter-item expanded "><a href="../lexis/token-references.html"><strong aria-hidden="true">3.4.</strong> Token References</a></li><li class="chapter-item expanded "><a href="../lexis/site-references.html"><strong aria-hidden="true">3.5.</strong> Site References</a></li></ol></li><li class="chapter-item expanded "><a href="../syntax/syntax.html"><strong aria-hidden="true">4.</strong> Syntax</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../syntax/syntax-grammar.html"><strong aria-hidden="true">4.1.</strong> Syntax Grammar</a></li><li class="chapter-item expanded "><a href="../syntax/error-recovering.html"><strong aria-hidden="true">4.2.</strong> Error Recovering</a></li><li class="chapter-item expanded "><a href="../syntax/debugging.html"><strong aria-hidden="true">4.3.</strong> Debugging</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-tree.html"><strong aria-hidden="true">4.4.</strong> Syntax Tree</a></li><li class="chapter-item expanded "><a href="../syntax/node-references.html"><strong aria-hidden="true">4.5.</strong> Node References</a></li><li class="chapter-item expanded "><a href="../syntax/tree-inspection.html"><strong aria-hidden="true">4.6.</strong> Tree Inspection</a></li><li class="chapter-item expanded "><a href="../syntax/hand-written-parsers.html" class="active"><strong aria-hidden="true">4.7.</strong> Hand-Written Parsers</a></li><li class="chapter-item expanded "><a href="../syntax/overriding-a-parser.html"><strong aria-hidden="true">4.8.</strong> Overriding a Parser</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-session.html"><strong aria-hidden="true">4.9.</strong> Syntax Session</a></li><li class="chapter-item expanded "><a href="../syntax/pratts-algorithm.html"><strong aria-hidden="true">4.10.</strong> Pratt's Algorithm</a></li></ol></li><li class="chapter-item expanded "><a href="../documents.html"><strong aria-hidden="true">5.</strong> Documents</a></li><li class="chapter-item expanded "><a href="../semantics/semantics.html"><strong aria-hidden="true">6.</strong> Semantics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../semantics/partition-into-scopes.html"><strong aria-hidden="true">6.1.</strong> Partition Into Scopes</a></li><li class="chapter-item expanded "><a href="../semantics/grammar-setup.html"><strong aria-hidden="true">6.2.</strong> Grammar Setup</a></li><li class="chapter-item expanded "><a href="../semantics/semantic-graph.html"><strong aria-hidden="true">6.3.</strong> Semantic Graph</a></li><li class="chapter-item expanded "><a href="../semantics/incremental-computations.html"><strong aria-hidden="true">6.4.</strong> Incremental Computations</a></li><li class="chapter-item expanded "><a href="../semantics/side-effects.html"><strong aria-hidden="true">6.5.</strong> Side Effects</a></li><li class="chapter-item expanded "><a href="../semantics/scope-access.html"><strong aria-hidden="true">6.6.</strong> Scope Access</a></li><li class="chapter-item expanded "><a href="../semantics/granularity.html"><strong aria-hidden="true">6.7.</strong> Granularity</a></li><li class="chapter-item expanded "><a href="../semantics/the-analyzer.html"><strong aria-hidden="true">6.8.</strong> The Analyzer</a></li><li class="chapter-item expanded "><a href="../semantics/tasks-management.html"><strong aria-hidden="true">6.9.</strong> Tasks Management</a></li><li class="chapter-item expanded "><a href="../semantics/multi-file-analysis.html"><strong aria-hidden="true">6.10.</strong> Multi-File Analysis</a></li><li class="chapter-item expanded "><a href="../semantics/language-server-design.html"><strong aria-hidden="true">6.11.</strong> Language Server Design</a></li><li class="chapter-item expanded "><a href="../semantics/configuration-issues.html"><strong aria-hidden="true">6.12.</strong> Configuration Issues</a></li><li class="chapter-item expanded "><a href="../semantics/code-diagnostics.html"><strong aria-hidden="true">6.13.</strong> Code Diagnostics</a></li><li class="chapter-item expanded "><a href="../semantics/tree-index.html"><strong aria-hidden="true">6.14.</strong> Tree Index</a></li></ol></li><li class="chapter-item expanded "><a href="../code-formatters/code-formatters.html"><strong aria-hidden="true">7.</strong> Code Formatters</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../code-formatters/pretty-printer.html"><strong aria-hidden="true">7.1.</strong> Pretty Printer</a></li></ol></li><li class="chapter-item expanded "><a href="../snippets.html"><strong aria-hidden="true">8.</strong> Snippets</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Lady Deirdre Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!------------------------------------------------------------------------------
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
+
+  This work is proprietary software with source-available code.
+
+  To copy, use, distribute, or contribute to this work, you must agree to
+  the terms of the General License Agreement:
+
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
+
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
+
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
+
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
+
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
+
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
+
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
+<h1 id="hand-written-parsers"><a class="header" href="#hand-written-parsers">Hand-Written Parsers</a></h1>
+<p>The following chapters cover more advanced topics, providing an in-depth
+exploration of the anatomy of Lady Deirdre's parsers. They will guide you on how
+to override parsers generated by the Node macro with manually implemented parse
+functions.</p>
+<p>One common case where you might want to implement the parse procedure manually
+is infix expression parsing. Infix expressions usually require left recursion,
+which cannot be directly expressed in terms of LL(1) grammars.</p>
+<p>These chapters will guide you through
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/tree/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/expr_parser">Expr Parser</a>
+example. This example demonstrates how to parse boolean expressions
+(e.g., <code>(true | false) &amp; true</code>) using the Pratt algorithm.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../syntax/tree-inspection.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../syntax/overriding-a-parser.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../syntax/tree-inspection.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../syntax/overriding-a-parser.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

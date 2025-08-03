@@ -1,0 +1,574 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Overview - The Lady Deirdre Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="overview.html" class="active"><strong aria-hidden="true">2.</strong> Overview</a></li><li class="chapter-item expanded "><a href="lexis/lexis.html"><strong aria-hidden="true">3.</strong> Lexis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="lexis/lexical-grammar.html"><strong aria-hidden="true">3.1.</strong> Lexical Grammar</a></li><li class="chapter-item expanded "><a href="lexis/scanning-process.html"><strong aria-hidden="true">3.2.</strong> Scanning Process</a></li><li class="chapter-item expanded "><a href="lexis/code-inspection.html"><strong aria-hidden="true">3.3.</strong> Code Inspection</a></li><li class="chapter-item expanded "><a href="lexis/token-references.html"><strong aria-hidden="true">3.4.</strong> Token References</a></li><li class="chapter-item expanded "><a href="lexis/site-references.html"><strong aria-hidden="true">3.5.</strong> Site References</a></li></ol></li><li class="chapter-item expanded "><a href="syntax/syntax.html"><strong aria-hidden="true">4.</strong> Syntax</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="syntax/syntax-grammar.html"><strong aria-hidden="true">4.1.</strong> Syntax Grammar</a></li><li class="chapter-item expanded "><a href="syntax/error-recovering.html"><strong aria-hidden="true">4.2.</strong> Error Recovering</a></li><li class="chapter-item expanded "><a href="syntax/debugging.html"><strong aria-hidden="true">4.3.</strong> Debugging</a></li><li class="chapter-item expanded "><a href="syntax/syntax-tree.html"><strong aria-hidden="true">4.4.</strong> Syntax Tree</a></li><li class="chapter-item expanded "><a href="syntax/node-references.html"><strong aria-hidden="true">4.5.</strong> Node References</a></li><li class="chapter-item expanded "><a href="syntax/tree-inspection.html"><strong aria-hidden="true">4.6.</strong> Tree Inspection</a></li><li class="chapter-item expanded "><a href="syntax/hand-written-parsers.html"><strong aria-hidden="true">4.7.</strong> Hand-Written Parsers</a></li><li class="chapter-item expanded "><a href="syntax/overriding-a-parser.html"><strong aria-hidden="true">4.8.</strong> Overriding a Parser</a></li><li class="chapter-item expanded "><a href="syntax/syntax-session.html"><strong aria-hidden="true">4.9.</strong> Syntax Session</a></li><li class="chapter-item expanded "><a href="syntax/pratts-algorithm.html"><strong aria-hidden="true">4.10.</strong> Pratt's Algorithm</a></li></ol></li><li class="chapter-item expanded "><a href="documents.html"><strong aria-hidden="true">5.</strong> Documents</a></li><li class="chapter-item expanded "><a href="semantics/semantics.html"><strong aria-hidden="true">6.</strong> Semantics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="semantics/partition-into-scopes.html"><strong aria-hidden="true">6.1.</strong> Partition Into Scopes</a></li><li class="chapter-item expanded "><a href="semantics/grammar-setup.html"><strong aria-hidden="true">6.2.</strong> Grammar Setup</a></li><li class="chapter-item expanded "><a href="semantics/semantic-graph.html"><strong aria-hidden="true">6.3.</strong> Semantic Graph</a></li><li class="chapter-item expanded "><a href="semantics/incremental-computations.html"><strong aria-hidden="true">6.4.</strong> Incremental Computations</a></li><li class="chapter-item expanded "><a href="semantics/side-effects.html"><strong aria-hidden="true">6.5.</strong> Side Effects</a></li><li class="chapter-item expanded "><a href="semantics/scope-access.html"><strong aria-hidden="true">6.6.</strong> Scope Access</a></li><li class="chapter-item expanded "><a href="semantics/granularity.html"><strong aria-hidden="true">6.7.</strong> Granularity</a></li><li class="chapter-item expanded "><a href="semantics/the-analyzer.html"><strong aria-hidden="true">6.8.</strong> The Analyzer</a></li><li class="chapter-item expanded "><a href="semantics/tasks-management.html"><strong aria-hidden="true">6.9.</strong> Tasks Management</a></li><li class="chapter-item expanded "><a href="semantics/multi-file-analysis.html"><strong aria-hidden="true">6.10.</strong> Multi-File Analysis</a></li><li class="chapter-item expanded "><a href="semantics/language-server-design.html"><strong aria-hidden="true">6.11.</strong> Language Server Design</a></li><li class="chapter-item expanded "><a href="semantics/configuration-issues.html"><strong aria-hidden="true">6.12.</strong> Configuration Issues</a></li><li class="chapter-item expanded "><a href="semantics/code-diagnostics.html"><strong aria-hidden="true">6.13.</strong> Code Diagnostics</a></li><li class="chapter-item expanded "><a href="semantics/tree-index.html"><strong aria-hidden="true">6.14.</strong> Tree Index</a></li></ol></li><li class="chapter-item expanded "><a href="code-formatters/code-formatters.html"><strong aria-hidden="true">7.</strong> Code Formatters</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="code-formatters/pretty-printer.html"><strong aria-hidden="true">7.1.</strong> Pretty Printer</a></li></ol></li><li class="chapter-item expanded "><a href="snippets.html"><strong aria-hidden="true">8.</strong> Snippets</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Lady Deirdre Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!------------------------------------------------------------------------------
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
+
+  This work is proprietary software with source-available code.
+
+  To copy, use, distribute, or contribute to this work, you must agree to
+  the terms of the General License Agreement:
+
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
+
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
+
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
+
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
+
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
+
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
+
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
+<h1 id="overview"><a class="header" href="#overview">Overview</a></h1>
+<h2 id="the-domain"><a class="header" href="#the-domain">The Domain</a></h2>
+<p>The program you are developing could function both as a programming language
+compiler and as a code editor extension simultaneously. Lady Deirdre does not
+strongly distinguish between these domains, so we will collectively refer to the
+developing program as the <em>Compiler</em>.</p>
+<p>The input data for the Compiler is a <em>compilation project</em>: a set of
+semantically interconnected source code text files. We refer to each individual
+file within a project as a compilation unit. A compilation unit could be a real
+file stored on disk or have a more abstract source (e.g., transferred to the
+Compiler by the code editor through the LSP communication channel).</p>
+<p>The primary purpose of the front-end part of the Compiler is to determine if the
+compilation project is well-formed (i.e., if there are syntax or semantic errors
+in the compilation units) and to infer the semantic connections between the
+source code objects (e.g., all call sites of a function in the source code).</p>
+<p>The compilation project is subject to frequent changes, as the end user may
+modify the source code of the units with every keystroke. The Compiler should
+keep its internal representation in sync with these changes in real time.</p>
+<p>Moreover, the compilation project is often not well-formed. While the end user
+is writing the source code, it is usually in an incomplete state, with syntax
+and semantic errors. Therefore, the Compiler should be resilient to these
+errors, able to continuously synchronize the program's abstract representation
+with the current state of the source code without halting at the first
+encountered error.</p>
+<p>The Compiler's best effort is to infer as much metadata as possible from the
+current state of the source code to assist the end user in the code editor:
+highlighting references between identifiers, providing code completion
+suggestions, and enabling semantically meaningful navigation between text
+symbols.</p>
+<h2 id="the-core-concepts"><a class="header" href="#the-core-concepts">The Core Concepts</a></h2>
+<p>Lady Deirdre separates the processes of lexical scanning, syntax parsing, and
+semantic analysis.</p>
+<p>Lexical and syntax analysis are performed on each compilation unit eagerly using
+an incremental reparsing approach. With every end-user keystroke, the framework
+patches the token stream and syntax tree relative to the changes.</p>
+<p>As a result, incremental reparsing is usually a fast process even if the unit's
+source code is large. This reparsing process does not alter the outer parts of
+the syntax tree outside the typically small reparsing area, which is important
+for the semantic analysis that relies on the states of the syntax tree.</p>
+<p>Semantic analysis, in contrast, is a lazy, demand-driven process for the entire
+compilation project. Lady Deirdre infers individual features of the semantic
+model only when you explicitly request these features.</p>
+<p>The model is described in terms of user-defined computable functions that
+compute specific node's semantic metadata based on the compilation units' syntax
+tree states and other computable function values. Together, these computable
+functions form the <em>Semantic Graph</em>.</p>
+<p>Lady Deirdre computes and incrementally updates this graph partially and
+automatically when you request a feature, taking into account the changes in the
+compilation units.</p>
+<h3 id="compilation-units"><a class="header" href="#compilation-units">Compilation Units</a></h3>
+<p>The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html">Document</a>
+object represents the source code text, token stream, and syntax tree of an
+individual compilation unit.</p>
+<p>Through the Document object, you can write to arbitrary fragments of the source
+code and read its data at any time.</p>
+<pre><code class="language-rust noplayground">let mut doc = Document::&lt;JsonNode&gt;::new_mutable(r#"{ "foo": 123 }"#);
+
+ // Absolute zero-based index.
+doc.write(3..6, "bar");
+
+ // Line-column one-based index.
+doc.write(Position::new(1, 4)..Position::new(1, 7), "baz");
+
+assert_eq!(doc.substring(2..12), r#""baz": 123"#);
+
+// Returns the root node of the syntax tree.
+let _ = doc.root();
+
+// Returns an iterator over the syntax errors.
+let _ = doc.errors();
+
+// Depth-first forth and back traverse of the syntax tree and its tokens.
+doc.traverse_tree(&amp;mut my_visitor);
+
+// Reads tokens within the token stream.
+let _ = doc.chunks(..);</code></pre>
+<p>The Document comes in two flavors: mutable and immutable. The mutable Document
+supports incremental reparsing (as shown in the example above), while the
+immutable Document does not support incremental reparsing but performs faster
+when you load the source code text once.</p>
+<p>There are no other API differences between these two document types, so you can
+switch between the modes seamlessly. For example, if you want to switch off the
+incremental compilation mode of your program, the program would function as a
+pure one-pass compiler.</p>
+<p>The Document is parameterized with the type that describes the lexical scanner
+and syntax parser of the language, specifying the individual token type and the
+syntax tree's node type.</p>
+<h3 id="lexis"><a class="header" href="#lexis">Lexis</a></h3>
+<p>First, you need to specify the type of the lexis. Typically, you can do this
+using
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/derive.Token.html">derive macro</a>
+on your enum type, where the enum variants denote individual token types.
+The token's lexical scanning rules are described in terms of regular expressions.</p>
+<p>From the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/lexis.rs#L47">JSON example</a>:</p>
+<pre><code class="language-rust noplayground">#[derive(Token)]
+pub enum JsonToken {
+    #[rule("true")]
+    True,
+
+    #[rule('{')]
+    BraceOpen,
+
+    #[rule('-'? ('0' | POSITIVE) ('.' DEC+)? (['e', 'E'] ['-', '+']? DEC+)?)]
+    Number,
+    
+    //...
+}</code></pre>
+<p>The macro will generate a highly optimized lexical scanner based on the provided
+regex rules.</p>
+<p>In Lady Deirdre, the lexical scanning process is infallible. If there are source
+code fragments that do not match the specified rules, these fragments will be
+recognized as fallback "mismatch" tokens, which will generate syntax errors
+during the syntax parsing stage.</p>
+<h3 id="syntax"><a class="header" href="#syntax">Syntax</a></h3>
+<p>The syntax grammar is described similarly using enum types and
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/derive.Node.html">derive macro</a>.</p>
+<p>The node's parsing rules are described in terms of LL(1) grammars, but you can
+also implement your own custom parsers for individual node types, allowing for
+custom parse logic with unlimited recursion, including possibly left recursion.</p>
+<p>Within the macro's parsing rules, you can capture the results of descending rule
+applications and reference these results in the enum variant fields.</p>
+<p>This system of references forms the node-to-child relationships between the
+syntax tree nodes, which is useful for depth-first tree traversal. Additionally,
+the parser establishes ascending node-to-parent relationships, allowing
+traversal from nodes to the tree root. Lady Deirdre's incremental reparser
+ensures both kinds of references are kept up to date.</p>
+<p>From the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs#L52">JSON example</a>:</p>
+<pre><code class="language-rust noplayground">#[derive(Node)]
+#[token(JsonToken)] // Specifies a type of the Token.
+pub enum JsonNode {
+    #[rule($BracketOpen (items: ANY)*{$Comma} $BracketClose)]
+    Array {
+        #[parent] // Node-to-Parent relation.
+        parent: NodeRef,
+        #[child]// Node-to-Child relation.
+        items: Vec&lt;NodeRef&gt;,
+    },
+    
+    //...
+}</code></pre>
+<p>Most of the language syntax constructs, which can be easily expressed in terms
+of LL(1) grammar rules, will be described this way. However, some complex
+parsing rules, such as infix expressions, will be implemented manually using
+hand-written recursive-descent parsers.</p>
+<p>The syntax trees created by Lady Deirdre are, informally speaking, abstract
+syntax trees where all trivial elements such as whitespaces and comments are
+intentionally omitted. However, it is worth noting that you can also build a
+full <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.ParseTree.html">ParseTree</a>
+based on the same grammar, which has a different structure useful for
+implementing code formatters.</p>
+<p>The parser generated by the macro is an error-resistant parser capable of
+recovering from syntax errors in the end user's code. It recovers from syntax
+errors using standard "panic mode" algorithm and based on internal heuristics
+statically inferred from the grammar. You have the option to explicitly
+configure the recovery rules for the entire grammar and for individual parsing
+rules for fine-tuning.</p>
+<h3 id="ownership"><a class="header" href="#ownership">Ownership</a></h3>
+<p>In Lady Deirdre, the source code tokens and syntax tree nodes are owned by the
+<a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/units/enum.Document.html">Document</a>.</p>
+<p>The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.NodeRef.html">NodeRef</a>
+and <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.TokenRef.html">TokenRef</a>
+objects are globally unique (composite) numerical indices that point to a
+specific node or token inside the Document. They are unique in the sense that
+whenever the incremental reparser removes a node or token, the corresponding
+index object becomes obsolete forever, and the newly created node and token
+instance always receives a unique index object that will never clash with the
+index objects created previously by any Document.</p>
+<p>Lady Deirdre uses NodeRefs, in particular, to establish parent-child relations
+between syntax tree nodes.</p>
+<p>This approach is convenient in that NodeRefs/TokenRefs, being just numerical
+indices, are cheap and easy to Copy and are memory-allocation independent. You
+can easily spread them across the program to address specific objects within a
+particular document.</p>
+<p>But the downside is that to dereference the addressed instance, you always
+have to have access to the corresponding Document at the dereferencing point.</p>
+<pre><code class="language-rust noplayground">let doc: Document&lt;JsonNode&gt;;
+let token_ref: NodeRef;
+
+let Some(token) = token_ref.deref(&amp;doc) else {
+    panic!("TokenRef obsolete.");
+}</code></pre>
+<h3 id="traversing"><a class="header" href="#traversing">Traversing</a></h3>
+<p>You can traverse the syntax tree either manually by dereferencing the NodeRef
+index object and inspecting the enum variant fields, or generically, using the
+NodeRef's grammar-independent functions. These functions include getting the
+node's parent, children, or siblings, and addressing their children by string or
+numerical keys.</p>
+<pre><code class="language-rust noplayground">let doc: Document&lt;JsonNode&gt;;
+let node_ref: NodeRef;
+
+let foo_ref: NodeRef = node_ref
+    .parent(&amp;doc)
+    .last_child(&amp;doc)
+    .get_child(&amp;doc, 3)
+    .prev_sibling(&amp;doc)
+    .get_child(&amp;doc, "foo");</code></pre>
+<p>You can also traverse the entire syntax tree or a branch of the tree generically
+using a visitor.</p>
+<pre><code class="language-rust noplayground">let doc: Document&lt;JsonNode&gt;;
+let branch_ref: NodeRef;
+
+doc.traverse_subtree(&amp;branch_ref, &amp;mut MyVisitor);
+
+struct MyVisitor;
+
+impl Visitor for MyVisitor {
+    fn visit_token(&amp;mut self, _token_ref: &amp;TokenRef) {}
+    fn enter_node(&amp;mut self, _node_ref: &amp;NodeRef) -&gt; bool { true }
+    fn leave_node(&amp;mut self, _node_ref: &amp;NodeRef) {}
+}</code></pre>
+<h3 id="semantics"><a class="header" href="#semantics">Semantics</a></h3>
+<p>The semantic graph of the compilation project consists
+of <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Attr.html">attributes</a>.</p>
+<p>An attribute represents a value of arbitrary user-defined type, along with the
+function that computes this value based on the values of other attributes read
+within the function.</p>
+<p>The value of the attribute can be of any type that implements Clone and Eq.</p>
+<pre><code class="language-rust noplayground">#[derive(Clone, PartialEq, Eq)]
+struct MyAttrValue {
+    //...
+}
+
+impl Computable for MyAttrValue {
+    type Node = MyNode;
+
+    fn compute&lt;H: TaskHandle, S: SyncBuildHasher&gt;(
+        context: &amp;mut AttrContext&lt;Self::Node, H, S&gt;,
+    ) -&gt; AnalysisResult&lt;Self&gt; {
+        // Computes and returns attribute's value using the `context` object.
+    }
+}</code></pre>
+<p>The purpose of an attribute is to infer meaningful information related to a
+particular node of the syntax tree. For instance, one attribute of the variable
+declaration node could infer the type of that variable, while another attribute
+might infer all variable uses across the code.</p>
+<p>Attribute instances are owned by the syntax tree nodes. When defining the node,
+attributes can be placed inside a special enum variant's <code>#[semantics]</code> field:</p>
+<pre><code class="language-rust noplayground">#[derive(Node)]
+struct MyNode {
+    #[rule(&lt;parse rule&gt;)]
+    SomeNodeVariant {
+        //...
+        #[semantics]
+        semantics: Semantics&lt;Attr&lt;MyAttrValue&gt;&gt;,
+    }
+}</code></pre>
+<p>If a node has more than one attribute, you should define a dedicated struct
+where you would put these attributes. Then, you would use this struct as a
+parameter of the <code>Semantics&lt;...&gt;</code> object.</p>
+<p>Lady Deirdre computes attribute values only when you query them explicitly.</p>
+<pre><code class="language-rust noplayground">let analysis_task; // You gets this object from the Analyzer (see next sections).
+let node_ref: NodeRef;
+
+let Some(MyNode::SomeNodeVariant { semantics, ... }) = node_ref.deref() else {...}
+
+let (_, attribute_value) = semantics
+    .get().unwrap()
+    .my_attr.snapshot(&amp;analysis_task).unwrap();</code></pre>
+<p>You can find a complete setup example of the syntax tree with semantics in the
+<a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/syntax.rs">Chain Analysis</a>
+example.</p>
+<h3 id="concurrent-analysis"><a class="header" href="#concurrent-analysis">Concurrent Analysis</a></h3>
+<p>Lady Deirdre is capable of computing the semantic graph of your compilation
+project in a multi-threaded environment, handling concurrent requests to the
+semantic attributes. Specifically, the language server can manage parallel
+requests from the language client (code editor) in dedicated worker threads.</p>
+<p>The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Analyzer.html">Analyzer</a>
+object manages a collection of documents of the compilation project and the
+semantic graph of the project.</p>
+<p>It's assumed that this object will serve as the central synchronization point of
+your compiler. You can interact with the Analyzer from multiple threads if
+you're developing a multi-threaded compiler.</p>
+<p>At any point in time, you can either edit the source code or query the semantic
+graph. Due to this reason, the Analyzer doesn't allow direct access to its inner
+content. Instead, it provides functions that grant access to specific
+operations.</p>
+<p>These functions return RAII-guard-like objects called "tasks" through which
+necessary operations can be performed.</p>
+<p>From the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/mod.rs#L84">Chain Analysis</a> example:</p>
+<pre><code class="language-rust noplayground">let analyzer = Analyzer::&lt;ChainNode&gt;::new(AnalyzerConfig::default());
+
+let doc_id;
+
+{
+    // A handle object through which we can signalize the task's worker
+    // to cancel it's job. 
+    let handle = TriggerHandle::new();
+
+    // Requests Mutation task through which we can add new
+    // or edit existing documents.
+    let mut task = analyzer.mutate(&amp;handle, 1).unwrap();
+
+    // Returns a unique identifier of the new document
+    doc_id = task.add_mutable_doc(INPUT);
+}
+
+{
+    let handle = TriggerHandle::new();
+    
+    // Requests semantic-analysis task.
+    let task = analyzer.analyze(&amp;handle, 1).unwrap();
+
+    // Here we can fetch the document by `doc_id`, traverse its nodes,
+    // and query their semantics using the `task` object.
+}</code></pre>
+<p>The Analyzer's task system supports task priorities and a graceful shutdown
+mechanism. The inner task manager of the Analyzer can signal the task's worker
+thread to temporary interrupt its job based on the currently requested task
+priorities.</p>
+<p>It's important to note that the Analyzer itself is not a thread manager and does
+not spawn any threads. Thread job management is not a goal of Lady Deirdre.</p>
+<p>You can also use the Analyzer from a single main thread only. For example, you
+can build your compiler to the wasm target and use the Analyzer's tasks
+sequentially.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="lexis/lexis.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="lexis/lexis.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

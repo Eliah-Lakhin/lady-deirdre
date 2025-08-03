@@ -1,0 +1,451 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Semantic Graph - The Lady Deirdre Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../overview.html"><strong aria-hidden="true">2.</strong> Overview</a></li><li class="chapter-item expanded "><a href="../lexis/lexis.html"><strong aria-hidden="true">3.</strong> Lexis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../lexis/lexical-grammar.html"><strong aria-hidden="true">3.1.</strong> Lexical Grammar</a></li><li class="chapter-item expanded "><a href="../lexis/scanning-process.html"><strong aria-hidden="true">3.2.</strong> Scanning Process</a></li><li class="chapter-item expanded "><a href="../lexis/code-inspection.html"><strong aria-hidden="true">3.3.</strong> Code Inspection</a></li><li class="chapter-item expanded "><a href="../lexis/token-references.html"><strong aria-hidden="true">3.4.</strong> Token References</a></li><li class="chapter-item expanded "><a href="../lexis/site-references.html"><strong aria-hidden="true">3.5.</strong> Site References</a></li></ol></li><li class="chapter-item expanded "><a href="../syntax/syntax.html"><strong aria-hidden="true">4.</strong> Syntax</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../syntax/syntax-grammar.html"><strong aria-hidden="true">4.1.</strong> Syntax Grammar</a></li><li class="chapter-item expanded "><a href="../syntax/error-recovering.html"><strong aria-hidden="true">4.2.</strong> Error Recovering</a></li><li class="chapter-item expanded "><a href="../syntax/debugging.html"><strong aria-hidden="true">4.3.</strong> Debugging</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-tree.html"><strong aria-hidden="true">4.4.</strong> Syntax Tree</a></li><li class="chapter-item expanded "><a href="../syntax/node-references.html"><strong aria-hidden="true">4.5.</strong> Node References</a></li><li class="chapter-item expanded "><a href="../syntax/tree-inspection.html"><strong aria-hidden="true">4.6.</strong> Tree Inspection</a></li><li class="chapter-item expanded "><a href="../syntax/hand-written-parsers.html"><strong aria-hidden="true">4.7.</strong> Hand-Written Parsers</a></li><li class="chapter-item expanded "><a href="../syntax/overriding-a-parser.html"><strong aria-hidden="true">4.8.</strong> Overriding a Parser</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-session.html"><strong aria-hidden="true">4.9.</strong> Syntax Session</a></li><li class="chapter-item expanded "><a href="../syntax/pratts-algorithm.html"><strong aria-hidden="true">4.10.</strong> Pratt's Algorithm</a></li></ol></li><li class="chapter-item expanded "><a href="../documents.html"><strong aria-hidden="true">5.</strong> Documents</a></li><li class="chapter-item expanded "><a href="../semantics/semantics.html"><strong aria-hidden="true">6.</strong> Semantics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../semantics/partition-into-scopes.html"><strong aria-hidden="true">6.1.</strong> Partition Into Scopes</a></li><li class="chapter-item expanded "><a href="../semantics/grammar-setup.html"><strong aria-hidden="true">6.2.</strong> Grammar Setup</a></li><li class="chapter-item expanded "><a href="../semantics/semantic-graph.html" class="active"><strong aria-hidden="true">6.3.</strong> Semantic Graph</a></li><li class="chapter-item expanded "><a href="../semantics/incremental-computations.html"><strong aria-hidden="true">6.4.</strong> Incremental Computations</a></li><li class="chapter-item expanded "><a href="../semantics/side-effects.html"><strong aria-hidden="true">6.5.</strong> Side Effects</a></li><li class="chapter-item expanded "><a href="../semantics/scope-access.html"><strong aria-hidden="true">6.6.</strong> Scope Access</a></li><li class="chapter-item expanded "><a href="../semantics/granularity.html"><strong aria-hidden="true">6.7.</strong> Granularity</a></li><li class="chapter-item expanded "><a href="../semantics/the-analyzer.html"><strong aria-hidden="true">6.8.</strong> The Analyzer</a></li><li class="chapter-item expanded "><a href="../semantics/tasks-management.html"><strong aria-hidden="true">6.9.</strong> Tasks Management</a></li><li class="chapter-item expanded "><a href="../semantics/multi-file-analysis.html"><strong aria-hidden="true">6.10.</strong> Multi-File Analysis</a></li><li class="chapter-item expanded "><a href="../semantics/language-server-design.html"><strong aria-hidden="true">6.11.</strong> Language Server Design</a></li><li class="chapter-item expanded "><a href="../semantics/configuration-issues.html"><strong aria-hidden="true">6.12.</strong> Configuration Issues</a></li><li class="chapter-item expanded "><a href="../semantics/code-diagnostics.html"><strong aria-hidden="true">6.13.</strong> Code Diagnostics</a></li><li class="chapter-item expanded "><a href="../semantics/tree-index.html"><strong aria-hidden="true">6.14.</strong> Tree Index</a></li></ol></li><li class="chapter-item expanded "><a href="../code-formatters/code-formatters.html"><strong aria-hidden="true">7.</strong> Code Formatters</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../code-formatters/pretty-printer.html"><strong aria-hidden="true">7.1.</strong> Pretty Printer</a></li></ol></li><li class="chapter-item expanded "><a href="../snippets.html"><strong aria-hidden="true">8.</strong> Snippets</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Lady Deirdre Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!------------------------------------------------------------------------------
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
+
+  This work is proprietary software with source-available code.
+
+  To copy, use, distribute, or contribute to this work, you must agree to
+  the terms of the General License Agreement:
+
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
+
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
+
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
+
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
+
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
+
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
+
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
+<h1 id="semantic-graph"><a class="header" href="#semantic-graph">Semantic Graph</a></h1>
+<p>A semantic
+attribute (<a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Attr.html">Attr</a>
+object) consists of a cache for a value of an arbitrary user-defined type and a
+function that computes this value when invoked by the Analyzer's inner
+algorithm.</p>
+<p>Inside
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/trait.Computable.html">Computable</a>
+function that computes the value, you can access other attribute values, the
+syntax and lexical content of the compilation units, and other Analyzer-related
+elements from the <code>context</code> argument of
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.AttrContext.html">AttrContext</a>
+type. This argument is the source of the inputs to the function, allowing you to
+infer and return the resulting attribute value.</p>
+<p>The implementation of the function should be deterministic and generally free of
+side effects. Typically, it should compute the output value solely based on the
+inputs.</p>
+<h2 id="attribute-value"><a class="header" href="#attribute-value">Attribute Value</a></h2>
+<p>What you compute inside the function depends on your semantics design. It could
+be the type of a variable introduced in the source code, or the occurrences of a
+particular identifier throughout the source code. Essentially, it encompasses
+anything needed to express the programming language's semantic rules and to
+enhance the language server, thereby assisting the end user in the code
+editor<sup class="footnote-reference"><a href="#compiler">1</a></sup>.</p>
+<p>Typically, an attribute computes a value that logically belongs to the syntax
+tree node on which it is instantiated. From the <code>context</code> argument, you can
+access the NodeRef that points to the node owning this attribute. Using this
+NodeRef reference, you can determine the document (by the document's id) that
+contains this node and read the corresponding node instance.</p>
+<pre><code class="language-rust noplayground">#[derive(Default, Clone, PartialEq, Eq)]
+pub struct BlockAnalysis {
+    pub assignments: Shared&lt;BlockAssignmentMap&gt;,
+    pub blocks: Shared&lt;BlockNamespaceMap&gt;,
+}
+
+impl Computable for BlockAnalysis {
+    type Node = ChainNode;
+
+    fn compute&lt;H: TaskHandle, S: SyncBuildHasher&gt;(
+        context: &amp;mut AttrContext&lt;Self::Node, H, S&gt;,
+    ) -&gt; AnalysisResult&lt;Self&gt; {
+        // A NodeRef that points to the syntax tree node owning this
+        // attribute (assumed to be a `ChainNode::Block` enum variant in this case).
+        let block_ref = context.node_ref();
+        
+        // Requests the Document object that stores the corresponding
+        // compilation unit and its syntax tree in particular.
+        let doc_read = context.read_doc(block_ref.id).unwrap_abnormal()?;
+        let doc: &amp;Document&lt;ChainNode&gt; = doc_read.deref();
+
+        // Dereferences the instance of the syntax tree node to iterate through
+        // the block statements.
+        let Some(ChainNode::Block { statements, .. }) = block_ref.deref(doc) else {
+            // If we encounter that the syntax tree is broken for any reason,
+            // we return the (possibly unfinished) state of the computable
+            // value regardless.
+            //
+            // The computable functions strive to infer as much metadata
+            // as possible without panicking.
+            return Ok(Self::default());
+        };
+        
+        // Traversing through the block statements.
+        for st_ref in statements {
+            match st_ref.deref(doc) {
+                // ...
+            }
+        }
+        
+        // ...
+    }
+}</code></pre>
+<p>Similarly to the syntax analysis stage, semantic analysis should be resilient to
+errors. If the computable function cannot fully infer the target value, it
+attempts to compute as much metadata as possible or fallback to reasonable
+defaults without causing a panic. For this reason, most semantic model objects
+in the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/semantics.rs#L147">Chain Analysis</a>
+example implement the Default trait.</p>
+<p>For instance, in Rust source code, when introducing a variable with <code>let x;</code>,
+the variable's type depends on the initialization expression. In the
+type-inference attribute's computable function, we attempt to infer the Rust
+type of the variable based on known initialization points. If we cannot fully
+infer the type, we may infer it to a reasonable possibility or possibilities.</p>
+<div class="footnote-definition" id="compiler"><sup class="footnote-definition-label">1</sup>
+<p>Attributes are general-purpose; you can store any arbitrary data
+inside them, not necessarily related to language semantics only. For example,
+when implementing a programming language compiler, you can store middle-end or
+even back-end artifacts of the compiler in some attributes. In this sense, Lady
+Deirdre's semantic analysis framework could serve as an entry point to the
+middle- or back-end compiler, even though these compilation stages are not the
+direct purpose of Lady Deirdre.</p>
+</div>
+<h2 id="the-graph"><a class="header" href="#the-graph">The Graph</a></h2>
+<p>Inside the computable function of the attribute, you can read other attribute
+values. This mechanism allows you to infer more specific semantic facts from
+more general facts.</p>
+<p>For instance, in the Chain Analysis example,
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/semantics.rs#L155">LocalResolution</a>
+attribute infers let-statement references within the local block in which it was
+declared based on all local assignments
+(<a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/chain_analysis/semantics.rs#L306">BlockAssignmentMap</a> attribute)
+within this block.</p>
+<pre><code class="language-rust noplayground">#[derive(Default, Clone, PartialEq, Eq)]
+pub enum LocalResolution {
+    #[default]
+    Broken,
+    Resolved(usize),
+    External(String),
+}
+
+impl SharedComputable for LocalResolution {
+    type Node = ChainNode;
+
+    fn compute_shared&lt;H: TaskHandle, S: SyncBuildHasher&gt;(
+        context: &amp;mut AttrContext&lt;Self::Node, H, S&gt;,
+    ) -&gt; AnalysisResult&lt;Shared&lt;Self&gt;&gt; {
+        // The NodeRef reference points to the key `ChainNode::Key` enum variant.
+        let key_ref = context.node_ref();
+
+        // The Document that owns this node's syntax tree.
+        let doc_read = context.read_doc(key_ref.id).unwrap_abnormal()?;
+        let doc = doc_read.deref();
+
+        // Dereferencing the "Key" node to access its semantics.
+        let Some(ChainNode::Key { semantics, .. }) = key_ref.deref(doc) else {
+            return Ok(Shared::default());
+        };
+
+        // Fetches the local `ChainNode::Block`'s NodeRef within the scope of
+        // which the Key node resides.
+        let block_ref = semantics
+            .scope_attr()
+            .unwrap_abnormal()?
+            .read(context)?
+            .scope_ref;
+
+        // Dereferencing this block node instance.
+        let Some(ChainNode::Block { semantics, .. }) = block_ref.deref(doc) else {
+            return Ok(Shared::default());
+        };
+
+        // Accessing the block's semantics.
+        let block_semantics = semantics.get().unwrap_abnormal()?;
+
+        // Reading the `BlockAssignmentMap` attribute of the Block.
+        let assignments = block_semantics
+            .assignments
+            .read(context)
+            .unwrap_abnormal()?;
+
+        // Looking up for an entry inside this map that belongs to the key.
+        let Some(resolution) = assignments.as_ref().map.get(key_ref) else {
+            return Ok(Shared::default());
+        };
+
+        //  Cloning the value from the entry, which will be the value of
+        // the computable attribute.
+        Ok(resolution.clone())
+    }
+}</code></pre>
+<p>In this snippet, particularly on the
+line <code>block_semantics.assignments.read(context)</code>, we are reading the value of
+another attribute.
+The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/analysis/struct.Attr.html#method.read">Attr::read</a>
+function takes the current <code>context</code> reference and returns a RAII read-guard of
+the attribute's value.</p>
+<p>When we read an attribute inside another attribute, we're indicating to
+the <code>context</code> that the value of the reader depends on the value of what's being
+read.</p>
+<p>The act of reading establishes dependency relations between the attributes, so
+that the cached value of the reader is subject to recomputations whenever any of
+its dependencies change.</p>
+<p>The system of attributes and their dependencies forms a <em>Semantic Graph</em>.</p>
+<p>You don't specify this graph upfront; Lady Deirdre reveals the structure of the
+graph at runtime when it calls the computable function, which tells the Analyzer
+how one specific attribute depends on another.</p>
+<p>This graph is dynamically evolving and potentially subject to reconfiguration as
+the computable function passes through different control flow paths. However,
+Lady Deirdre imposes one important limitation: the
+graph <a href="https://en.wikipedia.org/wiki/Directed_acyclic_graph">should not have cycles</a>.
+In other words, a computable function of an attribute cannot read the value of
+an attribute that directly or indirectly reads its own value.</p>
+<p>In the example above, the <em>LocalResolution</em> attribute depends on the
+<em>BlockAssignmentMap</em> attribute, which in turn depends on the <em>BlockAnalysis</em>
+attribute, an entry-point attribute that does not read any other attributes.
+Thus, this dependency chain is straightforward and does not have any cycles by
+design.</p>
+<p>Avoiding cyclic dependencies between attributes is a rule that you should
+manually implement when designing the programming language semantics. Lady
+Deirdre provides some tools to detect possible errors in the graph design, which
+we will discuss in the next chapters.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../semantics/grammar-setup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../semantics/incremental-computations.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../semantics/grammar-setup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../semantics/incremental-computations.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

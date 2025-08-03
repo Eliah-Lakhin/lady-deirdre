@@ -1,0 +1,587 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Syntax Session - The Lady Deirdre Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../overview.html"><strong aria-hidden="true">2.</strong> Overview</a></li><li class="chapter-item expanded "><a href="../lexis/lexis.html"><strong aria-hidden="true">3.</strong> Lexis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../lexis/lexical-grammar.html"><strong aria-hidden="true">3.1.</strong> Lexical Grammar</a></li><li class="chapter-item expanded "><a href="../lexis/scanning-process.html"><strong aria-hidden="true">3.2.</strong> Scanning Process</a></li><li class="chapter-item expanded "><a href="../lexis/code-inspection.html"><strong aria-hidden="true">3.3.</strong> Code Inspection</a></li><li class="chapter-item expanded "><a href="../lexis/token-references.html"><strong aria-hidden="true">3.4.</strong> Token References</a></li><li class="chapter-item expanded "><a href="../lexis/site-references.html"><strong aria-hidden="true">3.5.</strong> Site References</a></li></ol></li><li class="chapter-item expanded "><a href="../syntax/syntax.html"><strong aria-hidden="true">4.</strong> Syntax</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../syntax/syntax-grammar.html"><strong aria-hidden="true">4.1.</strong> Syntax Grammar</a></li><li class="chapter-item expanded "><a href="../syntax/error-recovering.html"><strong aria-hidden="true">4.2.</strong> Error Recovering</a></li><li class="chapter-item expanded "><a href="../syntax/debugging.html"><strong aria-hidden="true">4.3.</strong> Debugging</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-tree.html"><strong aria-hidden="true">4.4.</strong> Syntax Tree</a></li><li class="chapter-item expanded "><a href="../syntax/node-references.html"><strong aria-hidden="true">4.5.</strong> Node References</a></li><li class="chapter-item expanded "><a href="../syntax/tree-inspection.html"><strong aria-hidden="true">4.6.</strong> Tree Inspection</a></li><li class="chapter-item expanded "><a href="../syntax/hand-written-parsers.html"><strong aria-hidden="true">4.7.</strong> Hand-Written Parsers</a></li><li class="chapter-item expanded "><a href="../syntax/overriding-a-parser.html"><strong aria-hidden="true">4.8.</strong> Overriding a Parser</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-session.html" class="active"><strong aria-hidden="true">4.9.</strong> Syntax Session</a></li><li class="chapter-item expanded "><a href="../syntax/pratts-algorithm.html"><strong aria-hidden="true">4.10.</strong> Pratt's Algorithm</a></li></ol></li><li class="chapter-item expanded "><a href="../documents.html"><strong aria-hidden="true">5.</strong> Documents</a></li><li class="chapter-item expanded "><a href="../semantics/semantics.html"><strong aria-hidden="true">6.</strong> Semantics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../semantics/partition-into-scopes.html"><strong aria-hidden="true">6.1.</strong> Partition Into Scopes</a></li><li class="chapter-item expanded "><a href="../semantics/grammar-setup.html"><strong aria-hidden="true">6.2.</strong> Grammar Setup</a></li><li class="chapter-item expanded "><a href="../semantics/semantic-graph.html"><strong aria-hidden="true">6.3.</strong> Semantic Graph</a></li><li class="chapter-item expanded "><a href="../semantics/incremental-computations.html"><strong aria-hidden="true">6.4.</strong> Incremental Computations</a></li><li class="chapter-item expanded "><a href="../semantics/side-effects.html"><strong aria-hidden="true">6.5.</strong> Side Effects</a></li><li class="chapter-item expanded "><a href="../semantics/scope-access.html"><strong aria-hidden="true">6.6.</strong> Scope Access</a></li><li class="chapter-item expanded "><a href="../semantics/granularity.html"><strong aria-hidden="true">6.7.</strong> Granularity</a></li><li class="chapter-item expanded "><a href="../semantics/the-analyzer.html"><strong aria-hidden="true">6.8.</strong> The Analyzer</a></li><li class="chapter-item expanded "><a href="../semantics/tasks-management.html"><strong aria-hidden="true">6.9.</strong> Tasks Management</a></li><li class="chapter-item expanded "><a href="../semantics/multi-file-analysis.html"><strong aria-hidden="true">6.10.</strong> Multi-File Analysis</a></li><li class="chapter-item expanded "><a href="../semantics/language-server-design.html"><strong aria-hidden="true">6.11.</strong> Language Server Design</a></li><li class="chapter-item expanded "><a href="../semantics/configuration-issues.html"><strong aria-hidden="true">6.12.</strong> Configuration Issues</a></li><li class="chapter-item expanded "><a href="../semantics/code-diagnostics.html"><strong aria-hidden="true">6.13.</strong> Code Diagnostics</a></li><li class="chapter-item expanded "><a href="../semantics/tree-index.html"><strong aria-hidden="true">6.14.</strong> Tree Index</a></li></ol></li><li class="chapter-item expanded "><a href="../code-formatters/code-formatters.html"><strong aria-hidden="true">7.</strong> Code Formatters</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../code-formatters/pretty-printer.html"><strong aria-hidden="true">7.1.</strong> Pretty Printer</a></li></ol></li><li class="chapter-item expanded "><a href="../snippets.html"><strong aria-hidden="true">8.</strong> Snippets</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Lady Deirdre Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!------------------------------------------------------------------------------
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
+
+  This work is proprietary software with source-available code.
+
+  To copy, use, distribute, or contribute to this work, you must agree to
+  the terms of the General License Agreement:
+
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
+
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
+
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
+
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
+
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
+
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
+
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
+<h1 id="syntax-session"><a class="header" href="#syntax-session">Syntax Session</a></h1>
+<p>Inside the hand-written parse function, you will use the <code>session</code> variable
+provided by the macro-generated code when it invokes this function.</p>
+<p>The variable is of
+type <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html">SyntaxSession</a>,
+which provides an interface to read input tokens and manage the output syntax
+tree.</p>
+<p>The final goal of the parse function is to read some tokens from the syntax
+session to recognize the target grammar rule and initialize and return an
+instance of the syntax tree node as a result of the parsing procedure.</p>
+<h2 id="input-tokens-stream"><a class="header" href="#input-tokens-stream">Input Tokens Stream</a></h2>
+<p>The SyntaxSession trait is at first place a supertrait
+of <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.TokenCursor.html">TokenCursor</a>,
+representing an input stream for the parser.</p>
+<p>From this interface, you can read tokens' metadata ahead of the current stream
+position. For example, the <code>session.token(0)</code> function returns the first token
+that has not been consumed yet, <code>session.token(1)</code> reads the next token, and so
+on. Other similar lookahead functions allow you to observe more metadata about
+the tokens<sup class="footnote-reference"><a href="#string">1</a></sup>. However, typically, the syntax parser should only rely on
+the token instances when making a decision to change its own inner parse
+state<sup class="footnote-reference"><a href="#lookahead">2</a></sup>.</p>
+<p>None of these lookahead functions move the input stream forward. Once your parse
+algorithm has observed a few tokens ahead, analyzed them, and made a decision to
+actually "consume" these tokens, the algorithm calls
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.advance">TokenCursor::advance</a>
+function, which consumes one token and moves the stream position to the next
+token,
+or <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/trait.TokenCursor.html#tymethod.skip">TokenCursor::skip</a>,
+which allows you to consume several tokens.</p>
+<p>For instance, in
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/expr_parser/parser.rs#L271">Expr Parser</a>
+example, we are parsing a sequence of whitespaces iteratively by reading
+the tokens one by one:</p>
+<pre><code class="language-rust noplayground">fn skip_trivia&lt;'a&gt;(session: &amp;mut impl SyntaxSession&lt;'a, Node = BoolNode&gt;) {
+    loop {
+        // Looking ahead at the next token.
+        let token = session.token(0);
+
+        // If the token is not a whitespace token, finish the parse procedure.
+        if token != BoolToken::Whitespace {
+            break;
+        }
+
+        // Otherwise, if the token is a whitespace, consume it, and resume
+        // the loop from the next token. 
+        session.advance();
+    }
+}</code></pre>
+<p>Note that the above function, as a helper function in the overall procedure,
+could potentially parse zero tokens. However, the general algorithm is required
+to consume at least one token from the non-empty input stream.</p>
+<div class="footnote-definition" id="string"><sup class="footnote-definition-label">1</sup>
+<p>For instance, <code>session.string(0)</code> would return a substring of the
+source code text covered by the first token.</p>
+</div>
+<div class="footnote-definition" id="lookahead"><sup class="footnote-definition-label">2</sup>
+<p>Furthermore, ideally, the parser should look ahead at no more than
+a single token ahead of the stream position (<code>session.token(0)</code>). The fewer
+tokens you look ahead, the better incremental reparsing performance you would
+gain. However, this is not a strict requirement. Looking at a few tokens ahead
+is generally acceptable.</p>
+</div>
+<h2 id="error-recovering"><a class="header" href="#error-recovering">Error Recovering</a></h2>
+<p>If the parsing algorithm hasn't finished yet but encounters an unexpected token
+in the middle of the parsing procedure — a token that normally shouldn't exist
+in the input stream based on the current parse state — this is a syntax error.</p>
+<p>Conventionally, in a hand-written parser, you should follow the same error
+recovery approaches common for parsers generated by the macro. More likely, you
+would use the <a href="error-recovering.html#panic-recovery">panic recovery</a> procedure.</p>
+<p>To avoid manually reimplementing the panic recovery algorithm and to be
+consistent with the auto-generated parsers, Lady Deirdre exposes
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.Recovery.html">Recovery</a>
+configurable object that implements this algorithm, which is also used inside
+the macro-generated code.</p>
+<p>The Recovery object has the same configuration options that you would use inside
+the <code>#[recovery(...)]</code> macro attribute:
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.Recovery.html#method.unexpected">Recovery::unexpected</a>
+function adds a halting token, and
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.Recovery.html#method.group">Recovery::group</a>
+function adds a group of tokens that should be treated as a whole.</p>
+<p>It is assumed that this object will be constructed upfront in the const context
+and stored in a static for fast reuse.</p>
+<p>Depending on the parsing procedure complexity, you may want to prepare several
+Recovery objects for various types of syntax errors. For instance, in
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/expr_parser/parser.rs#L54">Expr Parser</a>
+example, there are three prepared Recovery objects: one to recover from syntax
+errors in the operators, one for operands, and one for errors inside
+the parentheses.</p>
+<pre><code class="language-rust noplayground">static OPERAND_RECOVERY: Recovery =
+    // Creates an unlimited recovery configuration without groups
+    // and halting tokens.
+    Recovery::unlimited() 
+        // Adds a group of parenthesis tokens.
+        // The sequence of tokens like `(...)` will be consumed as a whole
+        // during the panic recovery.
+        .group(BoolToken::ParenOpen as u8, BoolToken::ParenClose as u8)
+        // If the recoverer encounters a `)` token somewhere outside of any
+        // group, it halts the recovery procedure (the halting token will
+        // not be consumed).
+        .unexpected(BoolToken::ParenClose as u8);</code></pre>
+<p>To apply the panic recovery procedure, you call
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.Recovery.html#method.recover">Recovery::recover</a>
+function, passing it the <code>session</code> variable and the set of tokens the recoverer
+should look for. The function will consume as many tokens as needed according to
+the configured rules and will return an object describing whether the procedure
+managed to find the required token or failed to do so due to a specific
+reason (e.g., a halting token has been reached).</p>
+<p>Regardless of the recovery result, you should report the error using
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.failure">SyntaxSession::failure</a>
+function.</p>
+<pre><code class="language-rust noplayground">// A set of tokens that we expect as the leftmost token of an operand.
+static OPERAND_TOKENS: TokenSet = TokenSet::inclusive(&amp;[
+    BoolToken::True as u8,
+    BoolToken::False as u8,
+    BoolToken::ParenOpen as u8,
+]);
+
+// ...
+
+fn parse_operand&lt;'a&gt;(
+    session: &amp;mut impl SyntaxSession&lt;'a, Node = BoolNode&gt;,
+    context: NodeRule,
+) -&gt; NodeRef {
+    loop {
+        let token = session.token(0);
+
+        match token {
+            // Handling expected tokens.
+            BoolToken::True =&gt; return parse_true_operand(session),
+            BoolToken::False =&gt; return parse_false_operand(session),
+            BoolToken::ParenOpen =&gt; return parse_group(session),
+
+            // Otherwise, try to recover using the panic recovery algorithm.
+            _ =&gt; {
+                // A SiteRef of where the unexpected token was encountered.
+                let start_site_ref = session.site_ref(0);
+
+                // Runs the recovery procedure. This function possibly consumes
+                // some tokens from the input stream (using `session`).
+                let result = OPERAND_RECOVERY.recover(session, &amp;OPERAND_TOKENS);
+
+                // A SiteRef of where the recoverer finishes.
+                let end_site_ref = session.site_ref(0);
+
+                // Regardless of the recovery result, the syntax error has
+                // to be reported.
+                session.failure(SyntaxError {
+                    span: start_site_ref..end_site_ref,
+                    context,
+                    recovery: result,
+                    expected_tokens: &amp;OPERAND_TOKENS,
+                    expected_nodes: &amp;EMPTY_NODE_SET,
+                });
+
+                // If the recoverer failed to recover, finish the parse loop;
+                // otherwise, resume parsing from the recovered token stream
+                // position.
+                if !result.recovered() {
+                    return NodeRef::nil();
+                }
+            }
+        }
+    }
+}</code></pre>
+<h2 id="rules-descending"><a class="header" href="#rules-descending">Rules Descending</a></h2>
+<p>Whenever your parser needs to descend into other rules, you basically have two
+options:</p>
+<ol>
+<li>Call
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.descend">SyntaxSession::descend</a>
+function, which gives control flow back to the parsing environment.</li>
+<li>Create and parse the node manually using a pair of
+functions: <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.enter">SyntaxSession::enter</a>
+and <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.leave">SyntaxSession::leave</a>.</li>
+</ol>
+<p>The result of the <em>descend</em> function would be similar to if the parsing
+environment parsed the requested node: it will advance the token cursor of
+the <code>session</code> to as many tokens as needed to cover the parsing rule, it will add
+a branch of nodes to the syntax tree as a result of parsing, and it will return
+you a NodeRef reference of the top node of the branch. Basically, the <em>descend</em>
+function performs a normal parsing procedure, except that in practice, during
+incremental reparsing, this function could potentially utilize the parsing
+environment's inner cache to bypass real parsing steps.</p>
+<p>You should prefer to use the <em>descend</em> function on
+the <a href="syntax-grammar.html#incremental-reparsing">primary nodes</a> whenever possible.</p>
+<p>In
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/expr_parser/parser.rs#L230">Expr Parser</a>
+example, we are using this method to descend into the subexpression when parsing
+the expression group surrounded by the <code>(...)</code> parentheses.</p>
+<pre><code class="language-rust noplayground">fn parse_group&lt;'a&gt;(
+   session: &amp;mut impl SyntaxSession&lt;'a, Node = BoolNode&gt;,
+) -&gt; NodeRef {
+    // Consumes the opening "(" token.
+    session.advance();
+
+    // Skips whitespaces in between.
+    skip_trivia(session);
+
+    // Parses the inner expression.
+    let inner = session.descend(BoolNode::EXPR);
+
+    // In the rest of the code, we are parsing the closing ")" token and return
+    // the `inner` NodeRef to the parsed subexpression.
+}</code></pre>
+<p>Calling the <em>descend</em> function requires you to follow the same requirements as
+if you were descending into the rule from
+the <a href="syntax-grammar.html#rule-expressions">Node macro expression</a>:</p>
+<ol>
+<li>Left recursion is forbidden. You should not call this function at the
+beginning of the parse procedure if descending into this rule could directly
+or indirectly lead to recursive calling of the current parsing procedure.
+Such a call is likely to result in infinite recursion. However, descending
+into the same rule in the middle of the parsing is perfectly fine. In
+particular, the <code>parse_group</code> function recursively descends into the
+same <code>parse_expr</code> procedure because we forcefully consume the <code>(</code> token
+before the call.</li>
+<li>The variant you descend to must have a parser. The variant should have
+a <code>#[rule(...)]</code>.</li>
+</ol>
+<p>The second method allows you to parse the subnode manually and is generally not
+restricted to the above limitations.</p>
+<p>Calling the <em>enter</em> function starts node parsing. Calling the <em>leave</em> function
+finishes the subparser and returns the syntax session to parsing of the parent
+node. The <em>enter</em> and <em>leave</em> functions must be properly balanced: entering into
+the subparse context must always be enclosed by leaving the context.</p>
+<p>In the <em>leave</em> function, you specify the instance of the node that is the
+product of the subparser. This function returns a NodeRef of the product
+deployed to the syntax tree (similarly to the <em>descend</em> function).</p>
+<pre><code class="language-rust noplayground">fn parse_true_operand&lt;'a&gt;(
+   session: &amp;mut impl SyntaxSession&lt;'a, Node = BoolNode&gt;,
+) -&gt; NodeRef {
+    // Starts "true" node parsing.
+    session.enter(BoolNode::TRUE);
+
+    // Consumes the "true" token.
+    session.advance();
+
+    // A NodeRef of the syntax tree node currently being parsed.
+    let node = session.node_ref();
+    
+    // A NodeRef of the parent node that we parsed before entering into
+    // the "true" node subparser.
+    let parent = session.parent_ref();
+
+    // Finishes "true" node subparser, and returns its NodeRef.
+    return session.leave(BoolNode::True { node, parent });
+}</code></pre>
+<p>Note that both <em>descend</em> and <em>enter</em> functions require the rule number as an
+argument. Having this number, the parsing environment reveals nesting between
+the parsing procedures, which is specifically important for building the parser
+tree.</p>
+<p>These numbers are the constants that were specified in the <code>#[denote(TRUE)]</code>
+macro attributes when we set up the derive macro.</p>
+<h2 id="left-recursion"><a class="header" href="#left-recursion">Left Recursion</a></h2>
+<p>Lady Deirdre follows an approach to handling left recursion by lifting syntax
+tree nodes to their siblings, such that the node becomes a child of its former
+sibling.</p>
+<p>When parsing code such as <code>true &amp; false</code>, first, you parse the <code>true</code> operand.
+If the input stream finishes at this step, you return this node as the result
+product of parsing. Otherwise, when the parser encounters an <code>&amp;</code> token, it
+starts a new binary operator parser immediately lifting the previously created
+operand to the current operator's context, then parses the second operand and
+finishes the operator parser. You can repeat this procedure iteratively to
+create a left-rotated binary tree.</p>
+<p>The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.lift">SyntaxSession::lift</a>
+function "transplants" the syntax tree branch created just before we enter the
+new node subparser to the context of this subparser. In particular, this
+function automatically changes the parent NodeRef of the former sibling to the
+node that we start parsing.</p>
+<p>From the operator parser of
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/expr_parser/parser.rs#L90">Expr Parser</a>
+example:</p>
+<pre><code class="language-rust noplayground">BoolToken::And =&gt; {
+    if binding &gt;= 2 {
+        return accumulator;
+    }
+
+    // The `accumulator` is the result product of the overall parse procedure.
+    let left = accumulator;
+
+    // Entering into the `&amp;` operator subparser.
+    let node = session.enter(BoolNode::AND);
+ 
+    // The accumulated product could be Nil due to syntax errors.
+    // In this case, we should not and cannot lift it.
+    if !left.is_nil() {
+        // Makes the former accumulated node the child (the left-hand operand)
+        // of the currently parsed operator.
+        session.lift(&amp;left);
+    }
+
+    let parent = session.parent_ref();
+
+    // Consumes the `&amp;` token.
+    session.advance();
+    skip_trivia(session);
+
+    // Parses the right-hand side of the operator.
+    let right = parse_operator(session, BoolNode::AND, 2);
+
+    // Finishes operator subparser, and sets the result to the `accumulator`
+    // for reuse on the next loop step.
+    accumulator = session.leave(BoolNode::And {
+        node,
+        parent,
+        left,
+        right,
+    });
+}</code></pre>
+<h2 id="nodes-relations"><a class="header" href="#nodes-relations">Nodes Relations</a></h2>
+<p>In contrast to the macro-generated parsers, in the hand-written parser, you have
+to instantiate and properly initialize the instance of the node manually: when
+you return the final result from the overall parse procedure, and when you
+finish the inner subparsers via the <em>leave</em> function.</p>
+<p>To set up the node-to-parent relation, you can use
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.parent_ref">SyntaxSession::parent_ref</a>
+function that returns a NodeRef reference to the parent node in the syntax tree
+of the currently parsed node.</p>
+<p>The <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxSession.html#tymethod.node_ref">SyntaxSession::node_ref</a>
+returns a NodeRef reference of the currently parsed node that will be deployed
+into the syntax tree when the parser finishes parsing (or subparsing) process.</p>
+<p>To set up the child NodeRefs, you can use the result of the <em>descend</em> and
+<em>leave</em> functions.</p>
+<p>Whenever the parse procedure encounters syntax errors that cannot be recovered,
+the parser function should set the child references to the most reasonable
+defaults following the same <a href="error-recovering.html#mismatched-captures">approach</a>
+as in the macro-generated parsers.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../syntax/overriding-a-parser.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../syntax/pratts-algorithm.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../syntax/overriding-a-parser.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../syntax/pratts-algorithm.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,516 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Syntax Grammar - The Lady Deirdre Guide</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="../introduction.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="../overview.html"><strong aria-hidden="true">2.</strong> Overview</a></li><li class="chapter-item expanded "><a href="../lexis/lexis.html"><strong aria-hidden="true">3.</strong> Lexis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../lexis/lexical-grammar.html"><strong aria-hidden="true">3.1.</strong> Lexical Grammar</a></li><li class="chapter-item expanded "><a href="../lexis/scanning-process.html"><strong aria-hidden="true">3.2.</strong> Scanning Process</a></li><li class="chapter-item expanded "><a href="../lexis/code-inspection.html"><strong aria-hidden="true">3.3.</strong> Code Inspection</a></li><li class="chapter-item expanded "><a href="../lexis/token-references.html"><strong aria-hidden="true">3.4.</strong> Token References</a></li><li class="chapter-item expanded "><a href="../lexis/site-references.html"><strong aria-hidden="true">3.5.</strong> Site References</a></li></ol></li><li class="chapter-item expanded "><a href="../syntax/syntax.html"><strong aria-hidden="true">4.</strong> Syntax</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../syntax/syntax-grammar.html" class="active"><strong aria-hidden="true">4.1.</strong> Syntax Grammar</a></li><li class="chapter-item expanded "><a href="../syntax/error-recovering.html"><strong aria-hidden="true">4.2.</strong> Error Recovering</a></li><li class="chapter-item expanded "><a href="../syntax/debugging.html"><strong aria-hidden="true">4.3.</strong> Debugging</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-tree.html"><strong aria-hidden="true">4.4.</strong> Syntax Tree</a></li><li class="chapter-item expanded "><a href="../syntax/node-references.html"><strong aria-hidden="true">4.5.</strong> Node References</a></li><li class="chapter-item expanded "><a href="../syntax/tree-inspection.html"><strong aria-hidden="true">4.6.</strong> Tree Inspection</a></li><li class="chapter-item expanded "><a href="../syntax/hand-written-parsers.html"><strong aria-hidden="true">4.7.</strong> Hand-Written Parsers</a></li><li class="chapter-item expanded "><a href="../syntax/overriding-a-parser.html"><strong aria-hidden="true">4.8.</strong> Overriding a Parser</a></li><li class="chapter-item expanded "><a href="../syntax/syntax-session.html"><strong aria-hidden="true">4.9.</strong> Syntax Session</a></li><li class="chapter-item expanded "><a href="../syntax/pratts-algorithm.html"><strong aria-hidden="true">4.10.</strong> Pratt's Algorithm</a></li></ol></li><li class="chapter-item expanded "><a href="../documents.html"><strong aria-hidden="true">5.</strong> Documents</a></li><li class="chapter-item expanded "><a href="../semantics/semantics.html"><strong aria-hidden="true">6.</strong> Semantics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../semantics/partition-into-scopes.html"><strong aria-hidden="true">6.1.</strong> Partition Into Scopes</a></li><li class="chapter-item expanded "><a href="../semantics/grammar-setup.html"><strong aria-hidden="true">6.2.</strong> Grammar Setup</a></li><li class="chapter-item expanded "><a href="../semantics/semantic-graph.html"><strong aria-hidden="true">6.3.</strong> Semantic Graph</a></li><li class="chapter-item expanded "><a href="../semantics/incremental-computations.html"><strong aria-hidden="true">6.4.</strong> Incremental Computations</a></li><li class="chapter-item expanded "><a href="../semantics/side-effects.html"><strong aria-hidden="true">6.5.</strong> Side Effects</a></li><li class="chapter-item expanded "><a href="../semantics/scope-access.html"><strong aria-hidden="true">6.6.</strong> Scope Access</a></li><li class="chapter-item expanded "><a href="../semantics/granularity.html"><strong aria-hidden="true">6.7.</strong> Granularity</a></li><li class="chapter-item expanded "><a href="../semantics/the-analyzer.html"><strong aria-hidden="true">6.8.</strong> The Analyzer</a></li><li class="chapter-item expanded "><a href="../semantics/tasks-management.html"><strong aria-hidden="true">6.9.</strong> Tasks Management</a></li><li class="chapter-item expanded "><a href="../semantics/multi-file-analysis.html"><strong aria-hidden="true">6.10.</strong> Multi-File Analysis</a></li><li class="chapter-item expanded "><a href="../semantics/language-server-design.html"><strong aria-hidden="true">6.11.</strong> Language Server Design</a></li><li class="chapter-item expanded "><a href="../semantics/configuration-issues.html"><strong aria-hidden="true">6.12.</strong> Configuration Issues</a></li><li class="chapter-item expanded "><a href="../semantics/code-diagnostics.html"><strong aria-hidden="true">6.13.</strong> Code Diagnostics</a></li><li class="chapter-item expanded "><a href="../semantics/tree-index.html"><strong aria-hidden="true">6.14.</strong> Tree Index</a></li></ol></li><li class="chapter-item expanded "><a href="../code-formatters/code-formatters.html"><strong aria-hidden="true">7.</strong> Code Formatters</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../code-formatters/pretty-printer.html"><strong aria-hidden="true">7.1.</strong> Pretty Printer</a></li></ol></li><li class="chapter-item expanded "><a href="../snippets.html"><strong aria-hidden="true">8.</strong> Snippets</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Lady Deirdre Guide</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!------------------------------------------------------------------------------
+  This file is part of "Lady Deirdre", a compiler front-end foundation
+  technology.
+
+  This work is proprietary software with source-available code.
+
+  To copy, use, distribute, or contribute to this work, you must agree to
+  the terms of the General License Agreement:
+
+  https://github.com/Eliah-Lakhin/lady-deirdre/blob/master/EULA.md
+
+  The agreement grants a Basic Commercial License, allowing you to use
+  this work in non-commercial and limited commercial products with a total
+  gross revenue cap. To remove this commercial limit for one of your
+  products, you must acquire a Full Commercial License.
+
+  If you contribute to the source code, documentation, or related materials,
+  you must grant me an exclusive license to these contributions.
+  Contributions are governed by the "Contributions" section of the General
+  License Agreement.
+
+  Copying the work in parts is strictly forbidden, except as permitted
+  under the General License Agreement.
+
+  If you do not or cannot agree to the terms of this Agreement,
+  do not use this work.
+
+  This work is provided "as is", without any warranties, express or implied,
+  except where such disclaimers are legally invalid.
+
+  Copyright (c) 2024 Ilya Lakhin (Илья Александрович Лахин).
+  All rights reserved.
+------------------------------------------------------------------------------->
+<h1 id="syntax-grammar"><a class="header" href="#syntax-grammar">Syntax Grammar</a></h1>
+<p>You define the syntax grammar using
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/derive.Node.html">Node derive macro</a>
+on an arbitrary enum type that serves as the type for the syntax tree nodes.</p>
+<p>Unlike the token enum, the node enum variants are required to have bodies with
+fields. These fields allow the parser to store parent-child relationships
+between nodes.</p>
+<p>The node's parser is described in terms
+of <a href="https://en.wikipedia.org/wiki/LL_parser">LL(1)</a> grammars using
+the <code>#[rule(...)]</code> macro attributes, which denote individual variant grammar
+rules.</p>
+<p>Within these regex-like parse expressions, you can refer to other variants,
+establishing recursive descent parsing between the parse procedures.</p>
+<p>Additionally, you can name any subexpression with the <code>field:</code> prefix inside the
+expression. This syntax enforces the generated parser to capture the result of
+the subexpression matching (whether it be a token or a syntax tree node) and
+place the matching result into the variant's field with the same name.</p>
+<p>This process is called <em>capturing</em>, and it allows the parser to establish the
+node-to-children descending relationships between nodes.</p>
+<p>The opposite ascending node-to-parent relationships are established
+automatically if you declare a variant field with the <code>#[parent]</code> macro
+attribute.</p>
+<p>From the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs">JSON example</a>:</p>
+<pre><code class="language-rust noplayground">
+#[derive(Node)]
+#[token(JsonToken)]
+#[trivia($Whitespace)]
+#[define(ANY = Object | Array | True | False | String | Number | Null)]
+#[recovery(
+    $BraceClose,
+    $BracketClose,
+    [$BraceOpen..$BraceClose],
+    [$BracketOpen..$BracketClose],
+)]
+pub enum JsonNode {
+    #[root]
+    #[rule(object: Object)]
+    Root {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        object: NodeRef,
+    },
+
+    #[rule(start: $BraceOpen (entries: Entry)*{$Comma} end: $BraceClose)]
+    Object {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        start: TokenRef,
+        #[child]
+        entries: Vec&lt;NodeRef&gt;,
+        #[child]
+        end: TokenRef,
+    },
+
+    #[rule(key: String $Colon value: ANY)]
+    Entry {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        key: NodeRef,
+        #[child]
+        value: NodeRef,
+    },
+    
+    // ...
+
+    #[rule(value: $String)]
+    #[secondary]
+    String {
+        #[node]
+        node: NodeRef,
+        #[parent]
+        parent: NodeRef,
+        #[child]
+        value: TokenRef,
+    },
+}</code></pre>
+<p>The Node macro generates an optimized and error-resistant syntax parser based on
+the provided grammar rules. The macro allows you to replace individual
+node-generated parsers with hand-written parsers, where you can implement custom
+recursive-descent logic with potentially unlimited lookahead and left recursion.
+Hand-written parsers will be discussed in more detail in the next chapters of
+this guide.</p>
+<h2 id="macro-api"><a class="header" href="#macro-api">Macro API</a></h2>
+<p>In this chapter, I will intentionally omit some details, referring you to
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/derive.Node.html">macro documentation</a>
+for a more verbose description of the available features, and to
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs">JSON example</a>
+as an example of a node implementation that utilizes most of the macro's
+capabilities.</p>
+<p>Some general points to note about the macro API are:</p>
+<ol>
+<li>The <code>#[token(JsonToken)]</code> macro attribute specifies the type of the token.
+This attribute is required and denotes the alphabet of the parsing input.</li>
+<li>The <code>#[trivia($Whitespace)]</code> macro attribute describes elements that you want
+to omit automatically in the variant parsers between matching tokens. Trivia
+is a normal parsing expression that will be repeated zero or more times
+between each token. Typically, this expression enumerates whitespace tokens
+and refers to the comment variants of the grammar. The trivia expression can
+be overridden for each parsable variant (e.g., comments and string parsers
+might have different trivia expressions).</li>
+<li>There is exactly one enum variant annotated with the <code>#[root]</code> macro
+attribute. This variant denotes the syntax tree root and serves as the entry
+point of the grammar.</li>
+<li>A variant field annotated with the <code>#[node]</code> attribute is a reference to the
+current node<sup class="footnote-reference"><a href="#noderef">1</a></sup>.</li>
+<li>A variant field with the <code>#[parent]</code> attribute is a reference to the parent
+node of the current node. This field establishes a node-to-parent relation
+and will be automatically updated by the incremental reparser.</li>
+<li>A variant field with the <code>#[child]</code> attribute establishes a node-to-child
+relation. The name of the field must match one of the capturing operator
+keys, and the type must correspond to the capturing type (node or token) and
+the capturing repetition.</li>
+</ol>
+<div class="footnote-definition" id="noderef"><sup class="footnote-definition-label">1</sup>
+<p>NodeRef references are similar to TokenRef composite-index
+references, as they point to particular syntax tree instances of the compilation
+unit. We will discuss them in more detail in the next chapters as well.</p>
+</div>
+<h2 id="incremental-reparsing"><a class="header" href="#incremental-reparsing">Incremental Reparsing</a></h2>
+<p>The parser generated by the macro will be suitable for incremental reparsing.</p>
+<p>By default, all node variants are subject to eager caching during incremental
+reparsing. These variant nodes are called <em>Primary</em>.</p>
+<p>If you annotate a variant with the <code>#[secondary]</code> macro attribute, you inform
+the macro that this node is <em>Secondary</em>, and it should not be cached.</p>
+<h2 id="rule-expressions"><a class="header" href="#rule-expressions">Rule Expressions</a></h2>
+<p>The expression syntax of the <code>#[rule(...)]</code> macro attribute is similar to the
+regular expression syntax of the Token macro, except that inside the parse
+expression, we match tokens (prefixed with a dollar sign: <code>$Colon</code>) and nodes
+(without a dollar sign: <code>Object</code>) instead of Unicode characters.</p>
+<p>Since the LL(1) parser is a recursive-descent parser that looks at most one
+token ahead to make a decision in the choice operator (<code>A | B</code>), you should
+consider the leftmost set<sup class="footnote-reference"><a href="#leftmost">2</a></sup> of the descending rules.</p>
+<p>For example, the expression <code>A | B</code> would be ambiguous if both A and B variant
+rules could start matching with the same token. Similarly, the
+expression <code>A | $Foo</code> would be ambiguous if A could start with the <code>$Foo</code> token.</p>
+<p>All variant rules except the <code>#[root]</code> variant and the trivia expressions must
+parse at least one token. The Root variant is allowed to parse potentially empty
+token streams.</p>
+<p>The macro will check these and other requirements and yield descriptive error
+messages if one of the requirements is violated.</p>
+<p>Similar to the Token's regexes, you can use the <code>dump(...)</code> operator for
+debugging purposes, which prints the state-machine transitions, captures, and
+the leftmost set of the surrounding parse expression.</p>
+<div class="footnote-definition" id="leftmost"><sup class="footnote-definition-label">2</sup>
+<p>The set of tokens from which the parse rule starts matching
+directly or indirectly by descending into other rules is called the "leftmost
+set".</p>
+</div>
+<h2 id="capturing"><a class="header" href="#capturing">Capturing</a></h2>
+<p>The expression operator <code>start: $BraceOpen</code> means that the parser matches the
+token "BraceOpen" and puts its TokenRef reference into the "start" field of the
+variant's body.</p>
+<p>The operator can capture either a node or a token. If there is something else on
+the right-hand side, the capture operator will be spread to the inner operands.
+For example, <code>foo: (Bar | Baz*)</code> means the same as <code>(foo: Bar) | (foo: Baz)*</code>.</p>
+<p>The type of the corresponding field depends on what the operator captures (node
+or token) and how many times. If the operator could be applied no more than
+once, the field type would be NodeRef or TokenRef, respectively. If the operator
+could be applied more than once, the type would be a Vec of NodeRef or TokenRef.</p>
+<p>Examples:</p>
+<ul>
+<li>In <code>foo: Bar</code>, the "foo" field would have the type NodeRef.</li>
+<li>In <code>foo: $Bar</code>, the "foo" field would have the type TokenRef.</li>
+<li>In <code>foo: Bar &amp; foo: Baz</code>, the "foo" field would have the type Vec<NodeRef>.</li>
+<li>In <code>foo: Bar*</code>, the "foo" field would also have the type Vec<NodeRef>.</li>
+<li>In <code>foo: $Bar?</code>, the "foo" field would have the type TokenRef because "Bar"
+can be matched no more than one time. If the parser never matches "Bar", the
+"foo" field receives the
+value <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/lexis/struct.TokenRef.html#method.nil">TokenRef::nil</a>.</li>
+</ul>
+<h2 id="guidelines"><a class="header" href="#guidelines">Guidelines</a></h2>
+<ol>
+<li>
+<p><strong>Keep the syntax grammar simple</strong>.</p>
+<p>The purpose of the syntax tree is to express the general nesting structure of
+the source code to assist the further semantic analysis stage. If your
+language grammar contains rules that require higher-level lookaheads or
+context-dependent parsing, it might be better to parse a more simplified
+subset of this syntax at the syntax parse stage, leaving the rest of the
+analysis to the semantic stage.</p>
+</li>
+<li>
+<p><strong>Always capture the start and end bounds of the node</strong>.</p>
+<p>If your parse rules would capture the start and end tokens either directly or
+indirectly by capturing the starting and ending nodes of this node, these
+captures would help Lady Deirdre properly understand the starting and ending
+sites of the node. This is especially important for functions such as
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/struct.NodeRef.html#method.span">NodeRef::span</a>
+function.</p>
+<p>In particular, for this reason, in
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs#L96">JSON object and array rules</a>,
+we capture start and end tokens even though they are meaningless in terms of
+syntax tree traversing.</p>
+</li>
+<li>
+<p><strong>Annotate the captured fields with the <code>#[child]</code> attribute</strong>.</p>
+<p>By annotating the captured field with this attribute, you make it clear that
+the corresponding field should be treated as a node's child, even if this
+child is a token.</p>
+<p>For instance,
+the <a href="https://docs.rs/lady-deirdre/2.2.0/lady_deirdre/syntax/trait.SyntaxTree.html#method.traverse_tree">traverse_tree</a>
+function relies on this metadata when performing the syntax tree depth-first
+traversal.</p>
+</li>
+<li>
+<p><strong>Keep the <code>#[child]</code> fields in order</strong>.</p>
+<p>For the same reasons, the captured fields should appear in the variant's body
+in the same order as they appear in the parse expressions. For example, if
+you have a <code>#[rule(foo: $Foo &amp; bar: Bar* &amp; baz: $Baz)]</code> rule, the variant
+fields should come in this order: "foo", "bar", and "baz".</p>
+</li>
+<li>
+<p><strong>Don't capture semantically meaningless inner tokens</strong>.</p>
+<p>Capturing a comma token in a comma-separated list, for example, is likely
+unnecessary because you wouldn't rely on the list separators when analyzing
+the list.</p>
+<p>Note that for source code formatting purposes, you would use a dedicated API
+where all tokens are intentionally included in the parse tree regardless of
+their omission in the syntax tree.</p>
+</li>
+<li>
+<p><strong>Prefer wrapping semantically meaningful tokens into dedicated nodes</strong>.</p>
+<p>When you encounter an intermediate token in the rule's expression that
+potentially addresses semantic metadata (e.g., a variable identifier
+in <code>let x</code>), you always have a choice: either capture it as is or introduce a
+dedicated node (e.g., "Identifier") that captures the token separately, and
+then capture the introduced node in the rule.</p>
+<p>For semantic analysis purposes, it would be more convenient to always work
+with node captures, so you should prefer wrapping.</p>
+<p>For example, in
+the <a href="https://github.com/Eliah-Lakhin/lady-deirdre/blob/f350aaed30373a67694c3aba4d2cfd9874c2a656/work/crates/examples/src/json_grammar/syntax.rs#L83">JSON object entry rule</a>,
+we capture the entry's key as a node-wrapper (String node) rather than as a
+token for this reason.</p>
+</li>
+<li>
+<p><strong>Make the leaf nodes the Secondary nodes</strong>.</p>
+<p>By default, all nodes of the syntax tree are subject to eager caching. In
+practice, the incremental reparser probably performs better if you limit the
+cache to the structurally complex nodes only and annotate the rest of the
+node variants with the <code>#[secondary]</code> attribute.</p>
+<p>In the JSON example syntax, Root, Object, Entry, and Array are the primary
+nodes and could be cached during incremental reparsing. However, the leaf
+nodes such as String, Number, and others are secondary nodes. The incremental
+reparser will prefer to reparse their values during reparsing, saving cache
+memory.</p>
+</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../syntax/syntax.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../syntax/error-recovering.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../syntax/syntax.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../syntax/error-recovering.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
