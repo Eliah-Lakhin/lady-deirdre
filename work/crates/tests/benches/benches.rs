@@ -200,7 +200,9 @@ pub fn bench_parsing(criterion: &mut Criterion) {
 
                 for _ in 0..iters {
                     let mut parser = tree_sitter::Parser::new();
-                    parser.set_language(&tree_sitter_json::language()).unwrap();
+                    parser
+                        .set_language(&tree_sitter_json::LANGUAGE.into())
+                        .unwrap();
 
                     let start = Instant::now();
                     let result = parser.parse(small_text, None).unwrap();
@@ -222,7 +224,9 @@ pub fn bench_parsing(criterion: &mut Criterion) {
 
                 for _ in 0..iters {
                     let mut parser = tree_sitter::Parser::new();
-                    parser.set_language(&tree_sitter_json::language()).unwrap();
+                    parser
+                        .set_language(&tree_sitter_json::LANGUAGE.into())
+                        .unwrap();
 
                     let start = Instant::now();
                     let result = parser.parse(large_text, None).unwrap();

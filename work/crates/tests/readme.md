@@ -151,8 +151,8 @@ All four setups are generally acceptable for use in language server applications
 
 |                  | `Lady Deirdre (mutable)`          | `Lady Deirdre (immutable)`          | `Nom`                            | `Tree-Sitter`                    |
 |:-----------------|:----------------------------------|:------------------------------------|:---------------------------------|:-------------------------------- |
-| **`Small File`** | `751.99 us` (✅ **1.00x**)         | `550.96 us` (✅ **1.36x faster**)    | `448.80 us` (✅ **1.68x faster**) | `2.20 ms` (❌ *2.93x slower*)     |
-| **`Large File`** | `19.84 ms` (✅ **1.00x**)          | `14.33 ms` (✅ **1.38x faster**)     | `10.67 ms` (🚀 **1.86x faster**)  | `52.25 ms` (❌ *2.63x slower*)    |
+| **`Small File`** | `714.61 us` (✅ **1.00x**)         | `518.64 us` (✅ **1.38x faster**)    | `434.73 us` (✅ **1.64x faster**) | `2.21 ms` (❌ *3.10x slower*)     |
+| **`Large File`** | `18.39 ms` (✅ **1.00x**)          | `12.90 ms` (✅ **1.43x faster**)     | `9.98 ms` (🚀 **1.84x faster**)   | `54.75 ms` (❌ *2.98x slower*)    |
 
 ### Keystrokes Reparsing
 
@@ -183,8 +183,8 @@ the `Tree-Sitter` benchmark results.
 
 |                  | `Lady Deirdre`            | `Tree-Sitter`                    |
 |:-----------------|:--------------------------|:-------------------------------- |
-| **`Small File`** | `20.99 ms` (✅ **1.00x**)  | `46.19 ms` (❌ *2.20x slower*)    |
-| **`Large File`** | `377.86 ms` (✅ **1.00x**) | `51.06 ms` (🚀 **7.40x faster**)  |
+| **`Small File`** | `21.22 ms` (✅ **1.00x**)  | `45.49 ms` (❌ *2.14x slower*)    |
+| **`Large File`** | `376.75 ms` (✅ **1.00x**) | `50.07 ms` (🚀 **7.53x faster**)  |
 
 ### Entire Text Input
 
@@ -202,8 +202,8 @@ was designed for one-time loading.
 
 |                  | `Lady Deirdre (immutable)`          | `Lady Deirdre (mutable)`          | `Ropey`                           |
 |:-----------------|:------------------------------------|:----------------------------------|:--------------------------------- |
-| **`Small File`** | `179.69 us` (✅ **1.00x**)           | `212.44 us` (❌ *1.18x slower*)    | `26.76 us` (🚀 **6.72x faster**)   |
-| **`Large File`** | `5.04 ms` (✅ **1.00x**)             | `6.01 ms` (❌ *1.19x slower*)      | `900.86 us` (🚀 **5.59x faster**)  |
+| **`Small File`** | `174.53 us` (✅ **1.00x**)           | `208.19 us` (❌ *1.19x slower*)    | `16.41 us` (🚀 **10.63x faster**)  |
+| **`Large File`** | `4.92 ms` (✅ **1.00x**)             | `5.93 ms` (❌ *1.21x slower*)      | `581.09 us` (🚀 **8.46x faster**)  |
 
 ### Keystroke Writes
 
@@ -221,8 +221,8 @@ separately measured in the [Entire Text Input](#entire-text-input) tests).
 
 |                  | `Lady Deirdre`           | `Ropey`                            |
 |:-----------------|:-------------------------|:---------------------------------- |
-| **`Small File`** | `1.51 ms` (✅ **1.00x**)  | `400.51 us` (🚀 **3.78x faster**)   |
-| **`Large File`** | `11.75 ms` (✅ **1.00x**) | `535.70 us` (🚀 **21.94x faster**)  |
+| **`Small File`** | `1.49 ms` (✅ **1.00x**)  | `488.96 us` (🚀 **3.05x faster**)   |
+| **`Large File`** | `11.79 ms` (✅ **1.00x**) | `693.91 us` (🚀 **17.00x faster**)  |
 
 ### Scanner
 
@@ -238,8 +238,8 @@ generally acceptable results.
 
 |                  | `Lady Deirdre`            | `Logos`                          |
 |:-----------------|:--------------------------|:-------------------------------- |
-| **`Small File`** | `245.61 us` (✅ **1.00x**) | `86.70 us` (🚀 **2.83x faster**)  |
-| **`Large File`** | `6.87 ms` (✅ **1.00x**)   | `2.26 ms` (🚀 **3.04x faster**)   |
+| **`Small File`** | `246.80 us` (✅ **1.00x**) | `89.89 us` (🚀 **2.75x faster**)  |
+| **`Large File`** | `6.83 ms` (✅ **1.00x**)   | `2.31 ms` (🚀 **2.95x faster**)   |
 
 ---
 Made with [criterion-table](https://github.com/nu11ptr/criterion-table)
