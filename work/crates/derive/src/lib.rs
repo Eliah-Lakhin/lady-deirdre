@@ -196,6 +196,14 @@ mod utils;
 ///     //
 ///     // If the macro attribute omitted, the `Token::describe` would
 ///     // return None for this token variant.
+///     //
+///     // Note, that the attribute accepts custom expressions as arguments too,
+///     // as long as these expressions are const-compatible and
+///     // return `&'static str` value.
+///     //
+///     // For example, `#[describe("short", include_str!("descr_file.txt"))]`
+///     // or `#[describe("short", some_const_fn())]` acceptable, while
+///     // `#[describe(String::from("short"))]` is not.
 ///     #[describe("short", "verbose")]
 ///
 ///     // Optional.
@@ -530,6 +538,14 @@ pub fn token(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 ///     //
 ///     // If the macro attribute omitted, the `AbstractNode::describe` would
 ///     // return None for this node variant.
+///     //
+///     // Note, that the attribute accepts custom expressions as arguments too,
+///     // as long as these expressions are const-compatible and
+///     // return `&'static str` value.
+///     //
+///     // For example, `#[describe("short", include_str!("descr_file.txt"))]`
+///     // or `#[describe("short", some_const_fn())]` acceptable, while
+///     // `#[describe(String::from("short"))]` is not.
 ///     #[describe("short", "verbose")]
 ///
 ///     // Optional. Only applicable when the variant has a #[rule(..)]
