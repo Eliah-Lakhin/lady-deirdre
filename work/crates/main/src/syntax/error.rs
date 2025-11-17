@@ -480,6 +480,15 @@ impl SyntaxError {
                     return Ok(());
                 }
 
+                let annotation_message = self
+                    .error
+                    .message::<U::Node>(self.unit)
+                    .to_string()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string();
+
                 formatter
                     .snippet(self.unit)
                     .set_caption(format!("Unit({})", self.unit.id()))
@@ -487,7 +496,7 @@ impl SyntaxError {
                     .annotate(
                         aligned_span,
                         AnnotationPriority::Primary,
-                        format!("{}", self.error.message::<U::Node>(self.unit)),
+                        annotation_message,
                     )
                     .finish()
             }
