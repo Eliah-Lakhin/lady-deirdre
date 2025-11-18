@@ -48,7 +48,7 @@ mod void;
 pub(crate) use crate::syntax::void::is_void_syntax;
 pub use crate::syntax::{
     captures::{Capture, CaptureIntoIter, CapturesIter, ChildrenIter, Key},
-    error::{ErrorRef, SyntaxError, NIL_ERROR_REF},
+    error::{ErrorRef, SyntaxError, SyntaxErrorFormat, NIL_ERROR_REF},
     immutable::ImmutableSyntaxTree,
     morphism::{PolyRef, PolyVariant, RefKind},
     node::{AbstractNode, Node, NodeRef, NIL_NODE_REF},

@@ -32,8 +32,19 @@
 // All rights reserved.                                                       //
 ////////////////////////////////////////////////////////////////////////////////
 
-use proc_macro2::Span;
-use syn::{parse::ParseStream, spanned::Spanned, Attribute, Error, LitStr, Result};
+use proc_macro2::{Span, TokenStream};
+use quote::ToTokens;
+use syn::{
+    parse::{Parse, ParseStream},
+    spanned::Spanned,
+    Attribute,
+    Error,
+    Expr,
+    ExprLit,
+    Lit,
+    LitStr,
+    Result,
+};
 
 use crate::utils::{error, system_panic};
 
@@ -41,12 +52,12 @@ pub enum Description {
     Unset,
     Short {
         span: Span,
-        short: LitStr,
+        short: DescriptionExpr,
     },
     Full {
         span: Span,
-        short: LitStr,
-        verbose: LitStr,
+        short: DescriptionExpr,
+        verbose: DescriptionExpr,
     },
 }
 
@@ -60,24 +71,27 @@ impl TryFrom<Attribute> for Description {
             if input.is_empty() {
                 return Err(error!(
                     input.span(),
-                    "Expected description strings in form of `\"<short>\"` or \
-                    `\"<short>\", \"<verbose>\"`.",
+                    "Expected description in form of `<short>` or \
+                    `<short>, <verbose>`,\nwhere `<short>` and `<verbose>` must \
+                    be string literals or constant expressions.\n\n\
+                    Examples: `#[describe(\"foo\", \"bar\")]`, or \
+                    `#[describe(\"foo\", include_str!(\"bar.txt\"))]`.",
                 ));
             }
 
-            let short = input.parse::<LitStr>()?;
+            let short = input.parse::<DescriptionExpr>()?;
 
             let verbose = match input.peek(Token![,]) {
                 false => None,
 
                 true => {
                     let _ = input.parse::<Token![,]>()?;
-                    Some(input.parse::<LitStr>()?)
+                    Some(input.parse::<DescriptionExpr>()?)
                 }
             };
 
             if !input.is_empty() {
-                return Err(error!(input.span(), "unexpected end of input.",));
+                return Err(error!(input.span(), "unexpected end of input",));
             }
 
             match verbose {
@@ -103,8 +117,8 @@ impl Description {
 
                 Self::Full {
                     span,
-                    short: literal.clone(),
-                    verbose: literal,
+                    short: DescriptionExpr::Literal(literal.clone()),
+                    verbose: DescriptionExpr::Literal(literal),
                 }
             }
 
@@ -114,7 +128,7 @@ impl Description {
             } => {
                 let (span, string) = initializer();
 
-                let verbose = LitStr::new(string.as_ref(), span);
+                let verbose = DescriptionExpr::Literal(LitStr::new(string.as_ref(), span));
 
                 Self::Full {
                     span: attr_span,
@@ -145,7 +159,7 @@ impl Description {
     }
 
     #[inline(always)]
-    pub fn short(&self) -> &LitStr {
+    pub fn short(&self) -> &DescriptionExpr {
         match self {
             Self::Full { short, .. } => short,
             _ => system_panic!("Description is not fully initialized."),
@@ -153,10 +167,58 @@ impl Description {
     }
 
     #[inline(always)]
-    pub fn verbose(&self) -> &LitStr {
+    pub fn verbose(&self) -> &DescriptionExpr {
         match self {
             Self::Full { verbose, .. } => verbose,
             _ => system_panic!("Description is not fully initialized."),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum DescriptionExpr {
+    Literal(LitStr),
+    Custom(Expr),
+}
+
+impl Eq for DescriptionExpr {}
+
+impl PartialEq for DescriptionExpr {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Literal(a), Self::Literal(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Parse for DescriptionExpr {
+    #[inline(always)]
+    fn parse(input: ParseStream) -> Result<Self> {
+        let expr = input.parse::<Expr>()?;
+
+        match expr {
+            Expr::Lit(ExprLit {
+                attrs,
+                lit: Lit::Str(string),
+            }) if attrs.is_empty() => Ok(Self::Literal(string)),
+
+            other => Ok(Self::Custom(other)),
+        }
+    }
+}
+
+impl ToTokens for DescriptionExpr {
+    #[inline(always)]
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            Self::Literal(lit) => lit.to_tokens(tokens),
+            Self::Custom(expr) => {
+                let span = expr.span();
+
+                quote_spanned!(span=> const {#expr}).to_tokens(tokens)
+            }
         }
     }
 }

@@ -63,6 +63,39 @@ use crate::{
 /// The value of this static equals to the [ErrorRef::nil] value.
 pub static NIL_ERROR_REF: ErrorRef = ErrorRef::nil();
 
+/// A [SyntaxError] format configuration options.
+///
+/// Used to configure syntax error display helper functions such as
+/// [SyntaxError::title_with], [SyntaxError::message_with], and
+/// [SyntaxError::display_with].
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[non_exhaustive]
+pub struct SyntaxErrorFormat {
+    /// Enables Verbose [description](Token::describe) of
+    /// the token when formatting syntax error strings.
+    ///
+    /// This flag is set to true by default. When disabled, formatting function
+    /// can only use Short descriptions.
+    pub verbose_token: bool,
+
+    /// Enables Verbose [description](Node::describe) of
+    /// the node when formatting syntax error strings.
+    ///
+    /// This flag is set to true by default. When disabled, formatting function
+    /// can only use Short descriptions.
+    pub verbose_node: bool,
+}
+
+impl Default for SyntaxErrorFormat {
+    #[inline(always)]
+    fn default() -> Self {
+        Self {
+            verbose_token: true,
+            verbose_node: true,
+        }
+    }
+}
+
 /// A syntax error that may occur during the parsing process.
 ///
 /// In Lady Deirdre syntax parsing is an
@@ -92,29 +125,15 @@ impl SyntaxError {
     /// this syntax error.
     #[inline(always)]
     pub fn title<N: AbstractNode>(&self) -> impl Display + '_ {
-        struct Title<'error, N> {
-            error: &'error SyntaxError,
-            _node: PhantomData<N>,
-        }
+        self.title_with::<N>(SyntaxErrorFormat::default())
+    }
 
-        impl<'error, N: Node> Debug for Title<'error, N> {
-            #[inline(always)]
-            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                Display::fmt(self, formatter)
-            }
-        }
-
-        impl<'error, N: AbstractNode> Display for Title<'error, N> {
-            #[inline(always)]
-            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                match N::rule_description(self.error.context, true) {
-                    Some(context) => formatter.write_fmt(format_args!("{context} syntax error.")),
-                    None => formatter.write_str("Syntax error."),
-                }
-            }
-        }
-
-        Title {
+    /// Same as [title](Self::title), but provides more formatting
+    /// options specified via extra `config` argument.
+    #[inline(always)]
+    pub fn title_with<N: AbstractNode>(&self, config: SyntaxErrorFormat) -> impl Display + '_ {
+        DisplaySyntaxErrorTitle {
+            config,
             error: self,
             _node: PhantomData::<N>,
         }
@@ -130,314 +149,21 @@ impl SyntaxError {
         &self,
         code: &impl SourceCode<Token = <N as Node>::Token>,
     ) -> impl Debug + Display + '_ {
-        struct Message<'error, N> {
-            error: &'error SyntaxError,
-            empty_span: bool,
-            _node: PhantomData<N>,
-        }
+        self.message_with::<N>(code, SyntaxErrorFormat::default())
+    }
 
-        impl<'error, N: Node> Debug for Message<'error, N> {
-            #[inline(always)]
-            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                Display::fmt(self, formatter)
-            }
-        }
-
-        impl<'error, N: Node> Display for Message<'error, N> {
-            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                const LENGTH_MAX: Length = 80;
-
-                #[derive(PartialEq, Eq)]
-                enum TokenOrNode {
-                    Token(Cow<'static, str>),
-                    Node(Cow<'static, str>),
-                }
-
-                impl PartialOrd for TokenOrNode {
-                    #[inline(always)]
-                    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                        Some(self.cmp(other))
-                    }
-                }
-
-                impl Ord for TokenOrNode {
-                    fn cmp(&self, other: &Self) -> Ordering {
-                        match (self, other) {
-                            (Self::Token(_), Self::Node(_)) => Ordering::Greater,
-                            (Self::Node(_), Self::Token(_)) => Ordering::Less,
-                            (Self::Token(this), Self::Token(other)) => this.cmp(other),
-                            (Self::Node(this), Self::Node(other)) => this.cmp(other),
-                        }
-                    }
-                }
-
-                impl TokenOrNode {
-                    #[inline(always)]
-                    fn print_to(&self, target: &mut String) {
-                        match self {
-                            Self::Node(string) => target.push_str(string.as_ref()),
-
-                            Self::Token(string) => {
-                                target.push('\'');
-                                target.push_str(string.as_ref());
-                                target.push('\'');
-                            }
-                        }
-                    }
-                }
-
-                struct OutString {
-                    alt: bool,
-                    set: HashSet<&'static str>,
-                    empty_span: bool,
-                    context: Cow<'static, str>,
-                    recovery: RecoveryResult,
-                    components: Vec<TokenOrNode>,
-                    exhaustive: bool,
-                }
-
-                impl OutString {
-                    fn new<N: Node>(
-                        alt: bool,
-                        capacity: usize,
-                        empty_span: bool,
-                        context: NodeRule,
-                        recovery: RecoveryResult,
-                    ) -> Self {
-                        let set = HashSet::with_capacity(capacity);
-
-                        let context = N::rule_description(context, true)
-                            .filter(|_| context != ROOT_RULE)
-                            .map(Cow::Borrowed)
-                            .unwrap_or(Cow::Borrowed(""));
-
-                        Self {
-                            alt,
-                            set,
-                            empty_span,
-                            context,
-                            recovery,
-                            components: Vec::with_capacity(capacity),
-                            exhaustive: true,
-                        }
-                    }
-
-                    fn push_token<N: Node>(&mut self, rule: TokenRule) {
-                        let description = match <N as Node>::Token::rule_description(rule, self.alt)
-                        {
-                            Some(string) => string,
-                            None => return,
-                        };
-
-                        if self.set.insert(description) {
-                            self.components
-                                .push(TokenOrNode::Token(Cow::Borrowed(description)));
-                        }
-                    }
-
-                    fn push_node<N: Node>(&mut self, rule: NodeRule) {
-                        let description = match N::rule_description(rule, self.alt) {
-                            Some(string) => string,
-                            None => return,
-                        };
-
-                        if self.set.insert(description) {
-                            self.components
-                                .push(TokenOrNode::Node(Cow::Borrowed(description)));
-                        }
-                    }
-
-                    fn shorten(&mut self) -> bool {
-                        if self.alt {
-                            return false;
-                        }
-
-                        if self.components.len() <= 2 {
-                            return false;
-                        }
-
-                        let _ = self.components.pop();
-                        self.exhaustive = false;
-
-                        true
-                    }
-
-                    #[inline(always)]
-                    fn missing_str(&self) -> &'static str {
-                        static STRING: &'static str = "missing";
-                        static ALT_STR: &'static str = "Missing";
-
-                        match self.alt {
-                            false => STRING,
-                            true => ALT_STR,
-                        }
-                    }
-
-                    #[inline(always)]
-                    fn unexpected_str(&self) -> &'static str {
-                        static STRING: &'static str = "unexpected input";
-                        static ALT_STR: &'static str = "Unexpected input";
-
-                        match self.alt {
-                            false => STRING,
-                            true => ALT_STR,
-                        }
-                    }
-
-                    #[inline(always)]
-                    fn in_str(&self) -> &'static str {
-                        static STRING: &'static str = " in ";
-                        static ALT_STR: &'static str = " in ";
-
-                        match self.alt {
-                            false => STRING,
-                            true => ALT_STR,
-                        }
-                    }
-
-                    #[inline(always)]
-                    fn eoi_str(&self) -> &'static str {
-                        static STRING: &'static str = "unexpected end of input";
-                        static ALT_STR: &'static str = "Unexpected end of input";
-
-                        match self.alt {
-                            false => STRING,
-                            true => ALT_STR,
-                        }
-                    }
-
-                    #[inline(always)]
-                    fn or_str(&self) -> &'static str {
-                        static STRING: &'static str = " or ";
-
-                        STRING
-                    }
-
-                    #[inline(always)]
-                    fn comma_str(&self) -> &'static str {
-                        static STRING: &'static str = ", ";
-
-                        STRING
-                    }
-
-                    #[inline(always)]
-                    fn etc_str(&self) -> &'static str {
-                        static STRING: &'static str = "…";
-                        static ALT_STR: &'static str = "...";
-
-                        match self.alt {
-                            false => STRING,
-                            true => ALT_STR,
-                        }
-                    }
-
-                    fn string(&self) -> String {
-                        let mut result = String::new();
-
-                        let print_components;
-
-                        match self.recovery {
-                            RecoveryResult::InsertRecover => {
-                                result.push_str(self.missing_str());
-                                print_components = true;
-                            }
-
-                            RecoveryResult::PanicRecover if self.empty_span => {
-                                result.push_str(self.missing_str());
-                                print_components = true;
-                            }
-
-                            RecoveryResult::PanicRecover => {
-                                result.push_str(self.unexpected_str());
-                                print_components = false;
-                            }
-
-                            RecoveryResult::UnexpectedEOI => {
-                                result.push_str(self.eoi_str());
-                                print_components = false;
-                            }
-
-                            RecoveryResult::UnexpectedToken => {
-                                result.push_str(self.missing_str());
-                                print_components = true;
-                            }
-                        };
-
-                        if print_components {
-                            let mut is_first = true;
-
-                            for component in &self.components {
-                                match is_first {
-                                    true => {
-                                        result.push(' ');
-                                        is_first = false;
-                                    }
-                                    false => match self.components.len() == 2 && self.exhaustive {
-                                        true => result.push_str(self.or_str()),
-                                        false => result.push_str(self.comma_str()),
-                                    },
-                                }
-
-                                component.print_to(&mut result);
-                            }
-                        }
-
-                        match self.exhaustive {
-                            false => {
-                                result.push_str(self.etc_str());
-                            }
-
-                            true => {
-                                if !self.context.is_empty() {
-                                    result.push_str(self.in_str());
-                                    result.push_str(self.context.as_ref());
-                                }
-
-                                if self.alt {
-                                    result.push('.');
-                                }
-                            }
-                        }
-
-                        result
-                    }
-                }
-
-                let mut out = OutString::new::<N>(
-                    formatter.alternate(),
-                    self.error.expected_tokens.len() + self.error.expected_nodes.len(),
-                    self.empty_span,
-                    self.error.context,
-                    self.error.recovery,
-                );
-
-                for rule in self.error.expected_nodes {
-                    out.push_node::<N>(rule);
-                }
-
-                for rule in self.error.expected_tokens {
-                    out.push_token::<N>(rule);
-                }
-
-                out.components.sort();
-
-                let mut string = out.string();
-
-                while string.chars().count() > LENGTH_MAX {
-                    if !out.shorten() {
-                        break;
-                    }
-
-                    string = out.string();
-                }
-
-                formatter.write_str(string.as_ref())
-            }
-        }
-
+    /// Same as [message](Self::message), but provides more formatting
+    /// options specified via extra `config` argument.
+    #[inline(always)]
+    pub fn message_with<N: Node>(
+        &self,
+        code: &impl SourceCode<Token = <N as Node>::Token>,
+        config: SyntaxErrorFormat,
+    ) -> impl Debug + Display + '_ {
         let span = self.aligned_span(code);
 
-        Message {
+        DisplaySyntaxErrorMessage {
+            config,
             error: self,
             empty_span: span.start == span.end,
             _node: PhantomData::<N>,
@@ -452,48 +178,22 @@ impl SyntaxError {
     /// the error occurred.
     #[inline(always)]
     pub fn display<'a>(&'a self, unit: &'a impl CompilationUnit) -> impl Debug + Display + 'a {
-        struct DisplaySyntaxError<'a, U: CompilationUnit> {
-            error: &'a SyntaxError,
-            unit: &'a U,
+        self.display_with(unit, SyntaxErrorFormat::default())
+    }
+
+    /// Same as [display](Self::display), but provides more formatting
+    /// options specified via extra `config` argument.
+    #[inline(always)]
+    pub fn display_with<'a>(
+        &'a self,
+        unit: &'a impl CompilationUnit,
+        config: SyntaxErrorFormat,
+    ) -> impl Debug + Display + 'a {
+        DisplaySyntaxError {
+            config,
+            error: self,
+            unit,
         }
-
-        impl<'a, U: CompilationUnit> Debug for DisplaySyntaxError<'a, U> {
-            #[inline(always)]
-            fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-                Display::fmt(self, formatter)
-            }
-        }
-
-        impl<'a, U: CompilationUnit> Display for DisplaySyntaxError<'a, U> {
-            #[inline]
-            fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                let aligned_span = self.error.aligned_span(self.unit);
-
-                if !formatter.alternate() {
-                    formatter.write_fmt(format_args!("{}", aligned_span.display(self.unit)))?;
-                    formatter.write_str(": ")?;
-                    formatter.write_fmt(format_args!(
-                        "{:#}",
-                        self.error.message::<U::Node>(self.unit)
-                    ))?;
-
-                    return Ok(());
-                }
-
-                formatter
-                    .snippet(self.unit)
-                    .set_caption(format!("Unit({})", self.unit.id()))
-                    .set_summary(self.error.title::<U::Node>().to_string())
-                    .annotate(
-                        aligned_span,
-                        AnnotationPriority::Primary,
-                        format!("{}", self.error.message::<U::Node>(self.unit)),
-                    )
-                    .finish()
-            }
-        }
-
-        DisplaySyntaxError { error: self, unit }
     }
 
     /// Computes a [token span](SiteRefSpan) from the syntax error's original
@@ -749,5 +449,391 @@ impl ErrorRef {
         }
 
         tree.has_error(&self.entry)
+    }
+}
+
+struct DisplaySyntaxErrorTitle<'error, N> {
+    config: SyntaxErrorFormat,
+    error: &'error SyntaxError,
+    _node: PhantomData<N>,
+}
+
+impl<'error, N: Node> Debug for DisplaySyntaxErrorTitle<'error, N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(self, formatter)
+    }
+}
+
+impl<'error, N: AbstractNode> Display for DisplaySyntaxErrorTitle<'error, N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        match N::rule_description(self.error.context, self.config.verbose_node) {
+            Some(context) => formatter.write_fmt(format_args!("{context} syntax error.")),
+            None => formatter.write_str("Syntax error."),
+        }
+    }
+}
+
+struct DisplaySyntaxErrorMessage<'error, N> {
+    config: SyntaxErrorFormat,
+    error: &'error SyntaxError,
+    empty_span: bool,
+    _node: PhantomData<N>,
+}
+
+impl<'error, N: Node> Debug for DisplaySyntaxErrorMessage<'error, N> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        Display::fmt(self, formatter)
+    }
+}
+
+impl<'error, N: Node> Display for DisplaySyntaxErrorMessage<'error, N> {
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        const LENGTH_MAX: Length = 80;
+
+        #[derive(PartialEq, Eq)]
+        enum TokenOrNode {
+            Token(Cow<'static, str>),
+            Node(Cow<'static, str>),
+        }
+
+        impl PartialOrd for TokenOrNode {
+            #[inline(always)]
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl Ord for TokenOrNode {
+            fn cmp(&self, other: &Self) -> Ordering {
+                match (self, other) {
+                    (Self::Token(_), Self::Node(_)) => Ordering::Greater,
+                    (Self::Node(_), Self::Token(_)) => Ordering::Less,
+                    (Self::Token(this), Self::Token(other)) => this.cmp(other),
+                    (Self::Node(this), Self::Node(other)) => this.cmp(other),
+                }
+            }
+        }
+
+        impl TokenOrNode {
+            #[inline(always)]
+            fn print_to(&self, target: &mut String) {
+                match self {
+                    Self::Node(string) => target.push_str(string.as_ref()),
+
+                    Self::Token(string) => {
+                        target.push('\'');
+                        target.push_str(string.as_ref());
+                        target.push('\'');
+                    }
+                }
+            }
+        }
+
+        struct OutString {
+            config: SyntaxErrorFormat,
+            alt: bool,
+            set: HashSet<&'static str>,
+            empty_span: bool,
+            context: Cow<'static, str>,
+            recovery: RecoveryResult,
+            components: Vec<TokenOrNode>,
+            exhaustive: bool,
+        }
+
+        impl OutString {
+            fn new<N: Node>(
+                config: SyntaxErrorFormat,
+                alt: bool,
+                capacity: usize,
+                empty_span: bool,
+                context: NodeRule,
+                recovery: RecoveryResult,
+            ) -> Self {
+                let set = HashSet::with_capacity(capacity);
+
+                let context = N::rule_description(context, config.verbose_node)
+                    .filter(|_| context != ROOT_RULE)
+                    .map(Cow::Borrowed)
+                    .unwrap_or(Cow::Borrowed(""));
+
+                Self {
+                    config,
+                    alt,
+                    set,
+                    empty_span,
+                    context,
+                    recovery,
+                    components: Vec::with_capacity(capacity),
+                    exhaustive: true,
+                }
+            }
+
+            fn push_token<N: Node>(&mut self, rule: TokenRule) {
+                let verbose = self.alt && self.config.verbose_token;
+
+                let description = match <N as Node>::Token::rule_description(rule, verbose) {
+                    Some(string) => string,
+                    None => return,
+                };
+
+                if self.set.insert(description) {
+                    self.components
+                        .push(TokenOrNode::Token(Cow::Borrowed(description)));
+                }
+            }
+
+            fn push_node<N: Node>(&mut self, rule: NodeRule) {
+                let verbose = self.alt && self.config.verbose_token;
+
+                let description = match N::rule_description(rule, verbose) {
+                    Some(string) => string,
+                    None => return,
+                };
+
+                if self.set.insert(description) {
+                    self.components
+                        .push(TokenOrNode::Node(Cow::Borrowed(description)));
+                }
+            }
+
+            fn shorten(&mut self) -> bool {
+                if self.alt {
+                    return false;
+                }
+
+                if self.components.len() <= 2 {
+                    return false;
+                }
+
+                let _ = self.components.pop();
+                self.exhaustive = false;
+
+                true
+            }
+
+            #[inline(always)]
+            fn missing_str(&self) -> &'static str {
+                static STRING: &'static str = "missing";
+                static ALT_STR: &'static str = "Missing";
+
+                match self.alt {
+                    false => STRING,
+                    true => ALT_STR,
+                }
+            }
+
+            #[inline(always)]
+            fn unexpected_str(&self) -> &'static str {
+                static STRING: &'static str = "unexpected input";
+                static ALT_STR: &'static str = "Unexpected input";
+
+                match self.alt {
+                    false => STRING,
+                    true => ALT_STR,
+                }
+            }
+
+            #[inline(always)]
+            fn in_str(&self) -> &'static str {
+                static STRING: &'static str = " in ";
+                static ALT_STR: &'static str = " in ";
+
+                match self.alt {
+                    false => STRING,
+                    true => ALT_STR,
+                }
+            }
+
+            #[inline(always)]
+            fn eoi_str(&self) -> &'static str {
+                static STRING: &'static str = "unexpected end of input";
+                static ALT_STR: &'static str = "Unexpected end of input";
+
+                match self.alt {
+                    false => STRING,
+                    true => ALT_STR,
+                }
+            }
+
+            #[inline(always)]
+            fn or_str(&self) -> &'static str {
+                static STRING: &'static str = " or ";
+
+                STRING
+            }
+
+            #[inline(always)]
+            fn comma_str(&self) -> &'static str {
+                static STRING: &'static str = ", ";
+
+                STRING
+            }
+
+            #[inline(always)]
+            fn etc_str(&self) -> &'static str {
+                static STRING: &'static str = "…";
+                static ALT_STR: &'static str = "...";
+
+                match self.alt {
+                    false => STRING,
+                    true => ALT_STR,
+                }
+            }
+
+            fn string(&self) -> String {
+                let mut result = String::new();
+
+                let print_components;
+
+                match self.recovery {
+                    RecoveryResult::InsertRecover => {
+                        result.push_str(self.missing_str());
+                        print_components = true;
+                    }
+
+                    RecoveryResult::PanicRecover if self.empty_span => {
+                        result.push_str(self.missing_str());
+                        print_components = true;
+                    }
+
+                    RecoveryResult::PanicRecover => {
+                        result.push_str(self.unexpected_str());
+                        print_components = false;
+                    }
+
+                    RecoveryResult::UnexpectedEOI => {
+                        result.push_str(self.eoi_str());
+                        print_components = false;
+                    }
+
+                    RecoveryResult::UnexpectedToken => {
+                        result.push_str(self.missing_str());
+                        print_components = true;
+                    }
+                };
+
+                if print_components {
+                    let mut is_first = true;
+
+                    for component in &self.components {
+                        match is_first {
+                            true => {
+                                result.push(' ');
+                                is_first = false;
+                            }
+                            false => match self.components.len() == 2 && self.exhaustive {
+                                true => result.push_str(self.or_str()),
+                                false => result.push_str(self.comma_str()),
+                            },
+                        }
+
+                        component.print_to(&mut result);
+                    }
+                }
+
+                match self.exhaustive {
+                    false => {
+                        result.push_str(self.etc_str());
+                    }
+
+                    true => {
+                        if !self.context.is_empty() {
+                            result.push_str(self.in_str());
+                            result.push_str(self.context.as_ref());
+                        }
+
+                        if self.alt {
+                            result.push('.');
+                        }
+                    }
+                }
+
+                result
+            }
+        }
+
+        let mut out = OutString::new::<N>(
+            self.config,
+            formatter.alternate(),
+            self.error.expected_tokens.len() + self.error.expected_nodes.len(),
+            self.empty_span,
+            self.error.context,
+            self.error.recovery,
+        );
+
+        for rule in self.error.expected_nodes {
+            out.push_node::<N>(rule);
+        }
+
+        for rule in self.error.expected_tokens {
+            out.push_token::<N>(rule);
+        }
+
+        out.components.sort();
+
+        let mut string = out.string();
+
+        while string.chars().count() > LENGTH_MAX {
+            if !out.shorten() {
+                break;
+            }
+
+            string = out.string();
+        }
+
+        formatter.write_str(string.as_ref())
+    }
+}
+
+struct DisplaySyntaxError<'a, U: CompilationUnit> {
+    config: SyntaxErrorFormat,
+    error: &'a SyntaxError,
+    unit: &'a U,
+}
+
+impl<'a, U: CompilationUnit> Debug for DisplaySyntaxError<'a, U> {
+    #[inline(always)]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, formatter)
+    }
+}
+
+impl<'a, U: CompilationUnit> Display for DisplaySyntaxError<'a, U> {
+    #[inline]
+    fn fmt(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        let aligned_span = self.error.aligned_span(self.unit);
+
+        let message = self.error.message_with::<U::Node>(self.unit, self.config);
+
+        if !formatter.alternate() {
+            formatter.write_fmt(format_args!("{}", aligned_span.display(self.unit)))?;
+            formatter.write_str(": ")?;
+            formatter.write_fmt(format_args!("{message:#}"))?;
+
+            return Ok(());
+        }
+
+        let annotation_message = message
+            .to_string()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_string();
+
+        let title = self.error.title_with::<U::Node>(self.config);
+
+        formatter
+            .snippet(self.unit)
+            .set_caption(format!("Unit({})", self.unit.id()))
+            .set_summary(title.to_string())
+            .annotate(
+                aligned_span,
+                AnnotationPriority::Primary,
+                annotation_message,
+            )
+            .finish()
     }
 }
