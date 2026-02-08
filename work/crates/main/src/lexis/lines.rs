@@ -140,7 +140,7 @@ impl LineIndex {
 
     /// Returns the end [site](Site) of the `line`.
     ///
-    /// The end sites points to the first character of the next line or points
+    /// The end site points to the first character of the next line or points
     /// to the end of the text content.
     ///
     /// See [Line] specification for details.

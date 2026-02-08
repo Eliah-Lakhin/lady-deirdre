@@ -627,7 +627,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                 .end(&mut is_first, self.formatter)?;
         }
 
-        let mut back_distance: usize = 0;
+        let mut back_distance = self.config.cover().min(usize::MAX / 2);
         let mut skip = false;
         let mut distances = Vec::with_capacity(lines.len());
 
@@ -640,7 +640,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
             distances.push(back_distance);
         }
 
-        back_distance = 0;
+        back_distance = self.config.cover().min(usize::MAX / 2);
 
         for (forward_distance, line) in distances.into_iter().rev().zip(lines) {
             if line.annotated || !self.config.show_numbers || !dim {
@@ -843,6 +843,8 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                     .sort_by_key(|message| message.priority.order());
 
                 self.buffer.push(pending);
+
+                self.empty = true;
             }
 
             #[inline(always)]
@@ -933,7 +935,13 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                 scanner.empty = false;
 
                 match ch {
-                    '\n' => scanner.submit(self.config),
+                    '\n' => {
+                        scanner.submit(self.config);
+
+                        if chunk.end() == self.code.length() {
+                            scanner.empty = false;
+                        }
+                    }
                     '\t' => scanner.pending.code.write_tab(self.config),
                     _ => scanner.pending.code.write_code_char(self.config, ch),
                 }
