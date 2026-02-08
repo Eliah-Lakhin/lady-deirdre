@@ -228,7 +228,7 @@ impl SnippetConfig {
 
     #[inline(always)]
     fn box_top_left(&self) -> &'static PrintString<'static> {
-        static ASCII: PrintString<'static> = PrintString::borrowed(" ");
+        static ASCII: PrintString<'static> = PrintString::borrowed("|");
         static NON_ASCII: PrintString<'static> = PrintString::borrowed("╭");
 
         match self.ascii_drawing {
@@ -239,7 +239,7 @@ impl SnippetConfig {
 
     #[inline(always)]
     fn box_top_right(&self) -> &'static PrintString<'static> {
-        static ASCII: PrintString<'static> = PrintString::borrowed("");
+        static ASCII: PrintString<'static> = PrintString::borrowed("|");
         static NON_ASCII: PrintString<'static> = PrintString::borrowed("╮");
 
         match self.ascii_drawing {
@@ -250,7 +250,7 @@ impl SnippetConfig {
 
     #[inline(always)]
     fn box_bottom_left(&self) -> &'static PrintString<'static> {
-        static ASCII: PrintString<'static> = PrintString::borrowed(" ");
+        static ASCII: PrintString<'static> = PrintString::borrowed("|");
         static NON_ASCII: PrintString<'static> = PrintString::borrowed("╰");
 
         match self.ascii_drawing {
@@ -261,7 +261,7 @@ impl SnippetConfig {
 
     #[inline(always)]
     fn box_bottom_right(&self) -> &'static PrintString<'static> {
-        static ASCII: PrintString<'static> = PrintString::borrowed("");
+        static ASCII: PrintString<'static> = PrintString::borrowed("|");
         static NON_ASCII: PrintString<'static> = PrintString::borrowed("╯");
 
         match self.ascii_drawing {
