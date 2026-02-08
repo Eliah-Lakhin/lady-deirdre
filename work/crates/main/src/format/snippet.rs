@@ -120,6 +120,14 @@ pub struct SnippetConfig {
     ///
     /// Default: 80.
     pub width: usize,
+
+    /// Shows extra bottom blank line with etcetera `...` line number if the
+    /// rendrer cuts the tail of the source code listing.
+    ///
+    /// This flag is ignored when the `show_numbers` set to false.
+    ///
+    /// Default: false.
+    pub etc: bool,
 }
 
 impl Default for SnippetConfig {
@@ -143,6 +151,7 @@ impl SnippetConfig {
             summary: true,
             surround: 2,
             width: 80,
+            etc: false,
         }
     }
 
@@ -162,6 +171,7 @@ impl SnippetConfig {
             summary: false,
             surround: 2,
             width: 80,
+            etc: false,
         }
     }
 
@@ -785,6 +795,17 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                     code_length,
                     line.code,
                 )
+                .end(&mut is_first, self.formatter)?;
+        }
+
+        if self.config.etc
+            && self.config.show_numbers
+            && cover.start.line != cover.end.line
+            && cover.end.line < self.code.lines().lines_count()
+        {
+            StyleString::start(is_first)
+                .with_header_etc(self.config, numbers_length)
+                .with_code_blank(self.config, dim, has_caption, has_summary, code_length)
                 .end(&mut is_first, self.formatter)?;
         }
 
