@@ -102,7 +102,7 @@ pub struct SnippetConfig {
     /// Default: true.
     pub caption: bool,
 
-    /// Allows summery (footer) rendering.
+    /// Allows summary (footer) rendering.
     ///
     /// Default: true.
     pub summary: bool,
