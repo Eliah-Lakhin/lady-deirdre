@@ -65,33 +65,60 @@ use crate::{
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[non_exhaustive]
 pub struct SnippetConfig {
-    /// Whether the line numbers shall be shown on the left of the code content.
+    /// Enables line numbers on the left of the code content.
+    ///
+    /// Default: true.
     pub show_numbers: bool,
 
-    /// Whether the boxed frame shall surround the code content from all sides.
+    /// Renders boxed frame surrounding the code content.
+    ///
+    /// Default: true.
     pub draw_frame: bool,
 
-    /// If the code annotations are present in the snippet, whether
-    /// the non-annotated parts of the source code text shall be rendered
-    /// dimmed to focus the user on annotations.
+    /// If the snippet has annotation, non-annotated text will be dimmed to
+    /// focus user attention on the annotations.
+    ///
+    /// Default: true.
     pub dim_code: bool,
 
-    /// Whether the box drawing characters shall be rendered using ASCII
-    /// symbols only.
+    /// Using ASCII symbols only when rendering decoation elements.
+    ///
+    /// Default: false.
     pub ascii_drawing: bool,
 
-    /// Whether the CSI [styles](Style) shall be applied.
+    /// Enables [terminal escape codes](Style) when rendering the snippet.
     ///
-    /// When set to false, the renderer does not apply built-in styles
-    /// to annotations and other parts of the output, and the syntax
-    /// highlighter will disabled too.
+    /// By turning this flag off, the snippet will be rendered as "monochrome",
+    /// syntax highlighter will be forcefully disabled, annotations will not
+    /// receive any colors or terminal styles, and the user input (caption,
+    /// summary and the annotation message) will be sanitized from the terminal
+    /// escape codes too.
+    ///
+    /// Default: true.
     pub style: bool,
 
-    /// Whether the snippet caption (header) shall be rendered or disabled.
+    /// Allows caption (header) rendering.
+    ///
+    /// Default: true.
     pub caption: bool,
 
-    /// Whether the snippet summary (footer) shall be rendered or disabled.
+    /// Allows summery (footer) rendering.
+    ///
+    /// Default: true.
     pub summary: bool,
+
+    /// The minimal number of non-annotated lines surrounding annotated lines.
+    ///
+    /// Default: 2.
+    pub annotations_cover: usize,
+
+    /// The minimal outer width of the rendered content.
+    ///
+    /// Note that when the `draw_frame` is false, this value is practically
+    /// meaningless, because the snippet without a frame does not have a border.
+    ///
+    /// Default: 80.
+    pub width: usize,
 }
 
 impl Default for SnippetConfig {
@@ -113,6 +140,8 @@ impl SnippetConfig {
             style: true,
             caption: true,
             summary: true,
+            annotations_cover: 2,
+            width: 80,
         }
     }
 
@@ -130,22 +159,24 @@ impl SnippetConfig {
             style: false,
             caption: false,
             summary: false,
+            annotations_cover: 2,
+            width: 80,
         }
     }
 
     #[inline(always)]
     fn cover(&self) -> usize {
-        2
+        self.annotations_cover
     }
 
     #[inline(always)]
     fn continuation(&self) -> usize {
-        3
+        self.cover().checked_mul(2).unwrap_or(usize::MAX)
     }
 
     #[inline(always)]
     fn margin(&self) -> Length {
-        80
+        self.width
     }
 
     #[inline(always)]
