@@ -75,8 +75,8 @@ pub struct SnippetConfig {
     /// Default: true.
     pub draw_frame: bool,
 
-    /// If the snippet has annotation, non-annotated text will be dimmed to
-    /// focus user attention on the annotations.
+    /// If the snippet has [annotations](Snippet::annotate), non-annotated
+    /// text will be dimmed to focus user attention on the annotated spans.
     ///
     /// Default: true.
     pub dim_code: bool,
@@ -97,20 +97,21 @@ pub struct SnippetConfig {
     /// Default: true.
     pub style: bool,
 
-    /// Allows caption (header) rendering.
+    /// Allows [caption](Snippet::set_caption) (header) rendering.
     ///
     /// Default: true.
     pub caption: bool,
 
-    /// Allows summary (footer) rendering.
+    /// Allows [summary](Snippet::set_summary) (footer) rendering.
     ///
     /// Default: true.
     pub summary: bool,
 
-    /// The minimal number of non-annotated lines surrounding annotated lines.
+    /// The minimal number of lines surrounding [annotated](Snippet::annotate)
+    /// lines and the lines with [inclusion](Snippet::include) spans.
     ///
     /// Default: 2.
-    pub annotations_cover: usize,
+    pub surround: usize,
 
     /// The minimal outer width of the rendered content.
     ///
@@ -140,7 +141,7 @@ impl SnippetConfig {
             style: true,
             caption: true,
             summary: true,
-            annotations_cover: 2,
+            surround: 2,
             width: 80,
         }
     }
@@ -159,14 +160,14 @@ impl SnippetConfig {
             style: false,
             caption: false,
             summary: false,
-            annotations_cover: 2,
+            surround: 2,
             width: 80,
         }
     }
 
     #[inline(always)]
     fn cover(&self) -> usize {
-        self.annotations_cover
+        self.surround
     }
 
     #[inline(always)]
@@ -520,9 +521,9 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
     /// Adds an annotation to the source code.
     ///
-    /// Annotations are the [spans](ToSpan) of source code that you want
-    /// to highlight for the end user, with or without a message,
-    /// such as syntax errors.
+    /// Annotations are the [spans](ToSpan) of source code that require end user
+    /// attention. For example, error messages connected with specific code
+    /// fragments.
     ///
     /// The `span` parameter specifies the annotation span.
     ///
@@ -533,9 +534,10 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
     /// but the message string must be one line (it should not contain
     /// `\n` chars).
     ///
-    /// When the snippet has annotations, the renderer will only show the source
-    /// code lines where the annotations are present, plus a few lines
-    /// surrounding the annotated spans.
+    /// When the snippet has specified annotations or
+    /// [inclusion fragments](Self::include), the renderer only shows a part of
+    /// the source code covering the lines of the specified spans, plus a few
+    /// lines surrounding these spans.
     ///
     /// **Panic**
     ///
@@ -560,8 +562,38 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
         self.annotations.push(Annotation {
             span,
-            priority,
+            priority: Some(priority),
             message: PrintString::from_cow(message),
+        });
+
+        self
+    }
+
+    /// Adds source code [span](ToSpan) that needs to be shown to the end user.
+    ///
+    /// Inclusion fragments are similar to [annotations](Self::annotate), except
+    /// that they don't receive special visual decorations in the final output,
+    /// and they don't have attached messages.
+    ///
+    /// When the snippet has specified inclusion fragments or
+    /// annotations, the renderer only shows a part of the
+    /// source code covering the lines of the specified spans, plus a few lines
+    /// surrounding these spans.
+    ///
+    /// **Panic**
+    ///
+    /// Panics if the message has `\n` characters.
+    pub fn include(&mut self, span: impl ToSpan) -> &mut Self {
+        let span = match span.to_site_span(self.code) {
+            Some(span) => span,
+
+            None => panic!("Invalid annotation span."),
+        };
+
+        self.annotations.push(Annotation {
+            span,
+            priority: None,
+            message: PrintString::empty(),
         });
 
         self
@@ -886,7 +918,10 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
         let mut scanner = Scanner::new(self);
 
-        let dim = !self.annotations.is_empty();
+        let dim = self
+            .annotations
+            .iter()
+            .any(|annotation| annotation.priority.is_some());
 
         let code_style = self.config.code_style(dim);
         let mut token_style = None;
@@ -920,25 +955,30 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
                     }
 
                     if !annotation.message.is_empty() {
-                        scanner
-                            .pending
-                            .messages
-                            .push(annotation.message(self.config, scanner.pending.code.length));
+                        if let Some(message) =
+                            annotation.message(self.config, scanner.pending.code.length)
+                        {
+                            scanner.pending.messages.push(message);
+                        }
                     }
 
                     match annotation.span.end == site {
                         true => {
-                            scanner.pending.code.style =
-                                self.config.annotation_style(annotation.priority);
-                            scanner.pending.code.write_placeholder(self.config);
+                            if let Some(priority) = annotation.priority {
+                                scanner.pending.code.style = self.config.annotation_style(priority);
+                                scanner.pending.code.write_placeholder(self.config);
+                            }
+
                             scanner.pending.annotated = true;
                         }
 
                         false => {
                             if ch == '\n' {
-                                scanner.pending.code.style =
-                                    self.config.annotation_style(annotation.priority);
-                                scanner.pending.code.write_placeholder(self.config);
+                                if let Some(priority) = annotation.priority {
+                                    scanner.pending.code.style =
+                                        self.config.annotation_style(priority);
+                                    scanner.pending.code.write_placeholder(self.config);
+                                }
                             }
 
                             scanner.stack.push(index);
@@ -959,7 +999,10 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
 
                         scanner.pending.annotated = true;
 
-                        self.config.annotation_style(priority)
+                        match priority {
+                            None => token_style.unwrap_or(code_style),
+                            Some(priority) => self.config.annotation_style(priority),
+                        }
                     }
                 };
 
@@ -995,15 +1038,18 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
             }
 
             if !annotation.message.is_empty() {
-                scanner
-                    .pending
-                    .messages
-                    .push(annotation.message(self.config, scanner.pending.code.length));
+                if let Some(message) = annotation.message(self.config, scanner.pending.code.length)
+                {
+                    scanner.pending.messages.push(message);
+                }
             }
 
             scanner.pending.annotated = true;
-            scanner.pending.code.style = self.config.annotation_style(annotation.priority);
-            scanner.pending.code.write_placeholder(self.config);
+
+            if let Some(priority) = annotation.priority {
+                scanner.pending.code.style = self.config.annotation_style(priority);
+                scanner.pending.code.write_placeholder(self.config);
+            }
 
             scanner.empty = false;
         }
@@ -1261,18 +1307,18 @@ impl ScanLine {
 
 struct Annotation<'a> {
     span: SiteSpan,
-    priority: AnnotationPriority,
+    priority: Option<AnnotationPriority>,
     message: PrintString<'a>,
 }
 
 impl<'a> Annotation<'a> {
     #[inline(always)]
-    fn message(&self, config: &SnippetConfig, offset: Column) -> Message {
-        Message {
+    fn message(&self, config: &SnippetConfig, offset: Column) -> Option<Message> {
+        Some(Message {
             offset,
-            priority: self.priority,
+            priority: self.priority?,
             string: StyleString::from_str(config, self.message.as_str()),
-        }
+        })
     }
 }
 
