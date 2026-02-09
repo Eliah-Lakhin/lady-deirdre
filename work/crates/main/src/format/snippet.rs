@@ -579,7 +579,7 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
         self
     }
 
-    /// Adds source code [span](ToSpan) that needs to be shown to the end user.
+    /// Adds source code [span](ToSpan) that needs to be included in the output.
     ///
     /// Inclusion fragments are similar to [annotations](Self::annotate), except
     /// that they don't receive special visual decorations in the final output,
@@ -589,10 +589,6 @@ impl<'a, 'f, C: SourceCode> Snippet<'a, 'f, C> {
     /// annotations, the renderer only shows a part of the
     /// source code covering the lines of the specified spans, plus a few lines
     /// surrounding these spans.
-    ///
-    /// **Panic**
-    ///
-    /// Panics if the message has `\n` characters.
     pub fn include(&mut self, span: impl ToSpan) -> &mut Self {
         let span = match span.to_site_span(self.code) {
             Some(span) => span,
