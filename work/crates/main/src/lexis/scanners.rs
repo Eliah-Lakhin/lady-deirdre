@@ -223,7 +223,7 @@ impl<'input, T: Token> TokenStream<'input, T> {
 
     fn chunk(&mut self, distance: TokenCount) -> Option<&Chunk<'input, T>> {
         while distance >= self.buffer.len() {
-            self.buffer.push_front(self.iter.next()?);
+            self.buffer.push_back(self.iter.next()?);
         }
 
         let Some(chunk) = self.buffer.get(distance) else {
